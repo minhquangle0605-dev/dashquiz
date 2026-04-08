@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Timeline – High School Learning Analytics Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        *{margin:0;box-sizing:border-box}
+        body{font-family:'Inter','Segoe UI',system-ui,sans-serif;background:#0f172a;color:#e2e8f0}
+        ::-webkit-scrollbar{width:6px;height:6px}
+        ::-webkit-scrollbar-track{background:transparent}
+        ::-webkit-scrollbar-thumb{background:#334155;border-radius:3px}
+        .hero-bg{background:linear-gradient(135deg,#0f172a 0%,#1e293b 50%,#0f172a 100%);position:relative;overflow:hidden}
+        .hero-bg::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 30% 20%,rgba(59,130,246,.12) 0%,transparent 60%),radial-gradient(ellipse at 70% 80%,rgba(16,185,129,.08) 0%,transparent 60%)}
+        .hero-grid{position:absolute;inset:0;opacity:.03;background-image:linear-gradient(#e2e8f0 1px,transparent 1px),linear-gradient(90deg,#e2e8f0 1px,transparent 1px);background-size:40px 40px}
+        .phase-nav{position:sticky;top:0;z-index:50;backdrop-filter:blur(16px);background:rgba(15,23,42,.88);border-bottom:1px solid #1e293b}
+        .phase-btn{padding:10px 14px;font-size:12px;font-weight:600;color:#64748b;cursor:pointer;border:none;background:none;transition:all .2s;position:relative;white-space:nowrap}
+        .phase-btn:hover{color:#94a3b8}
+        .phase-btn.active{color:#3b82f6}
+        .phase-btn.active::after{content:'';position:absolute;bottom:0;left:8px;right:8px;height:2px;background:#3b82f6;border-radius:1px}
+        .phase-section{display:none;animation:fadeUp .4s ease}
+        .phase-section.active{display:block}
+        @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+        .task-card{background:rgba(30,41,59,.5);border:1px solid #334155;border-radius:12px;padding:20px;transition:all .2s}
+        .task-card:hover{border-color:rgba(59,130,246,.3);background:rgba(30,41,59,.7)}
+        .subtask{display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid rgba(51,65,85,.3)}
+        .subtask:last-child{border-bottom:none}
+        .subtask-check{width:18px;height:18px;border:2px solid #475569;border-radius:4px;flex-shrink:0;margin-top:2px;cursor:pointer;transition:all .2s;display:grid;place-items:center}
+        .subtask-check:hover{border-color:#3b82f6}
+        .subtask-check.done{background:#10b981;border-color:#10b981}
+        .subtask-check.done::after{content:'✓';color:#fff;font-size:11px;font-weight:800}
+        .badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:.3px}
+        .file-tree{font-family:'Cascadia Code','Fira Code',monospace;font-size:12px;line-height:1.8;color:#94a3b8;background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:16px;overflow-x:auto}
+        .file-tree .dir{color:#3b82f6}
+        .file-tree .file{color:#cbd5e1}
+        .file-tree .comment{color:#475569}
+        .code-block{font-family:'Cascadia Code','Fira Code',monospace;font-size:11.5px;line-height:1.7;background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:14px;overflow-x:auto;color:#e2e8f0}
+        .api-row{display:grid;grid-template-columns:70px 1fr auto;gap:12px;align-items:center;padding:8px 12px;border-radius:6px;font-size:12px;transition:background .15s}
+        .api-row:hover{background:rgba(51,65,85,.3)}
+        .method{font-weight:800;font-size:10px;padding:3px 8px;border-radius:4px;text-align:center}
+        .method.get{background:rgba(16,185,129,.15);color:#10b981}
+        .method.post{background:rgba(59,130,246,.15);color:#3b82f6}
+        .method.put{background:rgba(245,158,11,.15);color:#f59e0b}
+        .method.delete{background:rgba(239,68,68,.15);color:#ef4444}
+        .dep-tag{font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;background:rgba(139,92,246,.12);color:#a78bfa;border:1px solid rgba(139,92,246,.2)}
+        .progress-ring{transform:rotate(-90deg)}
+        .timeline-line{position:absolute;left:23px;top:48px;bottom:0;width:2px;background:linear-gradient(to bottom,#3b82f6,#10b981,#f59e0b,#ef4444,#8b5cf6)}
+    </style>
+</head>
+<body>
+
+<!-- HERO -->
+<section class="hero-bg py-14 px-6 relative">
+    <div class="hero-grid"></div>
+    <div class="max-w-6xl mx-auto relative z-10 text-center">
+        <div class="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-4 py-1.5 mb-5">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span class="text-emerald-400 text-xs font-semibold tracking-wide">LỘ TRÌNH PHÁT TRIỂN CHI TIẾT</span>
+        </div>
+        <h1 class="text-3xl md:text-4xl font-extrabold bg-gradient-to-r from-white via-blue-100 to-emerald-200 bg-clip-text text-transparent leading-tight mb-3">
+            Project Development Timeline
+        </h1>
+        <p class="text-base text-slate-400 max-w-2xl mx-auto leading-relaxed mb-8">
+            High School Learning Analytics Dashboard — 12 giai đoạn, 87 ngày, 45 Use Cases, 28 bảng CSDL
+        </p>
+        <div class="flex flex-wrap justify-center gap-6 text-center">
+            <div><div class="text-2xl font-extrabold text-white" id="hero-phases">13</div><div class="text-[11px] text-slate-500">Giai đoạn</div></div>
+            <div class="w-px bg-slate-700"></div>
+            <div><div class="text-2xl font-extrabold text-white">87</div><div class="text-[11px] text-slate-500">Ngày làm việc</div></div>
+            <div class="w-px bg-slate-700"></div>
+            <div><div class="text-2xl font-extrabold text-white">45</div><div class="text-[11px] text-slate-500">Use Cases</div></div>
+            <div class="w-px bg-slate-700"></div>
+            <div><div class="text-2xl font-extrabold text-white">28</div><div class="text-[11px] text-slate-500">Bảng CSDL</div></div>
+            <div class="w-px bg-slate-700"></div>
+            <div><div class="text-2xl font-extrabold text-emerald-400" id="hero-progress">0%</div><div class="text-[11px] text-slate-500">Hoàn thành</div></div>
+        </div>
+    </div>
+</section>
+
+<!-- PHASE NAV -->
+<nav class="phase-nav">
+    <div class="max-w-6xl mx-auto flex items-center overflow-x-auto" id="phase-nav"></div>
+</nav>
+
+<!-- CONTENT -->
+<main class="max-w-6xl mx-auto px-6 py-8" id="main-content"></main>
+
+<!-- FOOTER -->
+<footer class="border-t border-slate-800 py-6 px-6 mt-8">
+    <div class="max-w-6xl mx-auto flex items-center justify-between text-xs text-slate-600">
+        <span>High School Learning Analytics Dashboard — Project Timeline</span>
+        <span>13 Giai đoạn &middot; 87 Ngày &middot; 45 UCs &middot; 28 Tables</span>
+    </div>
+</footer>
+
+<script>
+// ════════════════════════════════════════════════════
+// DATA — 13 PHASES WITH DETAILED TASKS
+// ════════════════════════════════════════════════════
+const phases = [
+{
+    id:'p0', num:'0', title:'Khởi tạo Dự án', days:'1–2', duration:2, color:'#64748b',
+    icon:'🏗️', ucs:[], deps:[],
+    summary:'Chuẩn bị nền móng kỹ thuật: monorepo, Docker, cấu hình dev environment. Không viết logic nghiệp vụ.',
+    tasks:[
+        {title:'Tạo cấu trúc Monorepo', type:'setup',
+         subtasks:[
+            'Tạo thư mục gốc `webquiz/` với `client/`, `server/`, `prisma/`, `docker/`',
+            'Tạo `.gitignore` (node_modules, .env, dist, .prisma)',
+            'Tạo `.env.example` với tất cả biến môi trường cần thiết',
+            'Tạo `README.md` mô tả cách setup project',
+         ],
+         files:'webquiz/\n├── client/          # React 18 + Vite + TypeScript\n├── server/          # Node.js 20 + Express 4 + TypeScript\n├── prisma/          # Prisma schema + migrations + seed\n├── docker/          # Dockerfiles cho từng service\n├── docs/            # 5 file HTML thiết kế\n├── docker-compose.yml\n├── .env.example\n├── .gitignore\n└── README.md'},
+        {title:'Khởi tạo Backend (server/)', type:'backend',
+         subtasks:[
+            '`npm init -y` trong thư mục server/',
+            'Cài dependencies: express, typescript, ts-node-dev, dotenv, cors, helmet, morgan, compression',
+            'Cài dev-deps: @types/express, @types/node, @types/cors, eslint, prettier',
+            'Tạo `tsconfig.json` (strict mode, paths alias)',
+            'Tạo `.eslintrc.js` + `.prettierrc`',
+            'Tạo cấu trúc thư mục src/ theo module pattern',
+            'Viết `server.ts` — Express app Hello World + health check endpoint',
+            'Thêm script `dev`: `ts-node-dev --respawn src/server.ts`',
+         ],
+         files:'server/src/\n├── config/          # database.ts, redis.ts, minio.ts, env.ts\n├── middlewares/     # auth.ts, errorHandler.ts, rateLimiter.ts, validate.ts, activityLogger.ts\n├── modules/\n│   ├── auth/        # controller, service, routes, validation\n│   ├── user/\n│   ├── exam/\n│   ├── question/\n│   ├── analytics/\n│   ├── ai/\n│   ├── notification/\n│   ├── class/\n│   ├── academic/\n│   └── system/\n├── utils/           # logger.ts (Winston), helpers.ts, constants.ts\n├── types/           # express.d.ts, common.ts\n├── app.ts           # Express app setup (middlewares, routes)\n└── server.ts        # Entry point (listen port)'},
+        {title:'Khởi tạo Frontend (client/)', type:'frontend',
+         subtasks:[
+            '`npm create vite@latest . -- --template react-ts` trong client/',
+            'Cài Tailwind CSS: `npm i -D tailwindcss @tailwindcss/vite` + cấu hình',
+            'Cài core deps: react-router-dom, axios, @tanstack/react-query, zustand',
+            'Cài UI deps: react-hook-form, zod, @hookform/resolvers, react-hot-toast',
+            'Cài chart deps: chart.js, react-chartjs-2, d3 (cho Knowledge Graph)',
+            'Cài realtime: socket.io-client',
+            'Tạo cấu trúc thư mục src/ theo feature pattern',
+            'Viết App.tsx cơ bản với React Router (placeholder pages)',
+            'Cấu hình axios instance với baseURL + interceptors skeleton',
+         ],
+         files:'client/src/\n├── assets/          # images, fonts\n├── components/      # Button, Input, Modal, Table, Badge, Card, Spinner...\n│   ├── ui/          # Primitive UI components\n│   └── shared/      # QuestionCard, SubjectSelect, NotificationBell...\n├── layouts/         # AuthLayout, StudentLayout, TeacherLayout, AdminLayout, ParentLayout\n├── pages/\n│   ├── auth/        # LoginPage, ForgotPasswordPage, ResetPasswordPage\n│   ├── student/     # DashboardPage, ExamListPage, TakeExamPage, ResultPage, AIPracticePage\n│   ├── teacher/     # DashboardPage, QuestionBankPage, CreateExamPage, ClassesPage\n│   ├── parent/      # DashboardPage, ChildResultsPage\n│   ├── admin/       # DashboardPage, UsersPage, AcademicPage, SystemPage\n│   └── common/      # NotFoundPage, ForbiddenPage, ProfilePage\n├── hooks/           # useAuth, useExam, useDebounce, useSocket...\n├── services/        # api.ts (axios), auth.api.ts, exam.api.ts, user.api.ts...\n├── stores/          # authStore.ts (zustand), uiStore.ts\n├── types/           # user.ts, exam.ts, question.ts, api.ts\n├── utils/           # format.ts, validate.ts, constants.ts\n├── App.tsx\n└── main.tsx'},
+        {title:'Docker Compose cho Development', type:'devops',
+         subtasks:[
+            'Viết `docker-compose.yml` với 3 services: postgres, redis, minio',
+            'PostgreSQL 16: port 5432, volume cho data persistence, init script tạo database',
+            'Redis 7: port 6379, password, volume',
+            'MinIO: port 9000 (API) + 9001 (Console), access/secret key, volume',
+            'Tạo `.env` từ `.env.example` với credentials local',
+            'Test: `docker compose up -d` → 3 services running',
+            'Verify: kết nối pgAdmin/psql, redis-cli ping, MinIO console',
+         ],
+         code:'# docker-compose.yml\nservices:\n  postgres:\n    image: postgres:16-alpine\n    ports: ["5432:5432"]\n    environment:\n      POSTGRES_DB: webquiz\n      POSTGRES_USER: webquiz\n      POSTGRES_PASSWORD: ${DB_PASSWORD}\n    volumes: [pgdata:/var/lib/postgresql/data]\n\n  redis:\n    image: redis:7-alpine\n    ports: ["6379:6379"]\n    command: redis-server --requirepass ${REDIS_PASSWORD}\n\n  minio:\n    image: minio/minio:latest\n    ports: ["9000:9000", "9001:9001"]\n    command: server /data --console-address ":9001"\n    environment:\n      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}\n      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}\n    volumes: [minio_data:/data]\n\nvolumes:\n  pgdata:\n  minio_data:'},
+        {title:'Git + GitHub Setup', type:'devops',
+         subtasks:[
+            '`git init` + initial commit',
+            'Tạo GitHub repository (private)',
+            'Branch strategy: main (production) → develop (staging) → feature/* (dev)',
+            'Tạo `.github/workflows/ci.yml` skeleton (chỉ echo, chưa cần pipeline thật)',
+            'Push initial commit lên GitHub',
+         ]},
+    ],
+    deliverable:'`docker compose up` → 3 services chạy. `npm run dev` ở cả client + server → Hello World. Git repo on GitHub.'
+},
+
+{
+    id:'p1', num:'1', title:'Database + Prisma Schema', days:'3–5', duration:3, color:'#f97316',
+    icon:'🗄️', ucs:[], deps:['GĐ 0'],
+    summary:'Toàn bộ 28 bảng ERD → Prisma schema, migrate vào PostgreSQL, seed data, kết nối Redis + MinIO.',
+    tasks:[
+        {title:'Viết Prisma Schema — 6 Enum Types', type:'backend',
+         subtasks:[
+            'Cài Prisma: `npm i prisma @prisma/client` + `npx prisma init`',
+            'Cấu hình datasource postgresql trong schema.prisma',
+            'Định nghĩa enum UserStatus { ACTIVE INACTIVE SUSPENDED }',
+            'Định nghĩa enum QuestionKind { SINGLE_CHOICE MULTIPLE_CHOICE }',
+            'Định nghĩa enum ExamStatus { DRAFT PUBLISHED SCHEDULED CLOSED }',
+            'Định nghĩa enum ScheduleStatus { PENDING ACTIVE COMPLETED CANCELLED }',
+            'Định nghĩa enum AttemptStatus { IN_PROGRESS SUBMITTED GRADED }',
+            'Định nghĩa enum BackupStatus { IN_PROGRESS COMPLETED FAILED }',
+         ]},
+        {title:'Viết Prisma Schema — 28 Models', type:'backend',
+         subtasks:[
+            'User group (4 models): Role, User (@unique email, username), ParentStudent, PasswordResetToken (@unique token)',
+            'Academic group (4 models): AcademicYear, Semester, Class, ClassStudent (composite PK)',
+            'Curriculum group (4 models): Subject (@unique code), Chapter, Topic, TopicRelation',
+            'Question group (3 models): Question, QuestionOption, QuestionTag',
+            'Exam group (4 models): Exam, ExamQuestion (composite PK), ExamSchedule, ExamAssignment',
+            'Result group (2 models): ExamAttempt (@@index [studentId, examId]), AttemptAnswer',
+            'AI group (2 models): AiPracticeSession, AiGeneratedQuestion',
+            'System group (5 models): Notification (@@index [userId, isRead]), ActivityLog, SystemConfig (@unique configKey), Backup, WebPushSubscription',
+            'Thiết lập tất cả relations: @relation, onDelete cascade/setNull theo ERD',
+         ]},
+        {title:'Migration + Verify', type:'backend',
+         subtasks:[
+            'Chạy `npx prisma migrate dev --name init` — tạo 28 bảng',
+            'Verify trong pgAdmin: kiểm tra 28 bảng, FK constraints, indexes, enum types',
+            'Chạy `npx prisma generate` — tạo Prisma Client',
+            'Test import Prisma Client trong server code — query đơn giản',
+         ]},
+        {title:'Seed Data', type:'backend',
+         subtasks:[
+            'Tạo `prisma/seed.ts`',
+            'Seed 4 roles: student, parent, teacher, admin',
+            'Seed 1 admin account: admin@school.edu.vn / Admin@123 (bcrypt hash)',
+            'Seed 5 môn học: Toán, Vật lý, Hóa học, Sinh học, Tiếng Anh (với code: MATH, PHY, CHEM, BIO, ENG)',
+            'Seed 1 năm học 2025-2026 (is_current: true) + 2 học kỳ',
+            'Seed 2–3 chương cho mỗi môn + 3–5 chủ đề mỗi chương',
+            'Seed vài topic_relations mẫu cho Knowledge Graph',
+            'Cấu hình seed script trong package.json: `"prisma": {"seed": "ts-node prisma/seed.ts"}`',
+            'Chạy `npx prisma db seed` — verify data trong pgAdmin',
+         ]},
+        {title:'Kết nối Redis + MinIO', type:'backend',
+         subtasks:[
+            'Cài `ioredis`: `npm i ioredis`',
+            'Tạo `config/redis.ts`: kết nối Redis với password, error handling, reconnect strategy',
+            'Test Redis: set/get key, PING → PONG',
+            'Cài MinIO client: `npm i minio`',
+            'Tạo `config/minio.ts`: kết nối MinIO, tạo bucket "uploads" nếu chưa có',
+            'Test MinIO: upload 1 file text → download → verify nội dung',
+            'Tạo `config/database.ts`: export Prisma Client singleton',
+         ]},
+    ],
+    deliverable:'28 bảng trong PostgreSQL + seed data. Prisma Client generate OK. Redis PING → PONG. MinIO upload/download OK.'
+},
+
+{
+    id:'p2', num:'2', title:'Auth Service', days:'6–10', duration:5, color:'#3b82f6',
+    icon:'🔐', ucs:['UC01','UC02','UC03','UC04'], deps:['GĐ 1'],
+    summary:'Xác thực JWT cho 4 vai trò, refresh token qua Redis, đặt lại mật khẩu, protected routes.',
+    tasks:[
+        {title:'Backend — Auth Module', type:'backend',
+         subtasks:[
+            'Tạo `modules/auth/auth.validation.ts`: Zod schemas cho login, register, refreshToken, forgotPassword, resetPassword',
+            'Tạo `modules/auth/auth.service.ts`: login (verify bcrypt → issue JWT), logout (delete Redis key), refreshToken, forgotPassword, resetPassword',
+            'Tạo `modules/auth/auth.controller.ts`: request handlers gọi service',
+            'Tạo `modules/auth/auth.routes.ts`: mount routes',
+         ],
+         apis:[
+            {method:'POST', path:'/api/auth/login', desc:'Đăng nhập → Access Token (15m) + Refresh Token (7d, Redis)'},
+            {method:'POST', path:'/api/auth/logout', desc:'Xóa Refresh Token khỏi Redis'},
+            {method:'POST', path:'/api/auth/refresh', desc:'Refresh Token → Access Token mới'},
+            {method:'POST', path:'/api/auth/forgot-password', desc:'Gửi email reset (tạo token trong DB, TTL 15m)'},
+            {method:'POST', path:'/api/auth/reset-password', desc:'Verify token → đổi password → xóa token'},
+         ]},
+        {title:'Backend — Middlewares', type:'backend',
+         subtasks:[
+            '`middlewares/auth.ts`: verify JWT từ Authorization header → gắn req.user = {id, role, email}',
+            '`middlewares/authorize.ts`: roleMiddleware("admin","teacher") → check req.user.role',
+            '`middlewares/errorHandler.ts`: global error handler → format {success:false, message, errors}',
+            '`middlewares/validate.ts`: nhận Zod schema → validate req.body → throw nếu invalid',
+            '`middlewares/rateLimiter.ts`: rate-limit 5 request/15 phút cho login (dùng express-rate-limit + Redis store)',
+            '`middlewares/activityLogger.ts`: ghi action vào activity_logs (user, action, entity, ip)',
+         ]},
+        {title:'Backend — User Profile', type:'backend',
+         subtasks:[
+            'Tạo `modules/user/user.service.ts`: getProfile, updateProfile, changePassword, uploadAvatar',
+            'Upload avatar: nhận file → validate (jpg/png, max 2MB) → upload MinIO → lưu URL vào users.avatar',
+         ],
+         apis:[
+            {method:'GET', path:'/api/users/me', desc:'Lấy thông tin user hiện tại'},
+            {method:'PUT', path:'/api/users/me', desc:'Cập nhật full_name, phone'},
+            {method:'PUT', path:'/api/users/me/password', desc:'Đổi mật khẩu (verify old → hash new)'},
+            {method:'POST', path:'/api/users/me/avatar', desc:'Upload ảnh đại diện → MinIO'},
+         ]},
+        {title:'Frontend — Auth Pages', type:'frontend',
+         subtasks:[
+            'Tạo `pages/auth/LoginPage.tsx`: form email + password (react-hook-form + zod validation)',
+            'UI: split layout — left: gradient brand panel, right: form (theo mockup ui-ux-design.html)',
+            'Submit → gọi API login → lưu tokens vào localStorage → redirect theo role',
+            'Hiển thị lỗi: "Sai email hoặc mật khẩu", "Tài khoản bị khóa"',
+            'Tạo `pages/auth/ForgotPasswordPage.tsx`: form nhập email → gọi API → hiện thông báo "Kiểm tra email"',
+            'Tạo `pages/auth/ResetPasswordPage.tsx`: form nhập mật khẩu mới (từ URL chứa token)',
+         ]},
+        {title:'Frontend — Auth System', type:'frontend',
+         subtasks:[
+            'Tạo `stores/authStore.ts` (Zustand): user, tokens, login(), logout(), isAuthenticated',
+            'Tạo `services/api.ts`: axios instance với baseURL, interceptors (gắn Bearer token, auto refresh khi 401)',
+            'Tạo `hooks/useAuth.ts`: wrap authStore, thêm logic check token expiry',
+            'Tạo `components/ProtectedRoute.tsx`: check isAuthenticated + role → redirect /login hoặc /403',
+            'Tạo `layouts/AuthLayout.tsx`: layout cho login/reset (no sidebar)',
+            'Tạo `layouts/DashboardLayout.tsx`: sidebar + topbar + content area (responsive)',
+            'Cấu hình React Router: public routes (/login, /forgot-password) + protected routes (/:role/*)',
+         ]},
+    ],
+    deliverable:'Đăng nhập 4 vai trò, JWT + refresh token, đặt lại mật khẩu. Frontend: Login page, protected routes, dashboard layout skeleton.'
+},
+
+{
+    id:'p3', num:'3', title:'Admin Portal', days:'11–17', duration:7, color:'#dc2626',
+    icon:'⚙️', ucs:['UC37','UC38','UC39','UC40','UC41','UC42','UC43','UC44','UC45'], deps:['GĐ 2'],
+    summary:'Admin quản lý users, môn học, năm học, cấu hình hệ thống, giám sát, backup. Tạo dữ liệu nền cho các module sau.',
+    tasks:[
+        {title:'Backend — User Management (UC37–39)', type:'backend',
+         apis:[
+            {method:'GET', path:'/api/admin/users', desc:'Danh sách users (search, filter role/status, pagination)'},
+            {method:'POST', path:'/api/admin/users', desc:'Tạo user mới (hash password, gán role)'},
+            {method:'PUT', path:'/api/admin/users/:id', desc:'Cập nhật user (name, email, phone, status)'},
+            {method:'DELETE', path:'/api/admin/users/:id', desc:'Soft delete (đổi status → SUSPENDED)'},
+            {method:'POST', path:'/api/admin/users/import', desc:'Import Excel (parse xlsx → validate → bulk create)'},
+            {method:'GET', path:'/api/admin/users/import-template', desc:'Download file Excel mẫu'},
+            {method:'PUT', path:'/api/admin/users/:id/role', desc:'Thay đổi vai trò'},
+         ],
+         subtasks:[
+            'Service: CRUD users với Prisma, bcrypt hash cho password mới',
+            'Import Excel: dùng thư viện `xlsx` — parse file → validate từng row (email unique, role valid) → trả danh sách lỗi chi tiết',
+            'Validation: email format, username 3–50 chars, password 8+ chars (upper+lower+number)',
+            'Pagination: page, limit, sort, search (full-text trên name + email)',
+            'Activity log: mọi CUD action được ghi tự động',
+         ]},
+        {title:'Backend — Academic Management (UC40–41)', type:'backend',
+         apis:[
+            {method:'GET', path:'/api/admin/subjects', desc:'Danh sách môn học'},
+            {method:'POST', path:'/api/admin/subjects', desc:'Tạo môn học (name, code unique)'},
+            {method:'PUT', path:'/api/admin/subjects/:id', desc:'Cập nhật môn học'},
+            {method:'GET', path:'/api/admin/academic-years', desc:'Danh sách năm học'},
+            {method:'POST', path:'/api/admin/academic-years', desc:'Tạo năm học + tự động tạo 2 học kỳ'},
+            {method:'PUT', path:'/api/admin/academic-years/:id', desc:'Cập nhật (set is_current)'},
+            {method:'GET', path:'/api/admin/semesters', desc:'Danh sách học kỳ'},
+         ]},
+        {title:'Backend — System Management (UC42–45)', type:'backend',
+         apis:[
+            {method:'GET', path:'/api/admin/configs', desc:'Lấy tất cả system_configs'},
+            {method:'PUT', path:'/api/admin/configs', desc:'Cập nhật batch configs'},
+            {method:'GET', path:'/api/admin/monitoring', desc:'CPU, RAM, uptime, active connections'},
+            {method:'GET', path:'/api/admin/activity-logs', desc:'Nhật ký (filter user, action, date range, pagination)'},
+            {method:'POST', path:'/api/admin/backups', desc:'Tạo backup (pg_dump → gzip → MinIO)'},
+            {method:'POST', path:'/api/admin/backups/:id/restore', desc:'Restore từ MinIO → pg_restore'},
+            {method:'GET', path:'/api/admin/backups', desc:'Danh sách backups'},
+         ],
+         subtasks:[
+            'Monitoring: dùng Node.js `os` module (cpus, totalmem, freemem, uptime) + process.memoryUsage()',
+            'Backup: child_process.exec `pg_dump` → stream to gzip → upload MinIO → save record',
+            'Restore: download từ MinIO → gunzip → `pg_restore`',
+         ]},
+        {title:'Frontend — Admin Dashboard', type:'frontend',
+         subtasks:[
+            'Tạo `pages/admin/DashboardPage.tsx`: cards tổng quan (total users, exams, subjects, system health)',
+            'Tạo `pages/admin/UsersPage.tsx`: bảng DataTable (search, filter dropdown, pagination, bulk actions)',
+            'Modal tạo/sửa user (react-hook-form, zod validation)',
+            'Import Excel: upload zone → preview table → confirm/cancel',
+            'Tạo `pages/admin/AcademicPage.tsx`: tabs Môn học | Năm học | Học kỳ — mỗi tab có DataTable + CRUD modal',
+            'Tạo `pages/admin/SystemPage.tsx`: tabs Cấu hình | Hiệu năng | Nhật ký | Sao lưu',
+            'Biểu đồ real-time CPU/RAM (Chart.js line chart, polling 5s)',
+            'Activity logs: bảng với filter + date range picker',
+            'Backup: danh sách + nút "Sao lưu ngay" → loading → success toast',
+         ]},
+    ],
+    deliverable:'Admin portal đầy đủ UC37–45. Dữ liệu nền: users, subjects, academic years sẵn sàng cho các module tiếp theo.'
+},
+
+{
+    id:'p4', num:'4', title:'Ngân hàng Câu hỏi', days:'18–23', duration:6, color:'#ea580c',
+    icon:'❓', ucs:['UC23','UC24','UC25'], deps:['GĐ 3'],
+    summary:'Giáo viên tạo, import, gắn tag câu hỏi trắc nghiệm. Ngân hàng sẵn sàng để tạo đề kiểm tra.',
+    tasks:[
+        {title:'Backend — Question Service', type:'backend',
+         apis:[
+            {method:'GET', path:'/api/questions', desc:'Danh sách câu hỏi (filter: subject, chapter, topic, difficulty, keyword)'},
+            {method:'POST', path:'/api/questions', desc:'Tạo câu hỏi + 4 options + correct answer + explanation'},
+            {method:'PUT', path:'/api/questions/:id', desc:'Cập nhật câu hỏi'},
+            {method:'DELETE', path:'/api/questions/:id', desc:'Xóa câu hỏi (check không thuộc exam đang active)'},
+            {method:'POST', path:'/api/questions/import', desc:'Import từ Excel (content, A, B, C, D, correct, explanation, difficulty)'},
+            {method:'GET', path:'/api/questions/import-template', desc:'Download file mẫu Excel'},
+            {method:'POST', path:'/api/questions/:id/tags', desc:'Thêm tags cho câu hỏi'},
+            {method:'DELETE', path:'/api/questions/:id/tags/:tagId', desc:'Xóa tag'},
+         ],
+         subtasks:[
+            'Tạo câu hỏi: validate content không rỗng, đúng 4 options, ít nhất 1 correct, difficulty 1–5',
+            'Import Excel: parse xlsx → validate headers → validate từng row → báo lỗi chi tiết (row number + reason)',
+            'Filter: cascading subject → chapter → topic, multi-difficulty, keyword search (PostgreSQL ILIKE)',
+            'Pagination: cursor-based hoặc offset (default 20/page)',
+         ]},
+        {title:'Backend — Curriculum Endpoints', type:'backend',
+         apis:[
+            {method:'GET', path:'/api/subjects', desc:'Danh sách môn học (public cho teacher/student)'},
+            {method:'GET', path:'/api/subjects/:id/chapters', desc:'Chương theo môn'},
+            {method:'GET', path:'/api/chapters/:id/topics', desc:'Chủ đề theo chương'},
+            {method:'POST', path:'/api/chapters', desc:'Tạo chương (teacher)'},
+            {method:'POST', path:'/api/topics', desc:'Tạo chủ đề (teacher)'},
+            {method:'GET', path:'/api/topics/:id/relations', desc:'Các chủ đề liên quan (Knowledge Graph edges)'},
+         ]},
+        {title:'Frontend — Question Bank Page', type:'frontend',
+         subtasks:[
+            'Tạo `pages/teacher/QuestionBankPage.tsx`: layout 2 cột (filter sidebar + question list)',
+            'Filter sidebar: cascading Select (Môn → Chương → Chủ đề), difficulty multi-select, keyword search',
+            'Question list: cards hiển thị content (truncated), difficulty badge, tags, subject/chapter',
+            'Click card → expand chi tiết: full content, 4 options (highlight correct), explanation',
+            'Tạo `components/shared/QuestionFormModal.tsx`: form phức tạp cho tạo/sửa câu hỏi',
+            'Form fields: rich text content, 4 option inputs, radio chọn correct, difficulty slider, subject/chapter/topic selects, tags input',
+            'Import Excel: dropzone upload → loading → preview table (highlight errors red) → confirm button',
+            'Tạo `components/shared/SubjectChapterTopicSelect.tsx`: cascading 3-level dropdown (tái sử dụng)',
+            'Tạo `components/shared/DifficultyBadge.tsx`: badge 5 mức (xanh/xanh lá/vàng/cam/đỏ)',
+         ]},
+    ],
+    deliverable:'Giáo viên CRUD câu hỏi, import Excel, gắn tag, filter/search. Ngân hàng câu hỏi sẵn sàng cho đề kiểm tra.'
+},
+
+{
+    id:'p5', num:'5', title:'Bài Kiểm tra + Lớp học', days:'24–31', duration:8, color:'#8b5cf6',
+    icon:'📝', ucs:['UC26','UC27','UC28','UC29'], deps:['GĐ 4'],
+    summary:'Giáo viên tạo đề KT, đặt lịch auto mở/đóng, phân công cho lớp. Quản lý lớp học + danh sách HS.',
+    tasks:[
+        {title:'Backend — Exam Service', type:'backend',
+         apis:[
+            {method:'POST', path:'/api/exams', desc:'Tạo bài KT (title, subject, duration, config)'},
+            {method:'GET', path:'/api/exams', desc:'Danh sách bài KT của teacher (filter status)'},
+            {method:'GET', path:'/api/exams/:id', desc:'Chi tiết bài KT + câu hỏi'},
+            {method:'PUT', path:'/api/exams/:id', desc:'Cập nhật (chỉ khi status = DRAFT)'},
+            {method:'POST', path:'/api/exams/:id/questions', desc:'Thêm câu hỏi vào đề (manual pick hoặc random)'},
+            {method:'PUT', path:'/api/exams/:id/publish', desc:'Publish → đổi status DRAFT → PUBLISHED'},
+            {method:'POST', path:'/api/exams/:id/schedule', desc:'Đặt lịch (start_time, end_time)'},
+            {method:'POST', path:'/api/exams/:id/assign', desc:'Phân công cho 1+ lớp'},
+            {method:'GET', path:'/api/exams/:id/assignments', desc:'Danh sách lớp đã phân công'},
+         ],
+         subtasks:[
+            'Random câu hỏi: nhận {subjectId, chapterIds?, difficulty?, count} → random pick từ ngân hàng',
+            'Shuffle logic: khi config.shuffle=true, lưu seed per-student để reproducible',
+            'Cron job: mỗi phút check exam_schedules — nếu now >= start_time → status PUBLISHED, nếu now >= end_time → status CLOSED',
+            'Validation: duration > 0, total_questions > 0, passing_score 0–10',
+         ]},
+        {title:'Backend — Class Service', type:'backend',
+         apis:[
+            {method:'GET', path:'/api/classes', desc:'Danh sách lớp (teacher thấy lớp mình, admin thấy tất cả)'},
+            {method:'POST', path:'/api/classes', desc:'Tạo lớp (name, grade_level, semester, subject)'},
+            {method:'PUT', path:'/api/classes/:id', desc:'Cập nhật lớp'},
+            {method:'GET', path:'/api/classes/:id/students', desc:'Danh sách HS trong lớp'},
+            {method:'POST', path:'/api/classes/:id/students', desc:'Thêm HS vào lớp (userIds[])'},
+            {method:'DELETE', path:'/api/classes/:id/students/:studentId', desc:'Xóa HS khỏi lớp'},
+            {method:'POST', path:'/api/classes/:id/students/import', desc:'Import HS từ Excel'},
+         ]},
+        {title:'Frontend — Create Exam Wizard', type:'frontend',
+         subtasks:[
+            'Tạo `pages/teacher/CreateExamPage.tsx`: step wizard 5 bước',
+            'Step 1 — Thông tin: title, subject select, duration (phút), passing score',
+            'Step 2 — Chọn câu hỏi: browse ngân hàng (reuse QuestionBank filter) + tích chọn, HOẶC random (nhập criteria + count)',
+            'Step 3 — Cấu hình: shuffle on/off, show result after submit on/off, max attempts',
+            'Step 4 — Đặt lịch (optional): date/time picker cho start + end',
+            'Step 5 — Phân công: multi-select classes → review summary → Create button',
+            'Preview: xem đề trước khi publish (read-only exam view)',
+         ]},
+        {title:'Frontend — Classes & Exams Pages', type:'frontend',
+         subtasks:[
+            'Tạo `pages/teacher/ClassesPage.tsx`: danh sách lớp cards, click → chi tiết',
+            'Chi tiết lớp: bảng HS + nút thêm/xóa + import Excel',
+            'Tạo `pages/teacher/ExamsPage.tsx`: bảng bài KT với status badge (draft/published/scheduled/closed)',
+            'Row actions: Edit (draft only), Schedule, Assign, View Results, Delete (draft only)',
+         ]},
+    ],
+    deliverable:'Tạo đề KT step-by-step, đặt lịch auto, phân công lớp. Quản lý lớp học + HS. Sẵn sàng cho HS làm bài.'
+},
+
+{
+    id:'p6', num:'6', title:'Làm bài Kiểm tra', days:'32–39', duration:8, color:'#2563eb',
+    icon:'✍️', ucs:['UC05','UC06','UC07','UC08','UC09'], deps:['GĐ 5'],
+    summary:'Học sinh làm bài KT online: đồng hồ đếm ngược, auto-save, auto-submit, xem kết quả chi tiết.',
+    tasks:[
+        {title:'Backend — Exam Taking', type:'backend',
+         apis:[
+            {method:'GET', path:'/api/student/exams', desc:'DS bài KT được phân công (filter: upcoming, in_progress, completed)'},
+            {method:'POST', path:'/api/student/exams/:id/start', desc:'Bắt đầu làm bài → tạo attempt, trả câu hỏi (KHÔNG có đáp án)'},
+            {method:'PUT', path:'/api/student/attempts/:id/save', desc:'Auto-save câu trả lời vào Redis'},
+            {method:'POST', path:'/api/student/attempts/:id/submit', desc:'Nộp bài → tính điểm → lưu DB → xóa Redis draft'},
+            {method:'GET', path:'/api/student/attempts/:id/result', desc:'Kết quả: score, per-question detail + explanation'},
+            {method:'GET', path:'/api/student/attempts', desc:'Lịch sử tất cả bài đã làm'},
+         ],
+         subtasks:[
+            'Start exam: check đã có attempt IN_PROGRESS chưa (resume nếu có), check exam status = PUBLISHED, check student thuộc assigned class',
+            'Trả câu hỏi: shuffle nếu config, KHÔNG include is_correct / explanation',
+            'Auto-save: lưu Redis key `attempt:{id}:answers` = JSON {questionId: selectedOptionId}, TTL = duration + 5 phút buffer',
+            'Submit: lấy answers từ Redis (hoặc request body), match với correct answers → tính total_score, time_spent',
+            'Tạo attempt_answers records: mỗi câu ghi selected_option_id, is_correct, time_spent_sec, answer_changes',
+            'Auto-submit cron: mỗi phút check attempts WHERE status=IN_PROGRESS AND started_at + duration < now() → auto submit, is_auto_submitted = true',
+            'Result: chỉ trả nếu exam.show_result = true HOẶC teacher đã graded',
+            'Anti-cheat: max 1 active attempt per exam per student, validate time_spent <= duration',
+         ]},
+        {title:'Frontend — Exam Taking (Màn hình quan trọng nhất)', type:'frontend',
+         subtasks:[
+            'Tạo `pages/student/ExamListPage.tsx`: cards bài KT grouped by status (sắp diễn ra / đang làm / đã nộp)',
+            'Card hiển thị: tên, môn, duration, deadline, status badge',
+            'Tạo `pages/student/TakeExamPage.tsx` — CRITICAL PAGE:',
+            '  Header: tên bài + đồng hồ đếm ngược (MM:SS), đổi đỏ khi < 5 phút, nhấp nháy khi < 1 phút',
+            '  Sidebar phải: bảng số câu (grid 5×N), click chuyển câu. Màu: xám=chưa, xanh=đã trả lời, vàng=đánh dấu',
+            '  Content giữa: câu hỏi (render HTML nếu rich text) + 4 radio options',
+            '  Footer: nút Previous / Next / Đánh dấu / Nộp bài',
+            '  Auto-save: mỗi 30 giây gọi PUT /save → hiện "Đã lưu" nhỏ',
+            '  Confirm dialog nộp bài: "Bạn còn X câu chưa trả lời. Xác nhận nộp?"',
+            '  Xử lý mất kết nối: hiện banner warning, queue saves, retry khi reconnect',
+            '  Xử lý hết giờ: auto-submit + redirect tới result page',
+            'Tạo `pages/student/ExamResultPage.tsx`:',
+            '  Tổng quan: điểm (lớn, nổi bật), thời gian, đúng/sai/bỏ qua, đạt/không đạt',
+            '  Chi tiết: từng câu: nội dung, option đã chọn (highlight), đáp án đúng (highlight), giải thích',
+            '  Màu: xanh (đúng), đỏ (sai), xám (bỏ qua)',
+         ]},
+    ],
+    deliverable:'Học sinh làm bài KT online hoàn chỉnh: đếm ngược, auto-save, auto-submit, kết quả chi tiết. Core feature hoàn thành.'
+},
+
+{
+    id:'p7', num:'7', title:'Analytics & Dashboard', days:'40–50', duration:11, color:'#6366f1',
+    icon:'📊', ucs:['UC10','UC11','UC12','UC13','UC14','UC15','UC30','UC31','UC32','UC33','UC34','UC35','UC36'], deps:['GĐ 6'],
+    summary:'Dashboard phân tích cho Student (điểm mạnh/yếu, Knowledge Graph) và Teacher (hiệu suất lớp, phân bố điểm, xuất báo cáo).',
+    tasks:[
+        {title:'Backend — Student Analytics (UC10–15)', type:'backend',
+         apis:[
+            {method:'GET', path:'/api/student/dashboard', desc:'Tổng hợp: total exams, avg score, recent results, trend 30/60/90d'},
+            {method:'GET', path:'/api/student/analytics/strengths', desc:'% đúng per topic → radar chart data'},
+            {method:'GET', path:'/api/student/analytics/time', desc:'Avg time per question, per topic'},
+            {method:'GET', path:'/api/student/analytics/patterns', desc:'Answer changes, skipped, time distribution'},
+            {method:'GET', path:'/api/student/analytics/knowledge-graph', desc:'Nodes (topics + mastery) + edges (topic_relations)'},
+            {method:'GET', path:'/api/student/attempts', desc:'Lịch sử bài KT (pagination, filter subject, date range)'},
+         ],
+         subtasks:[
+            'Dashboard aggregation: Prisma groupBy + aggregate queries',
+            'Strengths: GROUP BY topic_id, AVG(is_correct) → trả {topicName, accuracy, totalQuestions}',
+            'Knowledge Graph: query topics + topic_relations + join với attempt results → node color = mastery level (red < 40%, yellow 40-70%, green > 70%)',
+            'Redis cache: cache dashboard + strengths data, TTL 5 phút, invalidate khi submit mới',
+         ]},
+        {title:'Backend — Teacher Analytics (UC30–36)', type:'backend',
+         apis:[
+            {method:'GET', path:'/api/teacher/classes/:id/dashboard', desc:'Class overview: enrolled, avg score, pass rate'},
+            {method:'GET', path:'/api/teacher/classes/:id/analytics/performance', desc:'Trend: avg score per exam over time'},
+            {method:'GET', path:'/api/teacher/exams/:id/analytics/distribution', desc:'Histogram bins [0-2, 2-4, 4-6, 6-8, 8-10]'},
+            {method:'GET', path:'/api/teacher/classes/:id/analytics/weak-students', desc:'HS có avg < threshold liên tục 3 bài'},
+            {method:'GET', path:'/api/teacher/analytics/compare-classes', desc:'So sánh avg score giữa nhiều lớp'},
+            {method:'GET', path:'/api/teacher/exams/:id/results', desc:'Bảng kết quả từng HS (sortable)'},
+            {method:'POST', path:'/api/teacher/reports/export', desc:'Xuất PDF/Excel → MinIO → trả download URL'},
+         ],
+         subtasks:[
+            'Xuất PDF: dùng PDFKit — header trường, tiêu đề báo cáo, bảng kết quả, biểu đồ (chart as image)',
+            'Xuất Excel: dùng xlsx — sheet "Tổng hợp" + sheet "Chi tiết"',
+            'Upload file xuất vào MinIO bucket "reports" → trả signed URL (expire 1h)',
+         ]},
+        {title:'Frontend — Student Dashboard', type:'frontend',
+         subtasks:[
+            'Tạo `pages/student/DashboardPage.tsx`: grid layout responsive',
+            'Row 1: Stat cards — Tổng bài KT, Điểm TB, Bài gần nhất, Streak',
+            'Row 2 left: Line chart xu hướng điểm (Chart.js, 30/60/90 ngày toggle)',
+            'Row 2 right: Radar chart điểm mạnh/yếu (per topic, max 8 axes)',
+            'Row 3 left: Bar chart time-on-task (avg seconds per topic)',
+            'Row 3 right: Bảng lịch sử bài KT gần nhất (5 rows, link "Xem tất cả")',
+            'Knowledge Graph page: D3.js force-directed graph (nodes = topics, edges = relations, node size = attempts count, node color = mastery)',
+            'Click node → show detail panel: topic name, accuracy %, recent questions',
+         ]},
+        {title:'Frontend — Teacher Dashboard', type:'frontend',
+         subtasks:[
+            'Tạo `pages/teacher/DashboardPage.tsx`: class selector dropdown ở top',
+            'Stat cards: Sĩ số, Điểm TB, Tỷ lệ đạt, Bài KT gần nhất',
+            'Line chart: hiệu suất lớp qua các bài KT (multiple series nếu compare classes)',
+            'Histogram: phân bố điểm cho bài KT được chọn (Chart.js bar chart)',
+            'Alert panel: danh sách HS yếu (đỏ, cần quan tâm) với link xem chi tiết',
+            'Bảng kết quả: DataTable sortable (HS name, score, time, status)',
+            'Export buttons: "Xuất PDF" + "Xuất Excel" → loading → download',
+         ]},
+    ],
+    deliverable:'Dashboard analytics đầy đủ Student + Teacher. Biểu đồ, Knowledge Graph, HS yếu, xuất báo cáo PDF/Excel.'
+},
+
+{
+    id:'p8', num:'8', title:'Parent Portal + Thông báo', days:'51–57', duration:7, color:'#16a34a',
+    icon:'👪', ucs:['UC18','UC19','UC20','UC21','UC22'], deps:['GĐ 7'],
+    summary:'Phụ huynh liên kết con, giám sát kết quả, nhận thông báo in-app + email + web push.',
+    tasks:[
+        {title:'Backend — Parent Service', type:'backend',
+         apis:[
+            {method:'POST', path:'/api/parent/link-student', desc:'Liên kết con bằng mã xác nhận'},
+            {method:'GET', path:'/api/parent/children', desc:'Danh sách con đã liên kết'},
+            {method:'GET', path:'/api/parent/children/:id/results', desc:'Kết quả bài KT của con'},
+            {method:'GET', path:'/api/parent/children/:id/dashboard', desc:'Dashboard con (reuse student analytics)'},
+            {method:'GET', path:'/api/parent/children/:id/analytics/strengths', desc:'Điểm mạnh/yếu con'},
+         ],
+         subtasks:[
+            'Link student: Admin tạo mã (6 ký tự random) → parent nhập mã → verify → create parent_student record',
+            'Reuse Student Analytics service nhưng query theo child student_id thay vì req.user.id',
+         ]},
+        {title:'Backend — Notification Service', type:'backend',
+         apis:[
+            {method:'GET', path:'/api/notifications', desc:'Danh sách thông báo (pagination, filter is_read)'},
+            {method:'PUT', path:'/api/notifications/:id/read', desc:'Đánh dấu đã đọc'},
+            {method:'PUT', path:'/api/notifications/read-all', desc:'Đánh dấu tất cả đã đọc'},
+            {method:'POST', path:'/api/push/subscribe', desc:'Đăng ký push notification (lưu subscription vào web_push_subscriptions)'},
+            {method:'DELETE', path:'/api/push/unsubscribe', desc:'Hủy đăng ký push'},
+         ],
+         subtasks:[
+            'Notification triggers (gọi từ các service khác):',
+            '  → Khi HS submit bài → notify parent "Con bạn đã hoàn thành bài KT X, điểm: Y"',
+            '  → Khi GV publish kết quả → notify students + parents',
+            '  → Khi GV giao bài KT mới → notify students',
+            'Email notifications: cài nodemailer + cấu hình Gmail SMTP / SendGrid',
+            'Template email HTML cho: kết quả bài KT, xác nhận tài khoản, reset password',
+            'Web Push: generate VAPID keys, implement web-push library',
+            'Push flow: subscribe → save to DB → trigger event → web-push send → browser notification',
+         ]},
+        {title:'Frontend — Parent Pages + Notifications', type:'frontend',
+         subtasks:[
+            'Tạo `pages/parent/DashboardPage.tsx`: chọn con (dropdown nếu >1) → reuse Student Dashboard components (readonly)',
+            'Tạo `pages/parent/LinkStudentPage.tsx`: form nhập mã xác nhận 6 ký tự',
+            'Tạo `components/shared/NotificationBell.tsx`: icon chuông ở topbar, badge đếm chưa đọc, click → dropdown list',
+            'Notification dropdown: danh sách 10 gần nhất, click → navigate hoặc mark read, link "Xem tất cả"',
+            'Tạo `pages/common/NotificationsPage.tsx`: full list + filter',
+            'Push notification: register Service Worker, request permission on parent first login',
+            'Handle push event: show browser notification → click → open app',
+         ]},
+    ],
+    deliverable:'Parent portal: liên kết con, dashboard con, thông báo in-app + email + web push khi có kết quả mới.'
+},
+
+{
+    id:'p9', num:'9', title:'AI Thích ứng', days:'58–64', duration:7, color:'#a855f7',
+    icon:'🤖', ucs:['UC16','UC17'], deps:['GĐ 7'],
+    summary:'AI (GPT-4) sinh câu hỏi thích ứng từ câu trả lời sai, phiên luyện tập cá nhân hóa.',
+    tasks:[
+        {title:'Backend — AI Service', type:'backend',
+         apis:[
+            {method:'POST', path:'/api/student/ai-practice/start', desc:'Tạo phiên AI từ bài KT đã làm (phân tích câu sai → gọi GPT-4)'},
+            {method:'GET', path:'/api/student/ai-practice/:sessionId', desc:'Lấy câu hỏi AI đã sinh'},
+            {method:'POST', path:'/api/student/ai-practice/:sessionId/answer', desc:'Trả lời câu hỏi AI'},
+            {method:'GET', path:'/api/student/ai-practice/:sessionId/result', desc:'Kết quả phiên luyện tập'},
+            {method:'GET', path:'/api/student/ai-practice', desc:'Lịch sử phiên AI'},
+         ],
+         subtasks:[
+            'Cài OpenAI SDK: `npm i openai`',
+            'Phân tích câu sai: lấy attempt_answers WHERE is_correct=false → group by topic → chọn topic yếu nhất',
+            'Prompt engineering: system prompt = "Bạn là giáo viên THPT VN chuyên [subject]", user prompt = câu hỏi gốc + đáp án sai + yêu cầu tạo 5 câu mới cùng chủ đề',
+            'Response parsing: yêu cầu GPT-4 trả JSON strict format → parse → validate → lưu ai_generated_questions',
+            'Fallback: nếu OpenAI API timeout/error → chọn câu từ ngân hàng (cùng topic + difficulty ± 1)',
+            'Rate limiting: max 10 phiên AI / student / ngày (config trong system_configs)',
+            'Bull queue: queue AI requests nếu nhiều student đồng thời → process sequentially',
+            'Cost tracking: log tokens used per request → admin monitoring',
+         ]},
+        {title:'Frontend — AI Practice', type:'frontend',
+         subtasks:[
+            'Tạo `pages/student/AIPracticePage.tsx`: chọn bài KT đã làm → xem câu sai → nút "Luyện tập AI"',
+            'Loading state: skeleton + animation "AI đang phân tích và tạo câu hỏi..."',
+            'Interface làm bài AI: tương tự TakeExamPage nhưng đơn giản hơn (không timer, navigation giữa câu)',
+            'Kết quả phiên AI: score, so sánh topic mastery trước/sau, gợi ý tiếp tục luyện tập',
+            'Danh sách phiên AI đã thực hiện: date, topic, score, # questions',
+         ]},
+    ],
+    deliverable:'AI sinh câu hỏi thích ứng từ GPT-4 dựa trên câu sai. Phiên luyện tập cá nhân hóa hoàn chỉnh.'
+},
+
+{
+    id:'p10', num:'10', title:'Real-time + Polish', days:'65–72', duration:8, color:'#0d9488',
+    icon:'⚡', ucs:[], deps:['GĐ 8','GĐ 9'],
+    summary:'Socket.IO real-time, performance optimization, responsive design, dark mode, loading states, error handling UI.',
+    tasks:[
+        {title:'Backend — Socket.IO Setup', type:'backend',
+         subtasks:[
+            'Cài socket.io + @socket.io/redis-adapter',
+            'Tích hợp Socket.IO server vào Express app',
+            'Redis adapter cho multi-instance support',
+            'Auth middleware cho socket: verify JWT on connection',
+            'Rooms strategy: `user:{userId}`, `class:{classId}`, `exam:{examId}`',
+            'Events emit:\n  → `exam:started` — khi exam PUBLISHED (broadcast to assigned classes)\n  → `exam:student-submitted` — GV thấy real-time ai đã nộp\n  → `notification:new` — push notification in-app\n  → `exam:time-warning` — cảnh báo còn 5 phút\n  → `dashboard:update` — invalidate cache khi có data mới',
+         ]},
+        {title:'Frontend — Socket.IO Client', type:'frontend',
+         subtasks:[
+            'Tạo `hooks/useSocket.ts`: connect on login, disconnect on logout, auto-reconnect',
+            'Listen events: show toast/notification khi nhận event',
+            'Exam page: real-time cập nhật "X/Y học sinh đã nộp" cho GV',
+            'Notification bell: badge tự động tăng khi nhận notification:new',
+         ]},
+        {title:'Performance Optimization', type:'both',
+         subtasks:[
+            'Backend: Redis cache dashboard queries (TTL 5 phút), invalidate on submit',
+            'Backend: Prisma query optimization — select only needed fields, avoid N+1 (use include wisely)',
+            'Backend: Pagination everywhere (cursor-based cho large datasets)',
+            'Backend: Gzip compression via compression middleware',
+            'Frontend: React.lazy + Suspense cho mỗi page (code splitting)',
+            'Frontend: React Query cacheTime + staleTime tuning',
+            'Frontend: useMemo/useCallback cho heavy chart components',
+            'Frontend: Image lazy loading + avatar size optimization',
+            'Frontend: Bundle analysis (vite-plugin-visualizer) → loại bỏ unused deps',
+         ]},
+        {title:'UI Polish', type:'frontend',
+         subtasks:[
+            'Responsive design: test tablet (768px) + mobile (375px) cho mọi page',
+            'Dark mode: CSS variables + toggle button, lưu preference localStorage',
+            'Loading skeletons: tạo skeleton components cho mỗi page type (table, card, chart)',
+            'Toast notifications: react-hot-toast cho success/error/warning',
+            'Empty states: illustration + message cho mọi danh sách rỗng',
+            'Error boundaries: React ErrorBoundary wrapper cho mỗi route',
+            'Page transitions: framer-motion fade/slide animations',
+            '404 page (Not Found), 403 page (Forbidden), 500 page (Server Error)',
+            'Breadcrumbs navigation',
+            'Keyboard shortcuts: Ctrl+K search, Esc close modal',
+         ]},
+    ],
+    deliverable:'Real-time updates qua Socket.IO. Performance tối ưu. UI mượt mà, responsive, dark mode, loading states.'
+},
+
+{
+    id:'p11', num:'11', title:'Testing + CI/CD', days:'73–80', duration:8, color:'#e11d48',
+    icon:'🧪', ucs:[], deps:['GĐ 10'],
+    summary:'Unit tests, integration tests, E2E tests. GitHub Actions CI/CD pipeline. Branch protection.',
+    tasks:[
+        {title:'Backend — Unit Tests (Jest)', type:'backend',
+         subtasks:[
+            'Cài jest, ts-jest, @types/jest, supertest, @types/supertest',
+            'Cấu hình jest.config.ts: TypeScript transform, test database',
+            'Test Auth Service: login success/fail, token generation, password hash verify, refresh token, reset password flow',
+            'Test Exam Service: create exam, add questions, publish, schedule logic',
+            'Test Question Service: CRUD, import validation, filter logic',
+            'Test Analytics Service: score calculation accuracy, aggregation correctness',
+            'Test AI Service: prompt construction, response parsing, fallback logic',
+            'Test middlewares: auth (valid/invalid/expired token), roleAuth, rateLimiter, validation',
+            'Target: 70%+ code coverage cho business logic (services + controllers)',
+         ]},
+        {title:'Backend — Integration Tests (Supertest)', type:'backend',
+         subtasks:[
+            'Setup test database (separate PostgreSQL DB hoặc Docker container)',
+            'Tạo test helpers: createTestUser(), loginAsRole(), seedTestData()',
+            'Test full flow: login → create question → create exam → assign → student start → submit → view result',
+            'Test RBAC: student cannot POST /api/admin/users (403), teacher cannot DELETE user (403)',
+            'Test validation: invalid email format (400), missing required fields (400)',
+            'Test edge cases: submit after deadline, duplicate exam attempt, concurrent submissions',
+            'Cleanup: truncate test data after each test suite',
+         ]},
+        {title:'Frontend — Component Tests (Vitest)', type:'frontend',
+         subtasks:[
+            'Cài vitest, @testing-library/react, @testing-library/jest-dom, msw (Mock Service Worker)',
+            'Test LoginPage: render form, validation errors, successful login redirect',
+            'Test TakeExamPage: timer countdown, answer selection, auto-save trigger, submit confirmation',
+            'Test hooks: useAuth (login/logout state changes), useExam (data fetching)',
+            'Test shared components: QuestionCard, DifficultyBadge, NotificationBell',
+            'MSW: mock API responses cho consistent testing',
+         ]},
+        {title:'CI/CD Pipeline (GitHub Actions)', type:'devops',
+         subtasks:[
+            'Tạo `.github/workflows/ci.yml`:',
+            '  → Trigger: on push/PR to main, develop',
+            '  → Job 1: Lint (ESLint) + Format check (Prettier) + TypeScript type check',
+            '  → Job 2: Backend tests (Jest + Supertest) with PostgreSQL + Redis services',
+            '  → Job 3: Frontend tests (Vitest)',
+            '  → Job 4: Build check (TypeScript compile + Vite build)',
+            '  → Job 5 (optional): Docker build check',
+            'Branch protection rules:',
+            '  → main: require PR, require all checks pass, require 1 review',
+            '  → develop: require checks pass',
+            'Cấu hình GitHub secrets: DB credentials, API keys (cho test environment)',
+         ]},
+    ],
+    deliverable:'Test suite: 70%+ coverage backend, component tests frontend. CI pipeline auto-run on push. Branch protection enabled.'
+},
+
+{
+    id:'p12', num:'12', title:'Docker + Deploy + Monitoring', days:'81–87', duration:7, color:'#7c3aed',
+    icon:'🚀', ucs:[], deps:['GĐ 11'],
+    summary:'Production Docker images, Nginx reverse proxy, SSL, Prometheus monitoring, Grafana dashboards, Loki logging.',
+    tasks:[
+        {title:'Dockerfiles Production', type:'devops',
+         subtasks:[
+            'Tạo `docker/Dockerfile.server`: multi-stage build\n  Stage 1 (builder): npm ci → prisma generate → tsc build\n  Stage 2 (runner): copy dist + node_modules + prisma → CMD node dist/server.js',
+            'Tạo `docker/Dockerfile.client`: multi-stage build\n  Stage 1: npm ci → vite build\n  Stage 2: nginx:alpine → copy dist → copy nginx.conf',
+            'Tạo `docker/nginx.conf`: reverse proxy\n  / → client (static)\n  /api → server:3000\n  /socket.io → server:3000 (WebSocket upgrade)',
+            'Tạo `docker-compose.prod.yml` với tất cả services',
+            'Test: docker compose -f docker-compose.prod.yml up --build → toàn bộ stack chạy',
+         ],
+         code:'# docker-compose.prod.yml — 10 services\nservices:\n  nginx:          # Reverse proxy + SSL termination\n  server:         # Node.js Express app\n  client:         # Vite build served by Nginx\n  postgres:       # PostgreSQL 16 + volume + backup cron\n  pgbouncer:      # Connection pooling (max 100 connections)\n  redis:          # Cache + sessions + queue\n  minio:          # Object storage\n  prometheus:     # Metrics scraping (15s interval)\n  grafana:        # Dashboards + alerting\n  loki:           # Log aggregation\n  promtail:       # Log shipping to Loki'},
+        {title:'Monitoring (Prometheus + Grafana)', type:'devops',
+         subtasks:[
+            'Cài prom-client vào Express: default metrics + custom metrics',
+            'Custom metrics: http_request_duration_seconds, active_users_total, exam_submissions_total, ai_requests_total',
+            'Expose `/metrics` endpoint (chỉ internal access)',
+            'Prometheus config: scrape targets (server, postgres-exporter, redis-exporter, node-exporter)',
+            'Grafana dashboards:\n  → System Overview: CPU, RAM, disk, network\n  → Application: request rate, response time (p50/p95/p99), error rate\n  → Business: active users, exams created, submissions/hour\n  → Database: active connections, query duration, cache hit rate',
+            'Alert rules: response_time_p95 > 2s, error_rate > 5%, disk_usage > 80%',
+            'Alert channels: email + Slack webhook',
+         ]},
+        {title:'Logging (Loki + Promtail)', type:'devops',
+         subtasks:[
+            'Winston logger format: JSON structured logging {timestamp, level, message, requestId, userId, ...}',
+            'Correlation ID middleware: mỗi request nhận unique requestId → gắn vào mọi log entry',
+            'Log levels: error (bugs), warn (recoverable), info (business events), debug (dev only)',
+            'Promtail config: collect từ Docker container logs → ship to Loki',
+            'Grafana Log Explorer: filter by level, service, requestId, userId',
+         ]},
+        {title:'Production Checklist', type:'devops',
+         subtasks:[
+            '☐ SSL certificate (Let\'s Encrypt / Certbot auto-renew)',
+            '☐ Environment variables: tất cả secrets qua .env (không hardcode)',
+            '☐ Database backup cron: pg_dump daily → gzip → MinIO "backups" bucket → retain 30 ngày',
+            '☐ Nginx: rate limiting (100 req/min general, 10 req/min login), gzip on, security headers',
+            '☐ CORS: whitelist production domain only',
+            '☐ Helmet: security headers (CSP, HSTS, X-Frame-Options)',
+            '☐ Redis: password required, maxmemory policy allkeys-lru',
+            '☐ PostgreSQL: max_connections qua PgBouncer, log slow queries > 1s',
+            '☐ MinIO: access policies per bucket (uploads: authenticated, reports: signed URLs)',
+            '☐ Health check endpoints: /health (server), /health/db, /health/redis',
+            '☐ Graceful shutdown: handle SIGTERM, close connections, finish in-flight requests',
+            '☐ Docker resource limits: memory + CPU per container',
+         ]},
+    ],
+    deliverable:'Production deployment: Docker stack, SSL, monitoring dashboards, alerting, centralized logging, automated backup. PROJECT COMPLETE! 🎉'
+},
+];
+
+// ════════════════════════════════════════════════════
+// RENDER ENGINE
+// ════════════════════════════════════════════════════
+let activePhase = 'p0';
+const completedTasks = JSON.parse(localStorage.getItem('wq_completed') || '{}');
+
+function saveCompleted(){ localStorage.setItem('wq_completed', JSON.stringify(completedTasks)); }
+
+function getPhaseProgress(p){
+    let total=0, done=0;
+    p.tasks.forEach((t,ti)=>{
+        (t.subtasks||[]).forEach((_,si)=>{
+            total++;
+            if(completedTasks[`${p.id}_${ti}_${si}`]) done++;
+        });
+    });
+    return total?Math.round(done/total*100):0;
+}
+
+function getTotalProgress(){
+    let total=0, done=0;
+    phases.forEach(p=>{
+        p.tasks.forEach((t,ti)=>{
+            (t.subtasks||[]).forEach((_,si)=>{
+                total++;
+                if(completedTasks[`${p.id}_${ti}_${si}`]) done++;
+            });
+        });
+    });
+    return total?Math.round(done/total*100):0;
+}
+
+function toggleSubtask(key){
+    completedTasks[key]=!completedTasks[key];
+    saveCompleted();
+    renderPhase(activePhase);
+    updateNav();
+    document.getElementById('hero-progress').textContent=getTotalProgress()+'%';
+}
+
+function buildNav(){
+    const nav=document.getElementById('phase-nav');
+    nav.innerHTML=phases.map(p=>`<button class="phase-btn${p.id===activePhase?' active':''}" data-phase="${p.id}" onclick="switchPhase('${p.id}')">${p.icon} GĐ${p.num}</button>`).join('');
+}
+
+function updateNav(){
+    document.querySelectorAll('.phase-btn').forEach(b=>{
+        b.classList.toggle('active', b.dataset.phase===activePhase);
+    });
+}
+
+function switchPhase(id){
+    activePhase=id;
+    updateNav();
+    renderPhase(id);
+    window.scrollTo({top:document.getElementById('main-content').offsetTop-60,behavior:'smooth'});
+}
+
+function typeColor(t){
+    return t==='backend'?{bg:'rgba(16,185,129,.1)',text:'#10b981',label:'BACKEND'}:
+           t==='frontend'?{bg:'rgba(59,130,246,.1)',text:'#3b82f6',label:'FRONTEND'}:
+           t==='devops'?{bg:'rgba(139,92,246,.1)',text:'#a78bfa',label:'DEVOPS'}:
+           t==='setup'?{bg:'rgba(100,116,139,.1)',text:'#94a3b8',label:'SETUP'}:
+           {bg:'rgba(245,158,11,.1)',text:'#f59e0b',label:'FULL-STACK'};
+}
+
+function renderPhase(id){
+    const p=phases.find(x=>x.id===id);
+    if(!p) return;
+    const main=document.getElementById('main-content');
+    const progress=getPhaseProgress(p);
+    const tc=typeColor;
+
+    let h=`
+    <div class="mb-8">
+        <div class="flex items-start gap-4 mb-4">
+            <div class="text-4xl">${p.icon}</div>
+            <div class="flex-1">
+                <div class="flex items-center gap-3 mb-1">
+                    <h2 class="text-2xl font-extrabold text-white">Giai đoạn ${p.num}: ${p.title}</h2>
+                    <span class="badge" style="background:${p.color}22;color:${p.color};border:1px solid ${p.color}33">Ngày ${p.days}</span>
+                    <span class="badge bg-slate-700 text-slate-300">${p.duration} ngày</span>
+                </div>
+                <p class="text-sm text-slate-400 leading-relaxed mb-3">${p.summary}</p>
+                <div class="flex items-center gap-3 flex-wrap">
+                    ${p.ucs.length?`<span class="text-[11px] text-slate-500">Use Cases:</span>`:''}
+                    ${p.ucs.map(u=>`<span class="text-[10px] font-bold px-2 py-0.5 rounded" style="background:${p.color}15;color:${p.color}">${u}</span>`).join('')}
+                    ${p.deps.length?`<span class="text-[11px] text-slate-500 ml-2">Phụ thuộc:</span>`:''}
+                    ${p.deps.map(d=>`<span class="dep-tag">${d}</span>`).join('')}
+                </div>
+            </div>
+            <div class="text-right shrink-0">
+                <div class="text-3xl font-black" style="color:${progress>=100?'#10b981':p.color}">${progress}%</div>
+                <div class="text-[10px] text-slate-500 mt-1">hoàn thành</div>
+                <div class="w-32 h-2 bg-slate-700 rounded-full mt-2 overflow-hidden">
+                    <div class="h-full rounded-full transition-all duration-500" style="width:${progress}%;background:${progress>=100?'#10b981':p.color}"></div>
+                </div>
+            </div>
+        </div>
+    </div>`;
+
+    p.tasks.forEach((t,ti)=>{
+        const tc_=typeColor(t.type);
+        h+=`<div class="task-card mb-4">
+            <div class="flex items-center gap-3 mb-4">
+                <span class="badge" style="background:${tc_.bg};color:${tc_.text}">${tc_.label}</span>
+                <h3 class="text-base font-bold text-white">${t.title}</h3>
+            </div>`;
+
+        // APIs
+        if(t.apis && t.apis.length){
+            h+=`<div class="mb-4 bg-slate-900/50 rounded-lg p-3">
+                <div class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">API Endpoints</div>`;
+            t.apis.forEach(a=>{
+                const mc=a.method.toLowerCase();
+                h+=`<div class="api-row">
+                    <span class="method ${mc}">${a.method}</span>
+                    <code class="text-[11px] text-slate-300 font-mono">${a.path}</code>
+                    <span class="text-[11px] text-slate-500">${a.desc}</span>
+                </div>`;
+            });
+            h+=`</div>`;
+        }
+
+        // Subtasks
+        if(t.subtasks && t.subtasks.length){
+            h+=`<div class="space-y-0">`;
+            t.subtasks.forEach((s,si)=>{
+                const key=`${p.id}_${ti}_${si}`;
+                const done=completedTasks[key];
+                h+=`<div class="subtask">
+                    <div class="subtask-check${done?' done':''}" onclick="toggleSubtask('${key}')"></div>
+                    <span class="text-[13px] ${done?'text-slate-600 line-through':'text-slate-300'}" style="line-height:1.5">${s.replace(/`([^`]+)`/g,'<code class="text-xs px-1.5 py-0.5 bg-slate-800 text-blue-300 rounded font-mono">$1</code>').replace(/\n/g,'<br>')}</span>
+                </div>`;
+            });
+            h+=`</div>`;
+        }
+
+        // Files
+        if(t.files){
+            h+=`<div class="mt-4"><div class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Cấu trúc thư mục</div>
+            <div class="file-tree"><pre>${t.files.replace(/├/g,'<span class="text-slate-600">├</span>').replace(/└/g,'<span class="text-slate-600">└</span>').replace(/│/g,'<span class="text-slate-600">│</span>').replace(/#(.+)/g,'<span class="comment">#$1</span>')}</pre></div></div>`;
+        }
+
+        // Code
+        if(t.code){
+            h+=`<div class="mt-4"><div class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Code Example</div>
+            <div class="code-block"><pre>${t.code.replace(/#(.+)/g,'<span class="text-emerald-600">#$1</span>')}</pre></div></div>`;
+        }
+
+        h+=`</div>`;
+    });
+
+    // Deliverable
+    h+=`<div class="mt-6 p-5 rounded-xl border-2 border-dashed" style="border-color:${p.color}33;background:${p.color}08">
+        <div class="text-[10px] font-bold uppercase tracking-wider mb-2" style="color:${p.color}">🎯 Deliverable — Giai đoạn ${p.num}</div>
+        <p class="text-sm text-slate-300 leading-relaxed">${p.deliverable}</p>
+    </div>`;
+
+    main.innerHTML=h;
+}
+
+// ════════════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════════════
+buildNav();
+renderPhase(activePhase);
+document.getElementById('hero-progress').textContent=getTotalProgress()+'%';
+</script>
+
+</body>
+</html>

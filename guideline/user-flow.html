@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Flow – High School Learning Analytics Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        *{margin:0;box-sizing:border-box}
+        body{overflow:hidden;background:#f1f5f9;font-family:'Segoe UI',system-ui,-apple-system,sans-serif}
+        #canvas-wrap{flex:1;overflow:auto;cursor:grab;position:relative}
+        #canvas-wrap:active{cursor:grabbing}
+        #canvas-wrap::-webkit-scrollbar{width:8px;height:8px}
+        #canvas-wrap::-webkit-scrollbar-track{background:transparent}
+        #canvas-wrap::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px}
+        .flow-node{cursor:pointer;transition:filter .15s}
+        .flow-node:hover .node-bg{filter:url(#glow)}
+        #tooltip{position:fixed;max-width:320px;background:#fff;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:12px 16px;font-size:13px;line-height:1.55;display:none;z-index:999;pointer-events:none}
+        #tooltip .tid{font-weight:700;color:#3b82f6}
+        #tooltip .tname{font-weight:600;color:#0f172a;margin-left:4px}
+        #tooltip .tdesc{color:#475569;margin-top:5px;display:block}
+        #sidebar{width:290px;min-width:290px;background:#fff;border-left:1px solid #e2e8f0;overflow-y:auto;display:flex;flex-direction:column;transition:all .25s}
+        #sidebar.collapsed{width:0;min-width:0;padding:0;border:none;overflow:hidden}
+        #sidebar::-webkit-scrollbar{width:5px}
+        #sidebar::-webkit-scrollbar-thumb{background:#e2e8f0;border-radius:3px}
+        .sb-head{padding:14px 16px 10px;border-bottom:1px solid #f1f5f9}
+        .sb-body{flex:1;overflow-y:auto;padding:6px 0}
+        .sb-step{display:flex;gap:10px;padding:8px 16px;cursor:default;border-left:3px solid transparent;transition:background .12s}
+        .sb-step:hover{background:#f8fafc}
+        .sb-uc{font-weight:700;color:#94a3b8;font-size:10px;min-width:36px;padding-top:2px}
+        .sb-name{font-weight:600;color:#334155;font-size:12.5px}
+        .sb-desc{color:#64748b;font-size:11px;margin-top:3px;line-height:1.5}
+        .sb-opt{display:inline-block;font-size:9px;background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:3px;margin-left:4px;font-weight:700}
+        .tab-btn{padding:5px 14px;border-radius:6px;font-size:11.5px;font-weight:600;cursor:pointer;border:none;transition:all .15s}
+        .tab-btn:hover{opacity:.85}
+        .tab-btn.active{box-shadow:0 2px 8px rgba(0,0,0,.12)}
+    </style>
+</head>
+<body class="flex flex-col h-screen">
+
+<header class="h-[52px] bg-white border-b border-gray-200 flex items-center justify-between px-4 shadow-sm z-20 shrink-0">
+    <div class="flex items-center gap-3">
+        <h1 class="text-sm font-bold text-gray-800 mr-2 whitespace-nowrap">User Flow Diagram</h1>
+        <div class="flex gap-1.5" id="tab-bar">
+            <button class="tab-btn active" data-flow="student" onclick="switchTab('student')" style="background:#2563eb;color:#fff">Học sinh</button>
+            <button class="tab-btn" data-flow="parent" onclick="switchTab('parent')" style="background:#f0fdf4;color:#16a34a">Phụ huynh</button>
+            <button class="tab-btn" data-flow="teacher" onclick="switchTab('teacher')" style="background:#fff7ed;color:#ea580c">Giáo viên</button>
+            <button class="tab-btn" data-flow="admin" onclick="switchTab('admin')" style="background:#fef2f2;color:#dc2626">Admin</button>
+        </div>
+    </div>
+    <div class="flex items-center gap-3">
+        <div class="hidden md:flex items-center gap-4 mr-3 border-r pr-3 border-gray-200">
+            <div class="flex items-center gap-1.5 text-[11px] text-gray-500"><span class="inline-block w-5 h-0 border-t-2 border-gray-400"></span> Bắt buộc</div>
+            <div class="flex items-center gap-1.5 text-[11px] text-gray-500"><span class="inline-block w-5 h-0 border-t-2 border-dashed border-gray-400"></span> Tùy chọn</div>
+            <div class="flex items-center gap-1.5 text-[11px] text-gray-500"><span class="inline-block w-3 h-3 bg-amber-100 border border-amber-400 rotate-45"></span> Quyết định</div>
+        </div>
+        <span class="text-xs text-gray-400 tabular-nums w-10 text-right" id="zoom-pct">85%</span>
+        <button onclick="zoomBy(-.1)" class="w-7 h-7 rounded bg-gray-100 hover:bg-gray-200 font-bold text-gray-500 grid place-items-center">−</button>
+        <button onclick="zoomBy(.1)" class="w-7 h-7 rounded bg-gray-100 hover:bg-gray-200 font-bold text-gray-500 grid place-items-center">+</button>
+        <button onclick="fitToScreen()" class="h-7 px-2.5 rounded bg-gray-100 hover:bg-gray-200 text-[11px] font-semibold text-gray-600">Fit</button>
+        <button onclick="document.getElementById('sidebar').classList.toggle('collapsed')" class="h-7 px-2 rounded bg-gray-100 hover:bg-gray-200 text-sm text-gray-500" title="Toggle sidebar">☰</button>
+    </div>
+</header>
+
+<div class="flex flex-1 overflow-hidden">
+    <div id="canvas-wrap"><svg id="svg" xmlns="http://www.w3.org/2000/svg"></svg></div>
+    <div id="sidebar">
+        <div class="sb-head">
+            <div class="text-xs font-bold text-gray-800 uppercase tracking-wider" id="sb-title">Các bước trong luồng</div>
+            <div class="text-[11px] text-gray-500 mt-1" id="sb-sub"></div>
+        </div>
+        <div class="sb-body" id="sb-list"></div>
+    </div>
+</div>
+
+<div id="tooltip"><span class="tid"></span><span class="tname"></span><span class="tdesc"></span></div>
+
+<script>
+const NS='http://www.w3.org/2000/svg';
+function mk(t,a,p){const e=document.createElementNS(NS,t);if(a)for(const[k,v]of Object.entries(a))e.setAttribute(k,v);if(p)p.appendChild(e);return e}
+
+const NW=180,NH=52;
+const portDims={start:{hw:60,hh:18},end:{hw:60,hh:18},process:{hw:90,hh:26},decision:{hw:60,hh:35}};
+function gp(n,d){const p=portDims[n.type];switch(d){case'top':return{x:n.x,y:n.y-p.hh};case'bottom':return{x:n.x,y:n.y+p.hh};case'left':return{x:n.x-p.hw,y:n.y};case'right':return{x:n.x+p.hw,y:n.y}}}
+
+function route(a,b,fd,td){
+    if(fd==='bottom'&&td==='top'){
+        if(Math.abs(a.x-b.x)<3)return`M${a.x},${a.y}L${b.x},${b.y}`;
+        const m=(a.y+b.y)/2;return`M${a.x},${a.y}L${a.x},${m}L${b.x},${m}L${b.x},${b.y}`;
+    }
+    if((fd==='left'||fd==='right')&&td==='top')return`M${a.x},${a.y}L${b.x},${a.y}L${b.x},${b.y}`;
+    if(fd==='bottom'&&(td==='left'||td==='right'))return`M${a.x},${a.y}L${a.x},${b.y}L${b.x},${b.y}`;
+    if((fd==='left'||fd==='right')&&(td==='left'||td==='right')){const mx=(a.x+b.x)/2;return`M${a.x},${a.y}L${mx},${a.y}L${mx},${b.y}L${b.x},${b.y}`}
+    return`M${a.x},${a.y}L${b.x},${b.y}`;
+}
+
+function arrow(g,x,y,dir,c){
+    const s=5;let pts;
+    switch(dir){
+        case'top':pts=`${x},${y} ${x-s},${y-s*1.5} ${x+s},${y-s*1.5}`;break;
+        case'bottom':pts=`${x},${y} ${x-s},${y+s*1.5} ${x+s},${y+s*1.5}`;break;
+        case'left':pts=`${x},${y} ${x-s*1.5},${y-s} ${x-s*1.5},${y+s}`;break;
+        case'right':pts=`${x},${y} ${x+s*1.5},${y-s} ${x+s*1.5},${y+s}`;break;
+    }
+    mk('polygon',{points:pts,fill:c||'#94a3b8'},g);
+}
+
+const uc={
+    UC01:{n:'Đăng nhập hệ thống',d:'Người dùng nhập email/username và mật khẩu để truy cập hệ thống theo vai trò được phân quyền.'},
+    UC02:{n:'Đăng xuất',d:'Người dùng kết thúc phiên đăng nhập và thoát khỏi hệ thống an toàn.'},
+    UC03:{n:'Quản lý hồ sơ cá nhân',d:'Người dùng xem và cập nhật thông tin cá nhân (tên, email, ảnh đại diện, mật khẩu).'},
+    UC04:{n:'Đặt lại mật khẩu',d:'Người dùng yêu cầu đặt lại mật khẩu qua email khi quên mật khẩu đăng nhập.'},
+    UC05:{n:'Xem DS bài kiểm tra',d:'Học sinh xem danh sách bài kiểm tra được phân công, bao gồm trạng thái, thời hạn, môn học.'},
+    UC06:{n:'Làm bài kiểm tra',d:'Học sinh thực hiện bài kiểm tra trắc nghiệm trực tuyến với đồng hồ đếm ngược.'},
+    UC07:{n:'Nộp bài kiểm tra',d:'Hệ thống ghi nhận và lưu trữ bài làm khi học sinh chủ động nộp bài.'},
+    UC08:{n:'Tự động nộp khi hết giờ',d:'Hệ thống tự động nộp bài khi thời gian làm bài kết thúc.'},
+    UC09:{n:'Xem kết quả & đáp án',d:'Học sinh xem điểm số, đáp án đúng, và giải thích cho từng câu hỏi sau khi nộp bài.'},
+    UC10:{n:'Xem Dashboard cá nhân',d:'Học sinh truy cập dashboard tổng hợp hiển thị tiến độ học tập theo thời gian.'},
+    UC11:{n:'Phân tích điểm mạnh/yếu',d:'Hệ thống phân tích và hiển thị biểu đồ các chủ đề học sinh làm tốt và chưa tốt.'},
+    UC12:{n:'Phân tích Time-on-Task',d:'Hệ thống phân tích thời gian trung bình học sinh dành cho mỗi câu hỏi/chủ đề.'},
+    UC13:{n:'Phân tích Answer Patterns',d:'Hệ thống phân tích hành vi thay đổi đáp án của học sinh trong quá trình làm bài.'},
+    UC14:{n:'Xem Knowledge Graph',d:'Học sinh xem đồ thị tri thức trực quan hiển thị mối liên hệ giữa các chủ đề đã học.'},
+    UC15:{n:'Xem lịch sử bài KT',d:'Học sinh xem danh sách tất cả bài kiểm tra đã làm, bao gồm điểm, thời gian, xu hướng.'},
+    UC16:{n:'Luyện tập câu hỏi AI',d:'Học sinh luyện tập với bộ câu hỏi được AI tạo dựa trên những câu đã trả lời sai.'},
+    UC17:{n:'AI sinh câu hỏi từ bài sai',d:'Hệ thống AI tự động phân tích câu sai và sinh câu hỏi mới cùng chủ đề/dạng bài.'},
+    UC18:{n:'Liên kết TK với học sinh',d:'Phụ huynh liên kết tài khoản với tài khoản học sinh (con) bằng mã xác nhận.'},
+    UC19:{n:'Xem kết quả của con',d:'Phụ huynh xem tổng hợp kết quả bài kiểm tra của con theo môn học và thời gian.'},
+    UC20:{n:'Xem Dashboard của con',d:'Phụ huynh truy cập dashboard tiến độ học tập tổng quan của con.'},
+    UC21:{n:'Xem điểm mạnh/yếu con',d:'Phụ huynh xem biểu đồ phân tích điểm mạnh và điểm yếu của con theo chủ đề.'},
+    UC22:{n:'Nhận thông báo kết quả',d:'Phụ huynh nhận thông báo tự động khi con hoàn thành bài kiểm tra hoặc có kết quả mới.'},
+    UC23:{n:'QL ngân hàng câu hỏi',d:'Giáo viên quản lý kho câu hỏi (thêm, sửa, xóa) phân loại theo môn, chương, mức độ khó.'},
+    UC24:{n:'Import câu hỏi',d:'Giáo viên import hàng loạt câu hỏi từ file Excel/CSV vào ngân hàng câu hỏi.'},
+    UC25:{n:'Gắn tag chủ đề/chương',d:'Giáo viên gắn tag chủ đề, chương, và mức độ khó cho từng câu hỏi.'},
+    UC26:{n:'Tạo & cấu hình bài KT',d:'Giáo viên tạo bài kiểm tra mới và cấu hình (thời gian, số câu, trộn đề, điểm đạt).'},
+    UC27:{n:'Đặt lịch kiểm tra',d:'Giáo viên đặt lịch tự động mở/đóng bài kiểm tra theo thời gian xác định.'},
+    UC28:{n:'Phân công bài KT cho lớp',d:'Giáo viên gán bài kiểm tra cho một hoặc nhiều lớp học.'},
+    UC29:{n:'Quản lý lớp học',d:'Giáo viên quản lý danh sách lớp học (tạo, sửa, xóa lớp; thêm/xóa học sinh).'},
+    UC30:{n:'Xem Dashboard phân tích lớp',d:'Giáo viên truy cập dashboard phân tích tổng hợp kết quả kiểm tra của cả lớp.'},
+    UC31:{n:'Phân tích hiệu suất lớp',d:'Hệ thống tính toán và hiển thị các chỉ số hiệu suất lớp (điểm TB, tỷ lệ đạt).'},
+    UC32:{n:'Xem phân bố điểm',d:'Hệ thống hiển thị biểu đồ phân bố điểm của lớp cho từng bài kiểm tra.'},
+    UC33:{n:'Nhận diện HS yếu',d:'Hệ thống tự động nhận diện học sinh có kết quả yếu liên tục và cảnh báo giáo viên.'},
+    UC34:{n:'So sánh giữa các lớp',d:'Giáo viên so sánh kết quả kiểm tra giữa các lớp khác nhau cùng môn học.'},
+    UC35:{n:'Chấm điểm / Xem KQ',d:'Giáo viên xem chi tiết kết quả từng học sinh và chấm điểm bổ sung nếu cần.'},
+    UC36:{n:'Xuất báo cáo',d:'Giáo viên xuất báo cáo phân tích dưới dạng PDF/Excel.'},
+    UC37:{n:'QL tài khoản người dùng',d:'Admin quản lý tài khoản người dùng (tạo, sửa, kích hoạt/vô hiệu hóa tài khoản).'},
+    UC38:{n:'Import DS người dùng',d:'Admin import danh sách người dùng hàng loạt từ file Excel/CSV.'},
+    UC39:{n:'Phân quyền',d:'Admin gán vai trò (Student, Teacher, Parent, Admin) cho từng tài khoản.'},
+    UC40:{n:'Quản lý môn học',d:'Admin quản lý danh mục môn học (Toán, Lý, Hóa) và cấu hình liên quan.'},
+    UC41:{n:'QL năm học / Học kỳ',d:'Admin quản lý cấu trúc năm học, học kỳ, và các mốc thời gian quan trọng.'},
+    UC42:{n:'Cấu hình hệ thống',d:'Admin cấu hình các thiết lập hệ thống (logo, tên trường, email, v.v.).'},
+    UC43:{n:'Giám sát hiệu năng',d:'Admin giám sát hiệu năng hệ thống (CPU, RAM, response time, uptime).'},
+    UC44:{n:'Xem nhật ký hoạt động',d:'Admin xem nhật ký hoạt động chi tiết của người dùng và hệ thống.'},
+    UC45:{n:'Sao lưu / Phục hồi DL',d:'Admin thực hiện sao lưu và phục hồi dữ liệu hệ thống.'},
+};
+
+const flows={
+student:{
+    color:'#2563eb',bg:'#eff6ff',title:'Luồng Học sinh (Student Flow)',sub:'20 bước · 5 nhánh chức năng',
+    cw:1400,ch:1200,
+    nodes:[
+        {id:'s0',type:'start',label:'Bắt đầu',x:700,y:50},
+        {id:'s1',type:'process',label:'Đăng nhập\nhệ thống',x:700,y:140,uc:'UC01'},
+        {id:'s2',type:'process',label:'Dashboard cá nhân',x:700,y:240,uc:'UC10'},
+        {id:'s3',type:'decision',label:'Chọn\nchức năng?',x:700,y:360},
+        {id:'s4',type:'process',label:'Xem DS\nbài kiểm tra',x:200,y:510,uc:'UC05'},
+        {id:'s5',type:'process',label:'Làm bài kiểm tra',x:200,y:600,uc:'UC06'},
+        {id:'s6',type:'decision',label:'Hết giờ?',x:200,y:705},
+        {id:'s7',type:'process',label:'Nộp bài\nkiểm tra',x:100,y:810,uc:'UC07'},
+        {id:'s8',type:'process',label:'Tự động nộp\nkhi hết giờ',x:310,y:810,uc:'UC08'},
+        {id:'s9',type:'process',label:'Xem kết quả\n& đáp án',x:200,y:910,uc:'UC09'},
+        {id:'s10',type:'process',label:'Phân tích\nđiểm mạnh/yếu',x:450,y:510,uc:'UC11'},
+        {id:'s11',type:'process',label:'Phân tích\nTime-on-Task',x:450,y:600,uc:'UC12'},
+        {id:'s12',type:'process',label:'Phân tích\nAnswer Patterns',x:450,y:690,uc:'UC13'},
+        {id:'s13',type:'process',label:'Xem\nKnowledge Graph',x:680,y:510,uc:'UC14'},
+        {id:'s14',type:'process',label:'Xem lịch sử\nbài KT',x:680,y:600,uc:'UC15'},
+        {id:'s15',type:'process',label:'Luyện tập\ncâu hỏi AI',x:930,y:510,uc:'UC16'},
+        {id:'s16',type:'process',label:'AI sinh câu hỏi\ntừ bài sai',x:930,y:600,uc:'UC17'},
+        {id:'s17',type:'process',label:'Quản lý\nhồ sơ cá nhân',x:1200,y:510,uc:'UC03'},
+        {id:'s18',type:'process',label:'Đặt lại mật khẩu',x:1200,y:600,uc:'UC04'},
+        {id:'s19',type:'process',label:'Đăng xuất',x:700,y:1060,uc:'UC02'},
+        {id:'s20',type:'end',label:'Kết thúc',x:700,y:1150},
+    ],
+    edges:[
+        {from:'s0',to:'s1'},{from:'s1',to:'s2'},{from:'s2',to:'s3'},
+        {from:'s4',to:'s5'},{from:'s5',to:'s6'},
+        {from:'s6',to:'s7',fp:'left',label:'Không'},
+        {from:'s6',to:'s8',fp:'right',label:'Có'},
+        {from:'s7',to:'s9'},{from:'s8',to:'s9'},
+        {from:'s10',to:'s11'},{from:'s11',to:'s12'},
+        {from:'s13',to:'s14'},
+        {from:'s15',to:'s16'},
+        {from:'s17',to:'s18'},
+        {from:'s19',to:'s20'},
+    ],
+    forks:[{from:'s3',port:'bottom',barY:440,branches:[
+        {to:'s4',label:'Kiểm tra'},{to:'s10',label:'Phân tích'},{to:'s13',label:'Tra cứu'},{to:'s15',label:'AI'},{to:'s17',label:'Hồ sơ'}
+    ]}],
+    merges:[{to:'s19',port:'top',barY:990,branches:['s9','s12','s14','s16','s18']}],
+    annotations:[
+        {x:910,y:110,w:195,text:'❌ Sai mật khẩu → Thông báo lỗi\nCho thử lại (tối đa 5 lần)\nKhóa TK nếu vượt quá',color:'#dc2626',bg:'#fef2f2'},
+        {x:15,y:645,w:175,text:'⚡ Mất kết nối khi làm bài\n→ Auto-save mỗi 30 giây\n→ Tiếp tục khi reconnect',color:'#d97706',bg:'#fffbeb'},
+        {x:15,y:865,w:160,text:'🔄 Lỗi nộp bài → Retry\ntự động 3 lần, thông báo\nGV nếu vẫn thất bại',color:'#dc2626',bg:'#fef2f2'},
+    ]
+},
+
+parent:{
+    color:'#16a34a',bg:'#f0fdf4',title:'Luồng Phụ huynh (Parent Flow)',sub:'11 bước · 4 nhánh chức năng',
+    cw:1200,ch:960,
+    nodes:[
+        {id:'p0',type:'start',label:'Bắt đầu',x:600,y:50},
+        {id:'p1',type:'process',label:'Đăng nhập\nhệ thống',x:600,y:140,uc:'UC01'},
+        {id:'p2',type:'decision',label:'Lần đầu\nsử dụng?',x:600,y:250},
+        {id:'p3',type:'process',label:'Liên kết TK\nvới học sinh',x:300,y:355,uc:'UC18'},
+        {id:'p4',type:'decision',label:'Chọn\nchức năng?',x:600,y:445},
+        {id:'p5',type:'process',label:'Xem kết quả\ncủa con',x:150,y:590,uc:'UC19'},
+        {id:'p6',type:'process',label:'Xem Dashboard\ncủa con',x:400,y:590,uc:'UC20'},
+        {id:'p7',type:'process',label:'Xem điểm\nmạnh/yếu con',x:400,y:680,uc:'UC21'},
+        {id:'p8',type:'process',label:'Nhận thông báo\nkết quả',x:680,y:590,uc:'UC22'},
+        {id:'p9',type:'process',label:'Quản lý\nhồ sơ cá nhân',x:980,y:590,uc:'UC03'},
+        {id:'p10',type:'process',label:'Đăng xuất',x:600,y:840,uc:'UC02'},
+        {id:'p11',type:'end',label:'Kết thúc',x:600,y:925},
+    ],
+    edges:[
+        {from:'p0',to:'p1'},{from:'p1',to:'p2'},
+        {from:'p2',to:'p3',fp:'left',label:'Có'},
+        {from:'p2',to:'p4',label:'Không'},
+        {from:'p3',to:'p4',tp:'left'},
+        {from:'p6',to:'p7'},
+        {from:'p10',to:'p11'},
+    ],
+    forks:[{from:'p4',port:'bottom',barY:525,branches:[
+        {to:'p5',label:'Kết quả'},{to:'p6',label:'Dashboard'},{to:'p8',label:'Thông báo'},{to:'p9',label:'Hồ sơ'}
+    ]}],
+    merges:[{to:'p10',port:'top',barY:770,branches:['p5','p7','p8','p9']}],
+    annotations:[
+        {x:40,y:330,w:200,text:'❌ Mã xác nhận sai\n→ Thử lại hoặc yêu cầu\nmã mới từ Admin',color:'#dc2626',bg:'#fef2f2'},
+    ]
+},
+
+teacher:{
+    color:'#ea580c',bg:'#fff7ed',title:'Luồng Giáo viên (Teacher Flow)',sub:'18 bước · 4 nhánh chức năng',
+    cw:1400,ch:1210,
+    nodes:[
+        {id:'t0',type:'start',label:'Bắt đầu',x:700,y:50},
+        {id:'t1',type:'process',label:'Đăng nhập\nhệ thống',x:700,y:140,uc:'UC01'},
+        {id:'t2',type:'decision',label:'Chọn\nchức năng?',x:700,y:250},
+        {id:'t3',type:'process',label:'QL ngân hàng\ncâu hỏi',x:170,y:400,uc:'UC23'},
+        {id:'t4',type:'process',label:'Import câu hỏi',x:170,y:490,uc:'UC24',opt:true},
+        {id:'t5',type:'process',label:'Gắn tag\nchủ đề/chương',x:170,y:580,uc:'UC25',opt:true},
+        {id:'t6',type:'process',label:'Tạo & cấu hình\nbài KT',x:170,y:670,uc:'UC26'},
+        {id:'t7',type:'process',label:'Đặt lịch kiểm tra',x:170,y:760,uc:'UC27',opt:true},
+        {id:'t8',type:'process',label:'Phân công\nbài KT cho lớp',x:170,y:850,uc:'UC28'},
+        {id:'t9',type:'process',label:'Quản lý lớp học',x:470,y:400,uc:'UC29'},
+        {id:'t10',type:'process',label:'Dashboard\nphân tích lớp',x:770,y:400,uc:'UC30'},
+        {id:'t11',type:'process',label:'Phân tích\nhiệu suất lớp',x:770,y:490,uc:'UC31'},
+        {id:'t12',type:'process',label:'Xem phân bố điểm',x:770,y:580,uc:'UC32'},
+        {id:'t13',type:'process',label:'Nhận diện HS yếu',x:770,y:670,uc:'UC33'},
+        {id:'t14',type:'process',label:'So sánh\ngiữa các lớp',x:770,y:760,uc:'UC34'},
+        {id:'t15',type:'process',label:'Chấm điểm\n/ Xem KQ',x:770,y:850,uc:'UC35'},
+        {id:'t16',type:'process',label:'Xuất báo cáo',x:770,y:940,uc:'UC36'},
+        {id:'t17',type:'process',label:'Quản lý\nhồ sơ cá nhân',x:1130,y:400,uc:'UC03'},
+        {id:'t18',type:'process',label:'Đăng xuất',x:700,y:1090,uc:'UC02'},
+        {id:'t19',type:'end',label:'Kết thúc',x:700,y:1175},
+    ],
+    edges:[
+        {from:'t0',to:'t1'},{from:'t1',to:'t2'},
+        {from:'t3',to:'t4'},{from:'t4',to:'t5'},{from:'t5',to:'t6'},
+        {from:'t6',to:'t7'},{from:'t7',to:'t8'},
+        {from:'t10',to:'t11'},{from:'t11',to:'t12'},{from:'t12',to:'t13'},
+        {from:'t13',to:'t14'},{from:'t14',to:'t15'},{from:'t15',to:'t16'},
+        {from:'t18',to:'t19'},
+    ],
+    forks:[{from:'t2',port:'bottom',barY:330,branches:[
+        {to:'t3',label:'Đề thi & CH'},{to:'t9',label:'Lớp học'},{to:'t10',label:'Phân tích'},{to:'t17',label:'Hồ sơ'}
+    ]}],
+    merges:[{to:'t18',port:'top',barY:1025,branches:['t8','t9','t16','t17']}],
+    annotations:[
+        {x:380,y:470,w:200,text:'⚠️ File Excel lỗi format\n→ Hiện chi tiết lỗi từng dòng\n→ Cho tải file mẫu',color:'#d97706',bg:'#fffbeb'},
+        {x:1000,y:920,w:180,text:'📄 Xuất báo cáo lỗi\n→ Thông báo, cho retry\n→ Email nếu file quá lớn',color:'#d97706',bg:'#fffbeb'},
+    ]
+},
+
+admin:{
+    color:'#dc2626',bg:'#fef2f2',title:'Luồng Quản trị viên (Admin Flow)',sub:'14 bước · 4 nhánh chức năng',
+    cw:1400,ch:980,
+    nodes:[
+        {id:'a0',type:'start',label:'Bắt đầu',x:700,y:50},
+        {id:'a1',type:'process',label:'Đăng nhập\nhệ thống',x:700,y:140,uc:'UC01'},
+        {id:'a2',type:'decision',label:'Chọn\nchức năng?',x:700,y:250},
+        {id:'a3',type:'process',label:'QL tài khoản\nngười dùng',x:200,y:400,uc:'UC37'},
+        {id:'a4',type:'process',label:'Import DS\nngười dùng',x:200,y:490,uc:'UC38',opt:true},
+        {id:'a5',type:'process',label:'Phân quyền',x:200,y:580,uc:'UC39'},
+        {id:'a6',type:'process',label:'Quản lý môn học',x:480,y:400,uc:'UC40'},
+        {id:'a7',type:'process',label:'QL năm học\n/ Học kỳ',x:480,y:490,uc:'UC41'},
+        {id:'a8',type:'process',label:'Cấu hình hệ thống',x:780,y:400,uc:'UC42'},
+        {id:'a9',type:'process',label:'Giám sát hiệu năng',x:780,y:490,uc:'UC43'},
+        {id:'a10',type:'process',label:'Xem nhật ký\nhoạt động',x:780,y:580,uc:'UC44'},
+        {id:'a11',type:'process',label:'Sao lưu /\nPhục hồi DL',x:780,y:670,uc:'UC45'},
+        {id:'a12',type:'process',label:'Quản lý\nhồ sơ cá nhân',x:1100,y:400,uc:'UC03'},
+        {id:'a13',type:'process',label:'Đăng xuất',x:700,y:830,uc:'UC02'},
+        {id:'a14',type:'end',label:'Kết thúc',x:700,y:915},
+    ],
+    edges:[
+        {from:'a0',to:'a1'},{from:'a1',to:'a2'},
+        {from:'a3',to:'a4'},{from:'a4',to:'a5'},
+        {from:'a6',to:'a7'},
+        {from:'a8',to:'a9'},{from:'a9',to:'a10'},{from:'a10',to:'a11'},
+        {from:'a13',to:'a14'},
+    ],
+    forks:[{from:'a2',port:'bottom',barY:330,branches:[
+        {to:'a3',label:'Người dùng'},{to:'a6',label:'Học vụ'},{to:'a8',label:'Hệ thống'},{to:'a12',label:'Hồ sơ'}
+    ]}],
+    merges:[{to:'a13',port:'top',barY:760,branches:['a5','a7','a11','a12']}],
+    annotations:[
+        {x:420,y:470,w:200,text:'⚠️ Import trùng email\n→ Bỏ qua dòng lỗi\n→ Xuất báo cáo chi tiết',color:'#d97706',bg:'#fffbeb'},
+        {x:1020,y:650,w:180,text:'❌ Backup thất bại\n→ Email thông báo admin\n→ Ghi log chi tiết',color:'#dc2626',bg:'#fef2f2'},
+    ]
+}
+};
+
+/* ── RENDER ─────────────────────────────────────────── */
+const svgEl=document.getElementById('svg'),wrapEl=document.getElementById('canvas-wrap');
+let scale=.85,curFlow='student',gRoot;
+
+function renderFlow(fid){
+    const f=flows[fid],nm={};f.nodes.forEach(n=>nm[n.id]=n);
+    svgEl.innerHTML='';
+    svgEl.setAttribute('viewBox',`0 0 ${f.cw} ${f.ch}`);
+    gRoot=mk('g',{},svgEl);
+
+    const defs=mk('defs',{},gRoot);
+    const fs=mk('filter',{id:'shadow',x:'-10%',y:'-10%',width:'130%',height:'140%'},defs);
+    mk('feDropShadow',{dx:0,dy:2,stdDeviation:3,'flood-opacity':.07},fs);
+    const fg=mk('filter',{id:'glow',x:'-20%',y:'-20%',width:'140%',height:'140%'},defs);
+    mk('feDropShadow',{dx:0,dy:0,stdDeviation:5,'flood-color':f.color,'flood-opacity':.3},fg);
+
+    mk('rect',{x:8,y:8,width:f.cw-16,height:f.ch-16,rx:16,fill:'#ffffff',stroke:'#e2e8f0','stroke-width':1.2},gRoot);
+
+    // edges
+    const eL=mk('g',{},gRoot);
+    f.edges.forEach(e=>{
+        const fn=nm[e.from],tn=nm[e.to];if(!fn||!tn)return;
+        const fd=e.fp||'bottom',td=e.tp||'top';
+        const p1=gp(fn,fd),p2=gp(tn,td);
+        const dashed=fn.opt||tn.opt;
+        mk('path',{d:route(p1,p2,fd,td),fill:'none',stroke:e.color||'#94a3b8','stroke-width':dashed?1.3:1.6,'stroke-dasharray':dashed?'6 3':'none'},eL);
+        arrow(eL,p2.x,p2.y,td,e.color||'#94a3b8');
+        if(e.label){
+            let lx,ly;
+            if(fd==='left'){lx=p1.x-14;ly=p1.y-8}
+            else if(fd==='right'){lx=p1.x+14;ly=p1.y-8}
+            else{lx=p1.x+12;ly=p1.y+14}
+            const tw=e.label.length*7+10;
+            mk('rect',{x:lx-tw/2,y:ly-9,width:tw,height:16,rx:3,fill:'#fff','fill-opacity':.95},eL);
+            mk('text',{x:lx,y:ly+2,'text-anchor':'middle','font-size':9,fill:'#64748b','font-weight':'600','font-style':'italic'},eL).textContent=e.label;
+        }
+    });
+
+    // forks
+    if(f.forks)f.forks.forEach(fk=>{
+        const fkg=mk('g',{},gRoot);
+        const fn=nm[fk.from],port=gp(fn,fk.port||'bottom'),by=fk.barY;
+        const xs=fk.branches.map(b=>nm[b.to].x);
+        mk('line',{x1:port.x,y1:port.y,x2:port.x,y2:by,stroke:'#94a3b8','stroke-width':1.6},fkg);
+        mk('line',{x1:Math.min(...xs),y1:by,x2:Math.max(...xs),y2:by,stroke:'#94a3b8','stroke-width':1.6},fkg);
+        fk.branches.forEach(b=>{
+            const tn=nm[b.to],tp=gp(tn,'top');
+            mk('line',{x1:tn.x,y1:by,x2:tp.x,y2:tp.y,stroke:'#94a3b8','stroke-width':1.6},fkg);
+            arrow(fkg,tp.x,tp.y,'top','#94a3b8');
+            if(b.label){
+                const ly=by+14,tw=b.label.length*6.5+14;
+                mk('rect',{x:tn.x-tw/2,y:ly-10,width:tw,height:17,rx:4,fill:f.bg,stroke:f.color,'stroke-width':.6,'stroke-opacity':.4},fkg);
+                mk('text',{x:tn.x,y:ly+3,'text-anchor':'middle','font-size':9.5,fill:f.color,'font-weight':'700'},fkg).textContent=b.label;
+            }
+        });
+    });
+
+    // merges
+    if(f.merges)f.merges.forEach(mg=>{
+        const mG=mk('g',{},gRoot);
+        const tn=nm[mg.to],tp=gp(tn,mg.port||'top'),by=mg.barY;
+        const xs=mg.branches.map(bid=>nm[bid].x);
+        mg.branches.forEach(bid=>{
+            const bn=nm[bid],bp=gp(bn,'bottom');
+            mk('line',{x1:bp.x,y1:bp.y,x2:bn.x,y2:by,stroke:'#cbd5e1','stroke-width':1.2,'stroke-dasharray':'4 3'},mG);
+        });
+        mk('line',{x1:Math.min(...xs),y1:by,x2:Math.max(...xs),y2:by,stroke:'#cbd5e1','stroke-width':1.2,'stroke-dasharray':'4 3'},mG);
+        mk('line',{x1:tp.x,y1:by,x2:tp.x,y2:tp.y,stroke:'#94a3b8','stroke-width':1.6},mG);
+        arrow(mG,tp.x,tp.y,'top','#94a3b8');
+    });
+
+    // nodes
+    const nL=mk('g',{},gRoot);
+    f.nodes.forEach(n=>{
+        const g=mk('g',{class:'flow-node','data-id':n.id},nL);
+        const lines=n.label.split('\n');
+
+        if(n.type==='start'||n.type==='end'){
+            const fc=n.type==='start'?'#10b981':'#6b7280';
+            mk('rect',{x:n.x-60,y:n.y-18,width:120,height:36,rx:18,fill:fc,class:'node-bg'},g);
+            mk('text',{x:n.x,y:n.y+5,'text-anchor':'middle','font-size':13,fill:'#fff','font-weight':'600'},g).textContent=n.label;
+        }
+        else if(n.type==='process'){
+            const w=NW,h=NH;
+            mk('rect',{x:n.x-w/2,y:n.y-h/2,width:w,height:h,rx:8,fill:'#fff',stroke:f.color,'stroke-width':n.opt?1.3:1.8,'stroke-dasharray':n.opt?'5 3':'none',filter:'url(#shadow)',class:'node-bg'},g);
+            mk('rect',{x:n.x-w/2,y:n.y-h/2,width:5,height:h,fill:f.color,rx:0,opacity:n.opt?.4:1,'clip-path':`inset(0 0 0 0 round 8px 0 0 8px)`},g);
+            if(lines.length===1){
+                mk('text',{x:n.x+2,y:n.y+4.5,'text-anchor':'middle','font-size':11.5,fill:'#1e293b','font-weight':'500'},g).textContent=lines[0];
+            }else{
+                mk('text',{x:n.x+2,y:n.y-4,'text-anchor':'middle','font-size':11,fill:'#1e293b','font-weight':'500'},g).textContent=lines[0];
+                mk('text',{x:n.x+2,y:n.y+11,'text-anchor':'middle','font-size':11,fill:'#1e293b','font-weight':'500'},g).textContent=lines[1];
+            }
+            if(n.uc)mk('text',{x:n.x,y:n.y-h/2-5,'text-anchor':'middle','font-size':8.5,fill:'#94a3b8','font-weight':'700'},g).textContent=n.uc;
+        }
+        else if(n.type==='decision'){
+            const dx=60,dy=35;
+            mk('polygon',{points:`${n.x},${n.y-dy} ${n.x+dx},${n.y} ${n.x},${n.y+dy} ${n.x-dx},${n.y}`,fill:'#fffbeb',stroke:'#f59e0b','stroke-width':1.8,filter:'url(#shadow)',class:'node-bg'},g);
+            if(lines.length===1){
+                mk('text',{x:n.x,y:n.y+4,'text-anchor':'middle','font-size':11,fill:'#92400e','font-weight':'600'},g).textContent=lines[0];
+            }else{
+                mk('text',{x:n.x,y:n.y-4,'text-anchor':'middle','font-size':10.5,fill:'#92400e','font-weight':'600'},g).textContent=lines[0];
+                mk('text',{x:n.x,y:n.y+10,'text-anchor':'middle','font-size':10.5,fill:'#92400e','font-weight':'600'},g).textContent=lines[1];
+            }
+        }
+
+        if(n.uc&&uc[n.uc]){
+            g.addEventListener('mouseenter',e=>showTip(e,n));
+            g.addEventListener('mousemove',e=>showTip(e,n));
+            g.addEventListener('mouseleave',hideTip);
+        }
+    });
+
+    // Error/Exception annotations
+    if(f.annotations)f.annotations.forEach(an=>{
+        const ag=mk('g',{},gRoot);
+        const lines=an.text.split('\n');
+        const lh=13,pad=8,h=lines.length*lh+pad*2;
+        mk('rect',{x:an.x,y:an.y,width:an.w,height:h,rx:6,fill:an.bg,stroke:an.color,'stroke-width':1.2,'stroke-dasharray':'4 2'},ag);
+        mk('rect',{x:an.x,y:an.y,width:4,height:h,fill:an.color,rx:0,opacity:.8},ag);
+        lines.forEach((l,i)=>{
+            mk('text',{x:an.x+12,y:an.y+pad+i*lh+10,'font-size':9.5,fill:an.color,'font-weight':'600'},ag).textContent=l;
+        });
+    });
+
+    applyZoom();
+}
+
+/* ── TOOLTIP ────────────────────────────────────────── */
+const tip=document.getElementById('tooltip');
+function showTip(ev,n){
+    if(!n.uc||!uc[n.uc])return;
+    const u=uc[n.uc];
+    tip.querySelector('.tid').textContent=n.uc;
+    tip.querySelector('.tname').textContent=' – '+u.n;
+    tip.querySelector('.tdesc').textContent=u.d;
+    tip.style.display='block';
+    tip.style.left=Math.min(ev.clientX+14,innerWidth-340)+'px';
+    tip.style.top=Math.min(ev.clientY+14,innerHeight-100)+'px';
+}
+function hideTip(){tip.style.display='none'}
+
+/* ── SIDEBAR ────────────────────────────────────────── */
+function buildSidebar(fid){
+    const f=flows[fid];
+    document.getElementById('sb-title').textContent=f.title;
+    document.getElementById('sb-sub').textContent=f.sub;
+    const el=document.getElementById('sb-list');
+    let h='';
+    f.nodes.forEach(n=>{
+        if(n.type==='start'||n.type==='end'||n.type==='decision')return;
+        const u=n.uc?uc[n.uc]:null;
+        h+=`<div class="sb-step"><span class="sb-uc">${n.uc||''}</span><div><div class="sb-name">${n.label.replace(/\n/g,' ')}${n.opt?'<span class="sb-opt">Tùy chọn</span>':''}</div>${u?`<div class="sb-desc">${u.d}</div>`:''}</div></div>`;
+    });
+    el.innerHTML=h;
+}
+
+/* ── ZOOM / PAN ─────────────────────────────────────── */
+function applyZoom(){
+    const f=flows[curFlow];
+    svgEl.setAttribute('width',f.cw*scale);
+    svgEl.setAttribute('height',f.ch*scale);
+    gRoot.setAttribute('transform',`scale(${scale})`);
+    document.getElementById('zoom-pct').textContent=Math.round(scale*100)+'%';
+}
+function zoomBy(d){scale=Math.max(.3,Math.min(2,scale+d));applyZoom()}
+function fitToScreen(){
+    const f=flows[curFlow],cw=wrapEl.clientWidth,ch=wrapEl.clientHeight;
+    scale=Math.min(cw/f.cw,ch/f.ch)*.95;
+    applyZoom();wrapEl.scrollTo({left:0,top:0,behavior:'smooth'});
+}
+
+/* ── TAB SWITCH ─────────────────────────────────────── */
+function switchTab(fid){
+    curFlow=fid;const f=flows[fid];
+    document.querySelectorAll('.tab-btn').forEach(b=>{
+        const act=b.dataset.flow===fid;
+        b.classList.toggle('active',act);
+        if(act){b.style.background=f.color;b.style.color='#fff'}
+        else{const o=flows[b.dataset.flow];b.style.background=o.bg;b.style.color=o.color}
+    });
+    svgEl.style.opacity=0;
+    setTimeout(()=>{renderFlow(fid);buildSidebar(fid);svgEl.style.opacity=1;setTimeout(fitToScreen,60)},80);
+}
+
+svgEl.style.transition='opacity .15s';
+wrapEl.addEventListener('wheel',e=>{e.preventDefault();zoomBy(e.deltaY<0?.08:-.08)},{passive:false});
+switchTab('student');
+</script>
+</body>
+</html>

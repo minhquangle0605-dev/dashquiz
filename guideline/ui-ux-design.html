@@ -1,0 +1,1921 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UI/UX Design – High School Learning Analytics Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; background: #0f172a; color: #e2e8f0; }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+
+        /* Hero */
+        .hero-bg {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+            position: relative; overflow: hidden;
+        }
+        .hero-bg::before {
+            content: ''; position: absolute; inset: 0;
+            background: radial-gradient(ellipse at 30% 20%, rgba(59,130,246,.12) 0%, transparent 60%),
+                        radial-gradient(ellipse at 70% 80%, rgba(139,92,246,.1) 0%, transparent 60%);
+        }
+        .hero-grid {
+            position: absolute; inset: 0; opacity: .04;
+            background-image: linear-gradient(#e2e8f0 1px, transparent 1px), linear-gradient(90deg, #e2e8f0 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+
+        /* Navigation */
+        .phase-nav { position: sticky; top: 0; z-index: 50; backdrop-filter: blur(16px); background: rgba(15,23,42,.85); border-bottom: 1px solid #1e293b; }
+        .phase-btn { padding: 12px 20px; font-size: 13px; font-weight: 600; color: #64748b; cursor: pointer; border: none; background: none; transition: all .2s; position: relative; }
+        .phase-btn:hover { color: #94a3b8; }
+        .phase-btn.active { color: #3b82f6; }
+        .phase-btn.active::after { content:''; position: absolute; bottom: 0; left: 16px; right: 16px; height: 2px; background: #3b82f6; border-radius: 1px; }
+
+        /* Section */
+        .design-section { display: none; animation: fadeUp .4s ease; }
+        .design-section.active { display: block; }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Screen tabs */
+        .screen-tab { padding: 8px 16px; font-size: 12px; font-weight: 600; color: #64748b; cursor: pointer; border: 1px solid transparent; border-radius: 8px; transition: all .2s; background: transparent; }
+        .screen-tab:hover { color: #94a3b8; background: #1e293b; }
+        .screen-tab.active { color: #3b82f6; background: #1e293b; border-color: #2563eb; }
+
+        /* Wireframe styles */
+        .wf-container { background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,.3); }
+        .wf-bar { background: #e2e8f0; height: 8px; border-radius: 4px; }
+        .wf-bar-sm { background: #cbd5e1; height: 6px; border-radius: 3px; }
+        .wf-box { border: 2px dashed #94a3b8; border-radius: 8px; background: #f8fafc; }
+        .wf-circle { width: 40px; height: 40px; border-radius: 50%; border: 2px dashed #94a3b8; background: #f1f5f9; }
+        .wf-btn { background: #94a3b8; color: #fff; border-radius: 6px; padding: 8px 20px; font-size: 12px; font-weight: 600; }
+        .wf-input { border: 2px solid #cbd5e1; border-radius: 6px; background: #f8fafc; height: 36px; }
+        .wf-text { color: #94a3b8; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+        .wf-card { border: 2px dashed #cbd5e1; border-radius: 8px; background: #f8fafc; }
+        .wf-nav { background: #e2e8f0; border-bottom: 2px solid #cbd5e1; }
+        .wf-sidebar { background: #f1f5f9; border-right: 2px solid #e2e8f0; }
+
+        /* Mockup styles */
+        .mk-container { border-radius: 12px; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,.4); }
+        .mk-gradient { background: linear-gradient(135deg, #1e40af 0%, #3b82f6 50%, #6366f1 100%); }
+        .mk-card { background: #fff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,.08); }
+        .mk-input { border: 1.5px solid #e2e8f0; border-radius: 8px; background: #fff; height: 40px; padding: 0 14px; font-size: 13px; color: #334155; transition: border-color .2s; }
+        .mk-input:focus { border-color: #3b82f6; outline: none; box-shadow: 0 0 0 3px rgba(59,130,246,.15); }
+        .mk-btn-primary { background: linear-gradient(135deg, #2563eb, #3b82f6); color: #fff; border: none; border-radius: 8px; padding: 10px 24px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .2s; box-shadow: 0 2px 8px rgba(37,99,235,.3); }
+        .mk-btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(37,99,235,.4); }
+
+        /* Annotation */
+        .annotation {
+            position: absolute; background: #fbbf24; color: #78350f; font-size: 10px; font-weight: 700;
+            padding: 3px 8px; border-radius: 4px; white-space: nowrap; z-index: 10;
+            box-shadow: 0 2px 8px rgba(251,191,36,.3);
+        }
+        .annotation::before {
+            content: ''; position: absolute; width: 0; height: 0;
+            border-left: 5px solid transparent; border-right: 5px solid transparent;
+        }
+        .annotation.top::before { bottom: -5px; left: 50%; transform: translateX(-50%); border-top: 5px solid #fbbf24; }
+        .annotation.left::before { right: -5px; top: 50%; transform: translateY(-50%); border-left: 5px solid #fbbf24; }
+        .annotation.bottom::before { top: -5px; left: 50%; transform: translateX(-50%); border-bottom: 5px solid #fbbf24; }
+
+        /* Comparison slider */
+        .compare-wrap { position: relative; overflow: hidden; border-radius: 12px; }
+        .compare-overlay { position: absolute; top: 0; left: 0; bottom: 0; overflow: hidden; border-right: 3px solid #3b82f6; }
+        .compare-handle {
+            position: absolute; top: 50%; right: -18px; transform: translateY(-50%);
+            width: 36px; height: 36px; background: #3b82f6; border-radius: 50%;
+            cursor: ew-resize; display: grid; place-items: center; z-index: 10;
+            box-shadow: 0 2px 12px rgba(59,130,246,.4);
+        }
+
+        /* Flow arrow */
+        .flow-arrow { display: flex; align-items: center; gap: 6px; color: #64748b; font-size: 11px; font-weight: 600; }
+        .flow-arrow::after { content: ''; width: 40px; height: 0; border-top: 2px solid #475569; }
+
+        /* Proto interactive */
+        .proto-screen { transition: all .3s ease; cursor: pointer; }
+        .proto-screen:hover { transform: scale(1.02); }
+        .proto-hotspot {
+            position: absolute; border: 2px solid rgba(59,130,246,.6); border-radius: 6px;
+            background: rgba(59,130,246,.08); cursor: pointer; transition: all .2s;
+            animation: pulse-spot 2s infinite;
+        }
+        .proto-hotspot:hover { background: rgba(59,130,246,.2); border-color: #3b82f6; }
+        @keyframes pulse-spot { 0%,100% { box-shadow: 0 0 0 0 rgba(59,130,246,.3); } 50% { box-shadow: 0 0 0 6px rgba(59,130,246,0); } }
+
+        /* Badge */
+        .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+
+        /* Tabs content */
+        .tab-panel { display: none; animation: fadeUp .3s ease; }
+        .tab-panel.active { display: block; }
+
+        /* Progress indicator */
+        .step-indicator { display: flex; align-items: center; gap: 0; }
+        .step-dot { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; flex-shrink: 0; }
+        .step-line { height: 2px; flex: 1; min-width: 40px; }
+    </style>
+</head>
+
+<body>
+
+<!-- ═══════════════════════════════════════════════════════
+     HERO SECTION
+     ═══════════════════════════════════════════════════════ -->
+<section class="hero-bg py-16 px-6 relative">
+    <div class="hero-grid"></div>
+    <div class="max-w-5xl mx-auto relative z-10 text-center">
+        <div class="inline-flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 rounded-full px-4 py-1.5 mb-6">
+            <span class="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></span>
+            <span class="text-blue-400 text-xs font-semibold tracking-wide">GIAI ĐOẠN 3 / 6 — THIẾT KẾ GIAO DIỆN</span>
+        </div>
+        <h1 class="text-4xl md:text-5xl font-extrabold bg-gradient-to-r from-white via-blue-100 to-blue-300 bg-clip-text text-transparent leading-tight mb-4">
+            UI/UX Design
+        </h1>
+        <p class="text-lg text-slate-400 max-w-2xl mx-auto leading-relaxed mb-8">
+            Một trải nghiệm tốt giữ chân người dùng lâu hơn là một hệ thống backend phức tạp nhưng khó dùng.
+        </p>
+
+        <!-- Design Process Steps -->
+        <div class="flex flex-wrap justify-center gap-3 mb-10">
+            <div class="flex items-center gap-3 bg-slate-800/60 border border-slate-700 rounded-xl px-5 py-3">
+                <div class="w-9 h-9 rounded-lg bg-amber-500/15 grid place-items-center">
+                    <span class="text-amber-400 text-base">&#9998;</span>
+                </div>
+                <div class="text-left">
+                    <div class="text-xs font-bold text-amber-400">Bước 1</div>
+                    <div class="text-sm font-semibold text-slate-200">Wireframe</div>
+                    <div class="text-[10px] text-slate-500">Khung xương giao diện</div>
+                </div>
+            </div>
+            <div class="text-slate-600 self-center text-xl">&#10132;</div>
+            <div class="flex items-center gap-3 bg-slate-800/60 border border-slate-700 rounded-xl px-5 py-3">
+                <div class="w-9 h-9 rounded-lg bg-blue-500/15 grid place-items-center">
+                    <span class="text-blue-400 text-base">&#9670;</span>
+                </div>
+                <div class="text-left">
+                    <div class="text-xs font-bold text-blue-400">Bước 2</div>
+                    <div class="text-sm font-semibold text-slate-200">Mockup</div>
+                    <div class="text-[10px] text-slate-500">Bản mẫu chi tiết</div>
+                </div>
+            </div>
+            <div class="text-slate-600 self-center text-xl">&#10132;</div>
+            <div class="flex items-center gap-3 bg-slate-800/60 border border-slate-700 rounded-xl px-5 py-3">
+                <div class="w-9 h-9 rounded-lg bg-violet-500/15 grid place-items-center">
+                    <span class="text-violet-400 text-base">&#9654;</span>
+                </div>
+                <div class="text-left">
+                    <div class="text-xs font-bold text-violet-400">Bước 3</div>
+                    <div class="text-sm font-semibold text-slate-200">Prototype</div>
+                    <div class="text-[10px] text-slate-500">Bản mẫu tương tác</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="flex justify-center gap-8 text-center">
+            <div><div class="text-2xl font-extrabold text-white">8</div><div class="text-xs text-slate-500">Màn hình chính</div></div>
+            <div class="w-px bg-slate-700"></div>
+            <div><div class="text-2xl font-extrabold text-white">4</div><div class="text-xs text-slate-500">Vai trò người dùng</div></div>
+            <div class="w-px bg-slate-700"></div>
+            <div><div class="text-2xl font-extrabold text-white">45</div><div class="text-xs text-slate-500">Use Cases</div></div>
+        </div>
+    </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════
+     PHASE NAVIGATION
+     ═══════════════════════════════════════════════════════ -->
+<nav class="phase-nav">
+    <div class="max-w-6xl mx-auto flex items-center overflow-x-auto">
+        <button class="phase-btn active" onclick="showSection('overview')">Tổng quan</button>
+        <button class="phase-btn" onclick="showSection('wireframe')">Wireframe</button>
+        <button class="phase-btn" onclick="showSection('mockup')">Mockup</button>
+        <button class="phase-btn" onclick="showSection('prototype')">Prototype</button>
+        <button class="phase-btn" onclick="showSection('designsystem')">Design System</button>
+        <button class="phase-btn" onclick="showSection('compare')">So sánh WF vs MK</button>
+    </div>
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════
+     SECTION 1: TỔNG QUAN
+     ═══════════════════════════════════════════════════════ -->
+<section id="sec-overview" class="design-section active">
+    <div class="max-w-6xl mx-auto px-6 py-12">
+
+        <!-- What is UI/UX -->
+        <div class="grid md:grid-cols-2 gap-6 mb-12">
+            <div class="bg-slate-800/50 border border-slate-700 rounded-2xl p-8">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="w-10 h-10 rounded-xl bg-blue-500/15 grid place-items-center text-blue-400 text-lg font-bold">UI</div>
+                    <h3 class="text-lg font-bold text-white">User Interface</h3>
+                </div>
+                <p class="text-sm text-slate-400 leading-relaxed mb-4">Giao diện người dùng — tập trung vào <strong class="text-slate-200">hình thức bên ngoài</strong>: màu sắc, typography, spacing, icon, bố cục trực quan.</p>
+                <div class="flex flex-wrap gap-2">
+                    <span class="badge bg-blue-500/10 text-blue-400">Màu sắc</span>
+                    <span class="badge bg-blue-500/10 text-blue-400">Typography</span>
+                    <span class="badge bg-blue-500/10 text-blue-400">Layout</span>
+                    <span class="badge bg-blue-500/10 text-blue-400">Icon</span>
+                    <span class="badge bg-blue-500/10 text-blue-400">Responsive</span>
+                </div>
+            </div>
+            <div class="bg-slate-800/50 border border-slate-700 rounded-2xl p-8">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="w-10 h-10 rounded-xl bg-violet-500/15 grid place-items-center text-violet-400 text-lg font-bold">UX</div>
+                    <h3 class="text-lg font-bold text-white">User Experience</h3>
+                </div>
+                <p class="text-sm text-slate-400 leading-relaxed mb-4">Trải nghiệm người dùng — tập trung vào <strong class="text-slate-200">cảm giác khi sử dụng</strong>: luồng thao tác, tốc độ, sự dễ hiểu, feedback.</p>
+                <div class="flex flex-wrap gap-2">
+                    <span class="badge bg-violet-500/10 text-violet-400">User Flow</span>
+                    <span class="badge bg-violet-500/10 text-violet-400">Usability</span>
+                    <span class="badge bg-violet-500/10 text-violet-400">Accessibility</span>
+                    <span class="badge bg-violet-500/10 text-violet-400">Feedback</span>
+                    <span class="badge bg-violet-500/10 text-violet-400">Performance</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Screens overview -->
+        <h2 class="text-xl font-bold text-white mb-6">Các màn hình chính cần thiết kế</h2>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12">
+            <div class="bg-slate-800/40 border border-slate-700/50 rounded-xl p-5 hover:border-blue-500/40 transition-colors cursor-pointer group" onclick="showSection('wireframe'); showScreen('login')">
+                <div class="text-2xl mb-2 opacity-60 group-hover:opacity-100 transition-opacity">&#128274;</div>
+                <div class="text-sm font-bold text-slate-200 mb-1">Đăng nhập</div>
+                <div class="text-[11px] text-slate-500">UC01, UC04</div>
+            </div>
+            <div class="bg-slate-800/40 border border-slate-700/50 rounded-xl p-5 hover:border-blue-500/40 transition-colors cursor-pointer group" onclick="showSection('wireframe'); showScreen('student-dash')">
+                <div class="text-2xl mb-2 opacity-60 group-hover:opacity-100 transition-opacity">&#128200;</div>
+                <div class="text-sm font-bold text-slate-200 mb-1">Dashboard Học sinh</div>
+                <div class="text-[11px] text-slate-500">UC10–UC15</div>
+            </div>
+            <div class="bg-slate-800/40 border border-slate-700/50 rounded-xl p-5 hover:border-blue-500/40 transition-colors cursor-pointer group" onclick="showSection('wireframe'); showScreen('exam')">
+                <div class="text-2xl mb-2 opacity-60 group-hover:opacity-100 transition-opacity">&#128221;</div>
+                <div class="text-sm font-bold text-slate-200 mb-1">Làm bài kiểm tra</div>
+                <div class="text-[11px] text-slate-500">UC05–UC09</div>
+            </div>
+            <div class="bg-slate-800/40 border border-slate-700/50 rounded-xl p-5 hover:border-blue-500/40 transition-colors cursor-pointer group" onclick="showSection('wireframe'); showScreen('parent-dash')">
+                <div class="text-2xl mb-2 opacity-60 group-hover:opacity-100 transition-opacity">&#128106;</div>
+                <div class="text-sm font-bold text-slate-200 mb-1">Dashboard Phụ huynh</div>
+                <div class="text-[11px] text-slate-500">UC18–UC22</div>
+            </div>
+            <div class="bg-slate-800/40 border border-slate-700/50 rounded-xl p-5 hover:border-orange-500/40 transition-colors cursor-pointer group" onclick="showSection('wireframe'); showScreen('teacher-dash')">
+                <div class="text-2xl mb-2 opacity-60 group-hover:opacity-100 transition-opacity">&#128218;</div>
+                <div class="text-sm font-bold text-slate-200 mb-1">Dashboard Giáo viên</div>
+                <div class="text-[11px] text-slate-500">UC23–UC36</div>
+            </div>
+            <div class="bg-slate-800/40 border border-slate-700/50 rounded-xl p-5 hover:border-orange-500/40 transition-colors cursor-pointer group" onclick="showSection('wireframe'); showScreen('question-bank')">
+                <div class="text-2xl mb-2 opacity-60 group-hover:opacity-100 transition-opacity">&#128218;</div>
+                <div class="text-sm font-bold text-slate-200 mb-1">Ngân hàng câu hỏi</div>
+                <div class="text-[11px] text-slate-500">UC23–UC25</div>
+            </div>
+            <div class="bg-slate-800/40 border border-slate-700/50 rounded-xl p-5 hover:border-red-500/40 transition-colors cursor-pointer group" onclick="showSection('wireframe'); showScreen('admin-dash')">
+                <div class="text-2xl mb-2 opacity-60 group-hover:opacity-100 transition-opacity">&#9881;</div>
+                <div class="text-sm font-bold text-slate-200 mb-1">Dashboard Admin</div>
+                <div class="text-[11px] text-slate-500">UC37–UC45</div>
+            </div>
+            <div class="bg-slate-800/40 border border-slate-700/50 rounded-xl p-5 hover:border-slate-500/40 transition-colors cursor-pointer group" onclick="showSection('wireframe'); showScreen('profile')">
+                <div class="text-2xl mb-2 opacity-60 group-hover:opacity-100 transition-opacity">&#128100;</div>
+                <div class="text-sm font-bold text-slate-200 mb-1">Hồ sơ cá nhân</div>
+                <div class="text-[11px] text-slate-500">UC02, UC03</div>
+            </div>
+        </div>
+
+        <!-- Design Process -->
+        <h2 class="text-xl font-bold text-white mb-6">Quy trình thiết kế giao diện</h2>
+        <div class="relative">
+            <div class="absolute left-6 top-8 bottom-8 w-px bg-gradient-to-b from-amber-500 via-blue-500 to-violet-500"></div>
+            <div class="space-y-8">
+                <div class="flex gap-6 items-start">
+                    <div class="w-12 h-12 rounded-full bg-amber-500/15 border-2 border-amber-500/40 grid place-items-center text-amber-400 font-bold text-sm shrink-0 relative z-10">1</div>
+                    <div class="bg-slate-800/40 border border-slate-700/50 rounded-xl p-5 flex-1">
+                        <h4 class="font-bold text-amber-400 text-sm mb-1">Wireframe — Khung xương</h4>
+                        <p class="text-sm text-slate-400">Phác thảo bố cục (layout) cơ bản bằng các hình khối đơn giản, không màu sắc, chỉ tập trung vào vị trí các thành phần: header, sidebar, content, button, form.</p>
+                        <div class="flex gap-2 mt-3">
+                            <span class="badge bg-slate-700 text-slate-400">Low-fidelity</span>
+                            <span class="badge bg-slate-700 text-slate-400">Giấy bút / Balsamiq</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex gap-6 items-start">
+                    <div class="w-12 h-12 rounded-full bg-blue-500/15 border-2 border-blue-500/40 grid place-items-center text-blue-400 font-bold text-sm shrink-0 relative z-10">2</div>
+                    <div class="bg-slate-800/40 border border-slate-700/50 rounded-xl p-5 flex-1">
+                        <h4 class="font-bold text-blue-400 text-sm mb-1">Mockup — Bản mẫu chi tiết</h4>
+                        <p class="text-sm text-slate-400">Thiết kế chi tiết với màu sắc thực tế, typography, icon, ảnh. Đây là bước gần nhất với giao diện cuối cùng, sử dụng Figma hoặc Adobe XD.</p>
+                        <div class="flex gap-2 mt-3">
+                            <span class="badge bg-slate-700 text-slate-400">High-fidelity</span>
+                            <span class="badge bg-slate-700 text-slate-400">Figma / Adobe XD</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex gap-6 items-start">
+                    <div class="w-12 h-12 rounded-full bg-violet-500/15 border-2 border-violet-500/40 grid place-items-center text-violet-400 font-bold text-sm shrink-0 relative z-10">3</div>
+                    <div class="bg-slate-800/40 border border-slate-700/50 rounded-xl p-5 flex-1">
+                        <h4 class="font-bold text-violet-400 text-sm mb-1">Prototype — Bản mẫu tương tác</h4>
+                        <p class="text-sm text-slate-400">Tạo liên kết giữa các màn hình để mô phỏng luồng sử dụng thực tế: bấm nút chuyển trang, hover hiệu ứng, animation chuyển cảnh.</p>
+                        <div class="flex gap-2 mt-3">
+                            <span class="badge bg-slate-700 text-slate-400">Interactive</span>
+                            <span class="badge bg-slate-700 text-slate-400">Clickable Flow</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════
+     SECTION 2: WIREFRAME
+     ═══════════════════════════════════════════════════════ -->
+<section id="sec-wireframe" class="design-section">
+    <div class="max-w-6xl mx-auto px-6 py-10">
+        <div class="flex items-center gap-3 mb-2">
+            <div class="w-8 h-8 rounded-lg bg-amber-500/15 grid place-items-center text-amber-400 text-sm font-bold">W</div>
+            <h2 class="text-xl font-bold text-white">Wireframe — Khung xương giao diện</h2>
+        </div>
+        <p class="text-sm text-slate-400 mb-8 ml-11">Bố cục cơ bản, chỉ dùng grayscale, tập trung vào vị trí và kích thước các thành phần.</p>
+
+        <!-- Screen tabs -->
+        <div class="flex flex-wrap gap-2 mb-8" id="wf-screen-tabs">
+            <button class="screen-tab active" data-screen="login" onclick="showScreen('login')">Đăng nhập</button>
+            <button class="screen-tab" data-screen="student-dash" onclick="showScreen('student-dash')">Dashboard HS</button>
+            <button class="screen-tab" data-screen="exam" onclick="showScreen('exam')">Làm bài KT</button>
+            <button class="screen-tab" data-screen="parent-dash" onclick="showScreen('parent-dash')">Dashboard PH</button>
+            <button class="screen-tab" data-screen="teacher-dash" onclick="showScreen('teacher-dash')">Dashboard GV</button>
+            <button class="screen-tab" data-screen="question-bank" onclick="showScreen('question-bank')">Ngân hàng CH</button>
+            <button class="screen-tab" data-screen="admin-dash" onclick="showScreen('admin-dash')">Dashboard Admin</button>
+            <button class="screen-tab" data-screen="profile" onclick="showScreen('profile')">Hồ sơ cá nhân</button>
+        </div>
+
+        <!-- ── LOGIN WIREFRAME ────────────────────────── -->
+        <div id="wf-login" class="tab-panel active">
+            <div class="grid md:grid-cols-[1fr_340px] gap-8">
+                <div class="wf-container" style="min-height: 500px;">
+                    <div class="flex h-full" style="min-height: 500px;">
+                        <!-- Left panel -->
+                        <div class="flex-1 bg-gray-100 flex items-center justify-center p-8 relative">
+                            <div class="text-center">
+                                <div class="w-20 h-20 rounded-2xl border-2 dashed border-gray-400 bg-gray-200 mx-auto mb-4 grid place-items-center">
+                                    <span class="wf-text text-lg">LOGO</span>
+                                </div>
+                                <div class="wf-bar w-48 mb-3 mx-auto" style="height: 14px;"></div>
+                                <div class="wf-bar-sm w-64 mb-2 mx-auto"></div>
+                                <div class="wf-bar-sm w-52 mx-auto"></div>
+                            </div>
+                            <div class="annotation top" style="top: 12px; left: 50%; transform: translateX(-50%);">Branding Area</div>
+                        </div>
+                        <!-- Right panel (form) -->
+                        <div class="w-[320px] bg-white p-8 flex flex-col justify-center relative">
+                            <div class="wf-bar w-24 mb-2" style="height: 12px;"></div>
+                            <div class="wf-bar-sm w-40 mb-8"></div>
+
+                            <div class="mb-4">
+                                <div class="wf-bar-sm w-16 mb-2"></div>
+                                <div class="wf-input w-full"></div>
+                            </div>
+                            <div class="mb-4">
+                                <div class="wf-bar-sm w-16 mb-2"></div>
+                                <div class="wf-input w-full"></div>
+                            </div>
+                            <div class="flex items-center justify-between mb-6">
+                                <div class="flex items-center gap-2">
+                                    <div class="w-4 h-4 border-2 border-gray-300 rounded"></div>
+                                    <div class="wf-bar-sm w-20"></div>
+                                </div>
+                                <div class="wf-bar-sm w-20"></div>
+                            </div>
+                            <div class="wf-btn text-center">ĐĂNG NHẬP</div>
+                            <div class="mt-6 flex items-center gap-3">
+                                <div class="flex-1 h-px bg-gray-200"></div>
+                                <div class="wf-bar-sm w-8"></div>
+                                <div class="flex-1 h-px bg-gray-200"></div>
+                            </div>
+                            <div class="flex gap-3 mt-4 justify-center">
+                                <div class="w-10 h-10 rounded-lg border-2 border-gray-300"></div>
+                                <div class="w-10 h-10 rounded-lg border-2 border-gray-300"></div>
+                            </div>
+
+                            <div class="annotation bottom" style="bottom: -30px; right: 20px;">Form đăng nhập</div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Annotations -->
+                <div class="space-y-4">
+                    <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
+                        <div class="text-xs font-bold text-amber-400 mb-2">THÀNH PHẦN</div>
+                        <ul class="text-xs text-slate-400 space-y-2">
+                            <li class="flex items-start gap-2"><span class="text-amber-400 mt-0.5">&#9679;</span> Logo + tên hệ thống (branding)</li>
+                            <li class="flex items-start gap-2"><span class="text-amber-400 mt-0.5">&#9679;</span> Input Email/Username</li>
+                            <li class="flex items-start gap-2"><span class="text-amber-400 mt-0.5">&#9679;</span> Input Mật khẩu</li>
+                            <li class="flex items-start gap-2"><span class="text-amber-400 mt-0.5">&#9679;</span> Checkbox "Ghi nhớ đăng nhập"</li>
+                            <li class="flex items-start gap-2"><span class="text-amber-400 mt-0.5">&#9679;</span> Link "Quên mật khẩu?" (UC04)</li>
+                            <li class="flex items-start gap-2"><span class="text-amber-400 mt-0.5">&#9679;</span> Nút Đăng nhập (primary CTA)</li>
+                            <li class="flex items-start gap-2"><span class="text-amber-400 mt-0.5">&#9679;</span> Social login (Google, Microsoft)</li>
+                        </ul>
+                    </div>
+                    <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
+                        <div class="text-xs font-bold text-blue-400 mb-2">USE CASES LIÊN QUAN</div>
+                        <div class="flex flex-wrap gap-1.5">
+                            <span class="badge bg-blue-500/10 text-blue-400">UC01</span>
+                            <span class="badge bg-blue-500/10 text-blue-400">UC02</span>
+                            <span class="badge bg-blue-500/10 text-blue-400">UC04</span>
+                        </div>
+                    </div>
+                    <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
+                        <div class="text-xs font-bold text-green-400 mb-2">UX NOTES</div>
+                        <ul class="text-xs text-slate-400 space-y-1.5">
+                            <li>&#8226; Auto-focus vào field email</li>
+                            <li>&#8226; Hiển thị/ẩn mật khẩu</li>
+                            <li>&#8226; Validation real-time</li>
+                            <li>&#8226; Loading state trên nút</li>
+                            <li>&#8226; Error message rõ ràng</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── STUDENT DASHBOARD WIREFRAME ──────────── -->
+        <div id="wf-student-dash" class="tab-panel">
+            <div class="grid md:grid-cols-[1fr_340px] gap-8">
+                <div class="wf-container" style="min-height: 560px;">
+                    <div class="flex h-full" style="min-height: 560px;">
+                        <!-- Sidebar -->
+                        <div class="wf-sidebar w-[180px] p-4 relative">
+                            <div class="flex items-center gap-2 mb-6">
+                                <div class="w-8 h-8 rounded-lg border-2 border-dashed border-gray-400 bg-gray-200"></div>
+                                <div class="wf-bar w-16" style="height:10px;"></div>
+                            </div>
+                            <div class="space-y-3">
+                                <div class="flex items-center gap-2 bg-blue-50 rounded-lg p-2">
+                                    <div class="w-5 h-5 rounded bg-gray-300"></div>
+                                    <div class="wf-bar-sm w-20"></div>
+                                </div>
+                                <div class="flex items-center gap-2 p-2">
+                                    <div class="w-5 h-5 rounded bg-gray-200"></div>
+                                    <div class="wf-bar-sm w-16"></div>
+                                </div>
+                                <div class="flex items-center gap-2 p-2">
+                                    <div class="w-5 h-5 rounded bg-gray-200"></div>
+                                    <div class="wf-bar-sm w-24"></div>
+                                </div>
+                                <div class="flex items-center gap-2 p-2">
+                                    <div class="w-5 h-5 rounded bg-gray-200"></div>
+                                    <div class="wf-bar-sm w-20"></div>
+                                </div>
+                                <div class="flex items-center gap-2 p-2">
+                                    <div class="w-5 h-5 rounded bg-gray-200"></div>
+                                    <div class="wf-bar-sm w-16"></div>
+                                </div>
+                            </div>
+                            <div class="annotation left" style="top: 12px; left: -8px; transform: translateX(-100%);">Sidebar Nav</div>
+                        </div>
+                        <!-- Main content -->
+                        <div class="flex-1 bg-gray-50 p-5 relative">
+                            <!-- Top bar -->
+                            <div class="flex items-center justify-between mb-5">
+                                <div>
+                                    <div class="wf-bar w-36 mb-2" style="height:12px"></div>
+                                    <div class="wf-bar-sm w-48"></div>
+                                </div>
+                                <div class="flex items-center gap-3">
+                                    <div class="w-8 h-8 rounded-lg border-2 border-gray-300"></div>
+                                    <div class="wf-circle" style="width:32px;height:32px;"></div>
+                                </div>
+                            </div>
+                            <!-- Stat cards row -->
+                            <div class="grid grid-cols-4 gap-3 mb-5">
+                                <div class="wf-card p-3 text-center">
+                                    <div class="wf-bar w-8 mx-auto mb-2" style="height:18px;"></div>
+                                    <div class="wf-bar-sm w-16 mx-auto"></div>
+                                </div>
+                                <div class="wf-card p-3 text-center">
+                                    <div class="wf-bar w-8 mx-auto mb-2" style="height:18px;"></div>
+                                    <div class="wf-bar-sm w-16 mx-auto"></div>
+                                </div>
+                                <div class="wf-card p-3 text-center">
+                                    <div class="wf-bar w-8 mx-auto mb-2" style="height:18px;"></div>
+                                    <div class="wf-bar-sm w-16 mx-auto"></div>
+                                </div>
+                                <div class="wf-card p-3 text-center">
+                                    <div class="wf-bar w-8 mx-auto mb-2" style="height:18px;"></div>
+                                    <div class="wf-bar-sm w-16 mx-auto"></div>
+                                </div>
+                            </div>
+                            <!-- Charts -->
+                            <div class="grid grid-cols-2 gap-3 mb-5">
+                                <div class="wf-card p-4 relative" style="min-height:160px;">
+                                    <div class="wf-bar-sm w-28 mb-3"></div>
+                                    <div class="flex items-end gap-2 h-[100px]">
+                                        <div class="flex-1 bg-gray-200 rounded-t" style="height:40%"></div>
+                                        <div class="flex-1 bg-gray-200 rounded-t" style="height:70%"></div>
+                                        <div class="flex-1 bg-gray-200 rounded-t" style="height:55%"></div>
+                                        <div class="flex-1 bg-gray-200 rounded-t" style="height:90%"></div>
+                                        <div class="flex-1 bg-gray-200 rounded-t" style="height:60%"></div>
+                                        <div class="flex-1 bg-gray-200 rounded-t" style="height:80%"></div>
+                                    </div>
+                                    <div class="annotation top" style="top:-28px; left:10px;">Biểu đồ điểm mạnh/yếu</div>
+                                </div>
+                                <div class="wf-card p-4 relative" style="min-height:160px;">
+                                    <div class="wf-bar-sm w-28 mb-3"></div>
+                                    <div class="flex items-center justify-center h-[100px]">
+                                        <div class="w-[90px] h-[90px] rounded-full border-[12px] border-gray-200 border-t-gray-400"></div>
+                                    </div>
+                                    <div class="annotation top" style="top:-28px; right:10px;">Knowledge Graph tổng quát</div>
+                                </div>
+                            </div>
+                            <!-- Recent tests -->
+                            <div class="wf-card p-4 relative">
+                                <div class="wf-bar-sm w-32 mb-3"></div>
+                                <div class="space-y-2">
+                                    <div class="flex items-center gap-3 p-2 bg-gray-100 rounded">
+                                        <div class="w-6 h-6 rounded bg-gray-200"></div>
+                                        <div class="wf-bar-sm w-32"></div>
+                                        <div class="ml-auto wf-bar-sm w-12"></div>
+                                        <div class="wf-bar-sm w-8"></div>
+                                    </div>
+                                    <div class="flex items-center gap-3 p-2 bg-gray-100 rounded">
+                                        <div class="w-6 h-6 rounded bg-gray-200"></div>
+                                        <div class="wf-bar-sm w-28"></div>
+                                        <div class="ml-auto wf-bar-sm w-12"></div>
+                                        <div class="wf-bar-sm w-8"></div>
+                                    </div>
+                                </div>
+                                <div class="annotation bottom" style="bottom:-28px; left:10px;">Lịch sử bài KT gần nhất</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="space-y-4">
+                    <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
+                        <div class="text-xs font-bold text-amber-400 mb-2">BỐ CỤC</div>
+                        <ul class="text-xs text-slate-400 space-y-2">
+                            <li class="flex items-start gap-2"><span class="text-amber-400 mt-0.5">&#9679;</span> Sidebar cố định bên trái (navigation)</li>
+                            <li class="flex items-start gap-2"><span class="text-amber-400 mt-0.5">&#9679;</span> Header: Xin chào + avatar + thông báo</li>
+                            <li class="flex items-start gap-2"><span class="text-amber-400 mt-0.5">&#9679;</span> 4 thẻ KPI: Tổng bài KT, Điểm TB, Streak, Xếp hạng</li>
+                            <li class="flex items-start gap-2"><span class="text-amber-400 mt-0.5">&#9679;</span> Biểu đồ phân tích điểm mạnh/yếu</li>
+                            <li class="flex items-start gap-2"><span class="text-amber-400 mt-0.5">&#9679;</span> Knowledge Graph trực quan</li>
+                            <li class="flex items-start gap-2"><span class="text-amber-400 mt-0.5">&#9679;</span> Bảng lịch sử bài KT gần nhất</li>
+                        </ul>
+                    </div>
+                    <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
+                        <div class="text-xs font-bold text-blue-400 mb-2">USE CASES</div>
+                        <div class="flex flex-wrap gap-1.5">
+                            <span class="badge bg-blue-500/10 text-blue-400">UC10</span>
+                            <span class="badge bg-blue-500/10 text-blue-400">UC11</span>
+                            <span class="badge bg-blue-500/10 text-blue-400">UC12</span>
+                            <span class="badge bg-blue-500/10 text-blue-400">UC13</span>
+                            <span class="badge bg-blue-500/10 text-blue-400">UC14</span>
+                            <span class="badge bg-blue-500/10 text-blue-400">UC15</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── EXAM WIREFRAME ─────────────────────────── -->
+        <div id="wf-exam" class="tab-panel">
+            <div class="grid md:grid-cols-[1fr_340px] gap-8">
+                <div class="wf-container" style="min-height: 520px;">
+                    <div class="bg-white relative" style="min-height:520px;">
+                        <!-- Exam header -->
+                        <div class="wf-nav p-4 flex items-center justify-between relative">
+                            <div class="flex items-center gap-3">
+                                <div class="w-6 h-6 rounded bg-gray-300"></div>
+                                <div class="wf-bar w-36" style="height:10px;"></div>
+                            </div>
+                            <div class="flex items-center gap-4">
+                                <div class="wf-card px-4 py-2 flex items-center gap-2" style="border-style:solid;">
+                                    <div class="w-4 h-4 rounded bg-gray-300"></div>
+                                    <div class="wf-bar w-12" style="height:12px; background:#ef4444;"></div>
+                                </div>
+                                <div class="wf-btn text-xs">NỘP BÀI</div>
+                            </div>
+                            <div class="annotation bottom" style="bottom:-28px; right: 80px;">Đồng hồ đếm ngược</div>
+                        </div>
+                        <!-- Progress -->
+                        <div class="px-6 pt-4">
+                            <div class="flex items-center gap-3 mb-1">
+                                <div class="wf-bar-sm w-20"></div>
+                                <div class="wf-bar-sm w-8 ml-auto"></div>
+                            </div>
+                            <div class="w-full h-2 bg-gray-200 rounded-full"><div class="h-full bg-gray-400 rounded-full" style="width:35%"></div></div>
+                        </div>
+                        <!-- Question area -->
+                        <div class="p-6 flex gap-6">
+                            <div class="flex-1">
+                                <div class="wf-card p-5 mb-4 relative" style="min-height:120px;">
+                                    <div class="flex items-center gap-2 mb-3">
+                                        <div class="wf-bar w-12 bg-blue-200" style="height:8px; border-radius:4px;"></div>
+                                        <div class="wf-bar-sm w-16"></div>
+                                    </div>
+                                    <div class="wf-bar w-full mb-2" style="height:8px;"></div>
+                                    <div class="wf-bar w-3/4 mb-2" style="height:8px;"></div>
+                                    <div class="wf-bar w-1/2" style="height:8px;"></div>
+                                    <div class="annotation top" style="top:-28px; left:0;">Nội dung câu hỏi</div>
+                                </div>
+                                <!-- Answer options -->
+                                <div class="space-y-3">
+                                    <div class="flex items-center gap-3 p-3 border-2 border-gray-200 rounded-lg bg-white">
+                                        <div class="w-6 h-6 rounded-full border-2 border-gray-300"></div>
+                                        <div class="wf-bar w-48" style="height:7px;"></div>
+                                    </div>
+                                    <div class="flex items-center gap-3 p-3 border-2 border-blue-300 rounded-lg bg-blue-50">
+                                        <div class="w-6 h-6 rounded-full border-2 border-blue-400 bg-blue-100"></div>
+                                        <div class="wf-bar w-52" style="height:7px;"></div>
+                                    </div>
+                                    <div class="flex items-center gap-3 p-3 border-2 border-gray-200 rounded-lg bg-white">
+                                        <div class="w-6 h-6 rounded-full border-2 border-gray-300"></div>
+                                        <div class="wf-bar w-40" style="height:7px;"></div>
+                                    </div>
+                                    <div class="flex items-center gap-3 p-3 border-2 border-gray-200 rounded-lg bg-white">
+                                        <div class="w-6 h-6 rounded-full border-2 border-gray-300"></div>
+                                        <div class="wf-bar w-56" style="height:7px;"></div>
+                                    </div>
+                                </div>
+                                <!-- Navigation buttons -->
+                                <div class="flex justify-between mt-6">
+                                    <div class="wf-btn bg-gray-300 text-gray-600">&#8592; Trước</div>
+                                    <div class="wf-btn">Tiếp &#8594;</div>
+                                </div>
+                            </div>
+                            <!-- Question palette -->
+                            <div class="w-[140px] shrink-0">
+                                <div class="wf-card p-3 relative">
+                                    <div class="wf-bar-sm w-20 mb-3"></div>
+                                    <div class="grid grid-cols-5 gap-1.5">
+                                        <div class="w-6 h-6 rounded bg-gray-400 text-white text-[9px] grid place-items-center font-bold">1</div>
+                                        <div class="w-6 h-6 rounded bg-gray-400 text-white text-[9px] grid place-items-center font-bold">2</div>
+                                        <div class="w-6 h-6 rounded bg-blue-200 text-blue-800 text-[9px] grid place-items-center font-bold">3</div>
+                                        <div class="w-6 h-6 rounded bg-gray-200 text-gray-500 text-[9px] grid place-items-center font-bold">4</div>
+                                        <div class="w-6 h-6 rounded bg-gray-200 text-gray-500 text-[9px] grid place-items-center font-bold">5</div>
+                                        <div class="w-6 h-6 rounded bg-gray-200 text-gray-500 text-[9px] grid place-items-center font-bold">6</div>
+                                        <div class="w-6 h-6 rounded bg-gray-200 text-gray-500 text-[9px] grid place-items-center font-bold">7</div>
+                                        <div class="w-6 h-6 rounded bg-gray-200 text-gray-500 text-[9px] grid place-items-center font-bold">8</div>
+                                        <div class="w-6 h-6 rounded bg-gray-200 text-gray-500 text-[9px] grid place-items-center font-bold">9</div>
+                                        <div class="w-6 h-6 rounded bg-gray-200 text-gray-500 text-[9px] grid place-items-center font-bold">10</div>
+                                    </div>
+                                    <div class="annotation left" style="top:10px; left:-8px; transform: translateX(-100%);">Bảng câu hỏi</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="space-y-4">
+                    <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
+                        <div class="text-xs font-bold text-amber-400 mb-2">BỐ CỤC</div>
+                        <ul class="text-xs text-slate-400 space-y-2">
+                            <li class="flex items-start gap-2"><span class="text-amber-400 mt-0.5">&#9679;</span> Header: Tên bài KT + Timer + Nút nộp</li>
+                            <li class="flex items-start gap-2"><span class="text-amber-400 mt-0.5">&#9679;</span> Progress bar hiển thị tiến độ</li>
+                            <li class="flex items-start gap-2"><span class="text-amber-400 mt-0.5">&#9679;</span> Nội dung câu hỏi (hỗ trợ hình ảnh)</li>
+                            <li class="flex items-start gap-2"><span class="text-amber-400 mt-0.5">&#9679;</span> 4 đáp án A-B-C-D dạng radio</li>
+                            <li class="flex items-start gap-2"><span class="text-amber-400 mt-0.5">&#9679;</span> Bảng palette câu hỏi (bên phải)</li>
+                            <li class="flex items-start gap-2"><span class="text-amber-400 mt-0.5">&#9679;</span> Nút Trước / Tiếp theo</li>
+                        </ul>
+                    </div>
+                    <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
+                        <div class="text-xs font-bold text-blue-400 mb-2">USE CASES</div>
+                        <div class="flex flex-wrap gap-1.5">
+                            <span class="badge bg-blue-500/10 text-blue-400">UC05</span>
+                            <span class="badge bg-blue-500/10 text-blue-400">UC06</span>
+                            <span class="badge bg-blue-500/10 text-blue-400">UC07</span>
+                            <span class="badge bg-blue-500/10 text-blue-400">UC08</span>
+                            <span class="badge bg-blue-500/10 text-blue-400">UC09</span>
+                        </div>
+                    </div>
+                    <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
+                        <div class="text-xs font-bold text-green-400 mb-2">UX NOTES</div>
+                        <ul class="text-xs text-slate-400 space-y-1.5">
+                            <li>&#8226; Timer đổi đỏ khi < 5 phút</li>
+                            <li>&#8226; Tự động lưu đáp án (UC08)</li>
+                            <li>&#8226; Confirm dialog khi nộp bài</li>
+                            <li>&#8226; Đánh dấu câu chưa trả lời</li>
+                            <li>&#8226; Keyboard shortcut (1-4)</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── PARENT DASHBOARD WIREFRAME ─────────────── -->
+        <div id="wf-parent-dash" class="tab-panel">
+            <div class="grid md:grid-cols-[1fr_340px] gap-8">
+                <div class="wf-container" style="min-height: 480px;">
+                    <div class="flex" style="min-height: 480px;">
+                        <div class="wf-sidebar w-[180px] p-4">
+                            <div class="flex items-center gap-2 mb-6">
+                                <div class="w-8 h-8 rounded-lg border-2 border-dashed border-gray-400 bg-gray-200"></div>
+                                <div class="wf-bar w-16" style="height:10px;"></div>
+                            </div>
+                            <div class="space-y-3">
+                                <div class="flex items-center gap-2 bg-green-50 rounded-lg p-2"><div class="w-5 h-5 rounded bg-green-200"></div><div class="wf-bar-sm w-20"></div></div>
+                                <div class="flex items-center gap-2 p-2"><div class="w-5 h-5 rounded bg-gray-200"></div><div class="wf-bar-sm w-16"></div></div>
+                                <div class="flex items-center gap-2 p-2"><div class="w-5 h-5 rounded bg-gray-200"></div><div class="wf-bar-sm w-24"></div></div>
+                            </div>
+                        </div>
+                        <div class="flex-1 bg-gray-50 p-5">
+                            <div class="flex items-center gap-3 mb-5">
+                                <div class="wf-circle" style="width:48px;height:48px;"></div>
+                                <div>
+                                    <div class="wf-bar w-28 mb-1" style="height:10px;"></div>
+                                    <div class="wf-bar-sm w-20"></div>
+                                </div>
+                                <div class="ml-auto flex gap-2">
+                                    <div class="wf-card px-3 py-1.5" style="border-style:solid; border-color:#16a34a;"><div class="wf-bar-sm w-16" style="background:#16a34a;"></div></div>
+                                    <div class="wf-card px-3 py-1.5" style="border-style:solid;"><div class="wf-bar-sm w-16"></div></div>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-3 gap-3 mb-5">
+                                <div class="wf-card p-3 text-center"><div class="wf-bar w-10 mx-auto mb-2" style="height:16px;"></div><div class="wf-bar-sm w-16 mx-auto"></div></div>
+                                <div class="wf-card p-3 text-center"><div class="wf-bar w-10 mx-auto mb-2" style="height:16px;"></div><div class="wf-bar-sm w-16 mx-auto"></div></div>
+                                <div class="wf-card p-3 text-center"><div class="wf-bar w-10 mx-auto mb-2" style="height:16px;"></div><div class="wf-bar-sm w-16 mx-auto"></div></div>
+                            </div>
+                            <div class="wf-card p-4 mb-4" style="min-height:140px;">
+                                <div class="wf-bar-sm w-32 mb-3"></div>
+                                <div class="flex items-end gap-2 h-[90px]">
+                                    <div class="flex-1 bg-green-100 rounded-t" style="height:50%"></div>
+                                    <div class="flex-1 bg-green-100 rounded-t" style="height:75%"></div>
+                                    <div class="flex-1 bg-green-100 rounded-t" style="height:60%"></div>
+                                    <div class="flex-1 bg-green-100 rounded-t" style="height:85%"></div>
+                                    <div class="flex-1 bg-green-100 rounded-t" style="height:70%"></div>
+                                </div>
+                            </div>
+                            <div class="wf-card p-4">
+                                <div class="wf-bar-sm w-28 mb-3"></div>
+                                <div class="space-y-2">
+                                    <div class="flex items-center gap-3 p-2 bg-gray-100 rounded"><div class="w-5 h-5 rounded bg-green-200"></div><div class="wf-bar-sm w-28"></div><div class="ml-auto wf-bar-sm w-10"></div></div>
+                                    <div class="flex items-center gap-3 p-2 bg-gray-100 rounded"><div class="w-5 h-5 rounded bg-green-200"></div><div class="wf-bar-sm w-32"></div><div class="ml-auto wf-bar-sm w-10"></div></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="space-y-4">
+                    <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
+                        <div class="text-xs font-bold text-amber-400 mb-2">BỐ CỤC</div>
+                        <ul class="text-xs text-slate-400 space-y-2">
+                            <li class="flex items-start gap-2"><span class="text-amber-400 mt-0.5">&#9679;</span> Hồ sơ con + Tab chuyển đổi giữa các con</li>
+                            <li class="flex items-start gap-2"><span class="text-amber-400 mt-0.5">&#9679;</span> 3 KPI: Điểm TB, Bài KT đã làm, Xếp hạng</li>
+                            <li class="flex items-start gap-2"><span class="text-amber-400 mt-0.5">&#9679;</span> Biểu đồ xu hướng điểm số</li>
+                            <li class="flex items-start gap-2"><span class="text-amber-400 mt-0.5">&#9679;</span> Danh sách kết quả KT gần đây</li>
+                        </ul>
+                    </div>
+                    <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
+                        <div class="text-xs font-bold text-blue-400 mb-2">USE CASES</div>
+                        <div class="flex flex-wrap gap-1.5">
+                            <span class="badge bg-green-500/10 text-green-400">UC18</span>
+                            <span class="badge bg-green-500/10 text-green-400">UC19</span>
+                            <span class="badge bg-green-500/10 text-green-400">UC20</span>
+                            <span class="badge bg-green-500/10 text-green-400">UC21</span>
+                            <span class="badge bg-green-500/10 text-green-400">UC22</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── TEACHER DASHBOARD WIREFRAME ────────────── -->
+        <div id="wf-teacher-dash" class="tab-panel">
+            <div class="grid md:grid-cols-[1fr_340px] gap-8">
+                <div class="wf-container" style="min-height: 500px;">
+                    <div class="flex" style="min-height: 500px;">
+                        <div class="wf-sidebar w-[180px] p-4">
+                            <div class="flex items-center gap-2 mb-6">
+                                <div class="w-8 h-8 rounded-lg border-2 border-dashed border-gray-400 bg-gray-200"></div>
+                                <div class="wf-bar w-16" style="height:10px;"></div>
+                            </div>
+                            <div class="space-y-3">
+                                <div class="flex items-center gap-2 bg-orange-50 rounded-lg p-2"><div class="w-5 h-5 rounded bg-orange-200"></div><div class="wf-bar-sm w-20"></div></div>
+                                <div class="flex items-center gap-2 p-2"><div class="w-5 h-5 rounded bg-gray-200"></div><div class="wf-bar-sm w-24"></div></div>
+                                <div class="flex items-center gap-2 p-2"><div class="w-5 h-5 rounded bg-gray-200"></div><div class="wf-bar-sm w-20"></div></div>
+                                <div class="flex items-center gap-2 p-2"><div class="w-5 h-5 rounded bg-gray-200"></div><div class="wf-bar-sm w-16"></div></div>
+                                <div class="flex items-center gap-2 p-2"><div class="w-5 h-5 rounded bg-gray-200"></div><div class="wf-bar-sm w-20"></div></div>
+                            </div>
+                        </div>
+                        <div class="flex-1 bg-gray-50 p-5">
+                            <div class="flex items-center justify-between mb-5">
+                                <div><div class="wf-bar w-40 mb-2" style="height:12px"></div><div class="wf-bar-sm w-52"></div></div>
+                                <div class="wf-btn text-xs">+ Tạo bài KT</div>
+                            </div>
+                            <div class="grid grid-cols-4 gap-3 mb-5">
+                                <div class="wf-card p-3 text-center"><div class="wf-bar w-8 mx-auto mb-1" style="height:16px;"></div><div class="wf-bar-sm w-14 mx-auto"></div></div>
+                                <div class="wf-card p-3 text-center"><div class="wf-bar w-8 mx-auto mb-1" style="height:16px;"></div><div class="wf-bar-sm w-14 mx-auto"></div></div>
+                                <div class="wf-card p-3 text-center"><div class="wf-bar w-8 mx-auto mb-1" style="height:16px;"></div><div class="wf-bar-sm w-14 mx-auto"></div></div>
+                                <div class="wf-card p-3 text-center"><div class="wf-bar w-8 mx-auto mb-1" style="height:16px;"></div><div class="wf-bar-sm w-14 mx-auto"></div></div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3 mb-4">
+                                <div class="wf-card p-4" style="min-height:140px;">
+                                    <div class="wf-bar-sm w-24 mb-3"></div>
+                                    <div class="flex items-end gap-1.5 h-[90px]">
+                                        <div class="flex-1 bg-orange-100 rounded-t" style="height:65%"></div>
+                                        <div class="flex-1 bg-orange-100 rounded-t" style="height:45%"></div>
+                                        <div class="flex-1 bg-orange-100 rounded-t" style="height:80%"></div>
+                                        <div class="flex-1 bg-orange-100 rounded-t" style="height:30%"></div>
+                                        <div class="flex-1 bg-orange-100 rounded-t" style="height:55%"></div>
+                                    </div>
+                                </div>
+                                <div class="wf-card p-4" style="min-height:140px;">
+                                    <div class="wf-bar-sm w-24 mb-3"></div>
+                                    <div class="flex items-center justify-center h-[90px] gap-4">
+                                        <div class="w-[80px] h-[80px] rounded-full border-[10px] border-orange-100 border-t-orange-300"></div>
+                                        <div class="space-y-2">
+                                            <div class="flex items-center gap-2"><div class="w-3 h-3 rounded bg-orange-300"></div><div class="wf-bar-sm w-12"></div></div>
+                                            <div class="flex items-center gap-2"><div class="w-3 h-3 rounded bg-orange-100"></div><div class="wf-bar-sm w-12"></div></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="wf-card p-4">
+                                <div class="flex items-center justify-between mb-3">
+                                    <div class="wf-bar-sm w-28"></div>
+                                    <div class="wf-bar-sm w-16"></div>
+                                </div>
+                                <table class="w-full text-[10px]">
+                                    <tr class="border-b border-gray-200"><td class="py-2"><div class="wf-bar-sm w-20"></div></td><td><div class="wf-bar-sm w-12"></div></td><td><div class="wf-bar-sm w-8"></div></td><td><div class="wf-bar w-6" style="height:6px; background:#f97316;"></div></td></tr>
+                                    <tr class="border-b border-gray-200"><td class="py-2"><div class="wf-bar-sm w-24"></div></td><td><div class="wf-bar-sm w-12"></div></td><td><div class="wf-bar-sm w-8"></div></td><td><div class="wf-bar w-6" style="height:6px; background:#22c55e;"></div></td></tr>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="space-y-4">
+                    <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
+                        <div class="text-xs font-bold text-amber-400 mb-2">BỐ CỤC</div>
+                        <ul class="text-xs text-slate-400 space-y-2">
+                            <li class="flex items-start gap-2"><span class="text-amber-400 mt-0.5">&#9679;</span> Sidebar: Dashboard, Ngân hàng CH, Đề thi, Lớp, Báo cáo</li>
+                            <li class="flex items-start gap-2"><span class="text-amber-400 mt-0.5">&#9679;</span> CTA "Tạo bài kiểm tra" nổi bật</li>
+                            <li class="flex items-start gap-2"><span class="text-amber-400 mt-0.5">&#9679;</span> KPI: Lớp, Học sinh, Bài KT, Điểm TB</li>
+                            <li class="flex items-start gap-2"><span class="text-amber-400 mt-0.5">&#9679;</span> Biểu đồ phân bố + pie chart</li>
+                            <li class="flex items-start gap-2"><span class="text-amber-400 mt-0.5">&#9679;</span> Bảng HS cần chú ý (điểm yếu)</li>
+                        </ul>
+                    </div>
+                    <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
+                        <div class="text-xs font-bold text-blue-400 mb-2">USE CASES</div>
+                        <div class="flex flex-wrap gap-1.5">
+                            <span class="badge bg-orange-500/10 text-orange-400">UC26</span>
+                            <span class="badge bg-orange-500/10 text-orange-400">UC28</span>
+                            <span class="badge bg-orange-500/10 text-orange-400">UC30</span>
+                            <span class="badge bg-orange-500/10 text-orange-400">UC31</span>
+                            <span class="badge bg-orange-500/10 text-orange-400">UC32</span>
+                            <span class="badge bg-orange-500/10 text-orange-400">UC33</span>
+                            <span class="badge bg-orange-500/10 text-orange-400">UC34</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── QUESTION BANK WIREFRAME ────────────────── -->
+        <div id="wf-question-bank" class="tab-panel">
+            <div class="grid md:grid-cols-[1fr_340px] gap-8">
+                <div class="wf-container" style="min-height: 480px;">
+                    <div class="flex" style="min-height: 480px;">
+                        <div class="wf-sidebar w-[180px] p-4">
+                            <div class="flex items-center gap-2 mb-6"><div class="w-8 h-8 rounded-lg border-2 border-dashed border-gray-400 bg-gray-200"></div><div class="wf-bar w-16" style="height:10px;"></div></div>
+                            <div class="space-y-3">
+                                <div class="flex items-center gap-2 p-2"><div class="w-5 h-5 rounded bg-gray-200"></div><div class="wf-bar-sm w-20"></div></div>
+                                <div class="flex items-center gap-2 bg-orange-50 rounded-lg p-2"><div class="w-5 h-5 rounded bg-orange-200"></div><div class="wf-bar-sm w-24"></div></div>
+                                <div class="flex items-center gap-2 p-2"><div class="w-5 h-5 rounded bg-gray-200"></div><div class="wf-bar-sm w-20"></div></div>
+                            </div>
+                        </div>
+                        <div class="flex-1 bg-gray-50 p-5">
+                            <div class="flex items-center justify-between mb-5">
+                                <div class="wf-bar w-36" style="height:12px;"></div>
+                                <div class="flex gap-2">
+                                    <div class="wf-btn bg-gray-300 text-gray-600 text-xs">Import Excel</div>
+                                    <div class="wf-btn text-xs">+ Thêm câu hỏi</div>
+                                </div>
+                            </div>
+                            <div class="flex gap-3 mb-4">
+                                <div class="wf-input flex-1"></div>
+                                <div class="wf-card px-3 flex items-center" style="border-style:solid;"><div class="wf-bar-sm w-14"></div></div>
+                                <div class="wf-card px-3 flex items-center" style="border-style:solid;"><div class="wf-bar-sm w-14"></div></div>
+                                <div class="wf-card px-3 flex items-center" style="border-style:solid;"><div class="wf-bar-sm w-14"></div></div>
+                            </div>
+                            <div class="wf-card p-0 overflow-hidden">
+                                <table class="w-full">
+                                    <thead><tr class="bg-gray-100 border-b-2 border-gray-200">
+                                        <th class="p-3 text-left"><div class="w-4 h-4 border-2 border-gray-300 rounded"></div></th>
+                                        <th class="p-3 text-left"><div class="wf-bar-sm w-8"></div></th>
+                                        <th class="p-3 text-left"><div class="wf-bar-sm w-28"></div></th>
+                                        <th class="p-3 text-left"><div class="wf-bar-sm w-16"></div></th>
+                                        <th class="p-3 text-left"><div class="wf-bar-sm w-14"></div></th>
+                                        <th class="p-3 text-left"><div class="wf-bar-sm w-14"></div></th>
+                                    </tr></thead>
+                                    <tbody>
+                                        <tr class="border-b border-gray-100"><td class="p-3"><div class="w-4 h-4 border-2 border-gray-300 rounded"></div></td><td class="p-3"><div class="wf-bar-sm w-6"></div></td><td class="p-3"><div class="wf-bar-sm w-full"></div></td><td class="p-3"><div class="wf-bar-sm w-12"></div></td><td class="p-3"><div class="wf-bar w-10 bg-green-200" style="height:6px;"></div></td><td class="p-3"><div class="flex gap-1"><div class="w-5 h-5 rounded bg-gray-200"></div><div class="w-5 h-5 rounded bg-gray-200"></div></div></td></tr>
+                                        <tr class="border-b border-gray-100"><td class="p-3"><div class="w-4 h-4 border-2 border-gray-300 rounded"></div></td><td class="p-3"><div class="wf-bar-sm w-6"></div></td><td class="p-3"><div class="wf-bar-sm w-3/4"></div></td><td class="p-3"><div class="wf-bar-sm w-12"></div></td><td class="p-3"><div class="wf-bar w-10 bg-yellow-200" style="height:6px;"></div></td><td class="p-3"><div class="flex gap-1"><div class="w-5 h-5 rounded bg-gray-200"></div><div class="w-5 h-5 rounded bg-gray-200"></div></div></td></tr>
+                                        <tr class="border-b border-gray-100"><td class="p-3"><div class="w-4 h-4 border-2 border-gray-300 rounded"></div></td><td class="p-3"><div class="wf-bar-sm w-6"></div></td><td class="p-3"><div class="wf-bar-sm w-5/6"></div></td><td class="p-3"><div class="wf-bar-sm w-12"></div></td><td class="p-3"><div class="wf-bar w-10 bg-red-200" style="height:6px;"></div></td><td class="p-3"><div class="flex gap-1"><div class="w-5 h-5 rounded bg-gray-200"></div><div class="w-5 h-5 rounded bg-gray-200"></div></div></td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="flex items-center justify-between mt-4">
+                                <div class="wf-bar-sm w-24"></div>
+                                <div class="flex gap-1">
+                                    <div class="w-7 h-7 rounded bg-gray-200 grid place-items-center text-[10px] text-gray-400">&#8249;</div>
+                                    <div class="w-7 h-7 rounded bg-gray-400 grid place-items-center text-[10px] text-white font-bold">1</div>
+                                    <div class="w-7 h-7 rounded bg-gray-200 grid place-items-center text-[10px] text-gray-400">2</div>
+                                    <div class="w-7 h-7 rounded bg-gray-200 grid place-items-center text-[10px] text-gray-400">&#8250;</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="space-y-4">
+                    <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
+                        <div class="text-xs font-bold text-amber-400 mb-2">BỐ CỤC</div>
+                        <ul class="text-xs text-slate-400 space-y-2">
+                            <li class="flex items-start gap-2"><span class="text-amber-400 mt-0.5">&#9679;</span> Thanh tìm kiếm + Bộ lọc (Môn, Chương, Mức độ)</li>
+                            <li class="flex items-start gap-2"><span class="text-amber-400 mt-0.5">&#9679;</span> CTA: Import Excel + Thêm câu hỏi</li>
+                            <li class="flex items-start gap-2"><span class="text-amber-400 mt-0.5">&#9679;</span> Bảng dữ liệu: STT, Nội dung, Chương, Mức độ, Thao tác</li>
+                            <li class="flex items-start gap-2"><span class="text-amber-400 mt-0.5">&#9679;</span> Phân trang</li>
+                        </ul>
+                    </div>
+                    <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
+                        <div class="text-xs font-bold text-blue-400 mb-2">USE CASES</div>
+                        <div class="flex flex-wrap gap-1.5">
+                            <span class="badge bg-orange-500/10 text-orange-400">UC23</span>
+                            <span class="badge bg-orange-500/10 text-orange-400">UC24</span>
+                            <span class="badge bg-orange-500/10 text-orange-400">UC25</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── ADMIN DASHBOARD WIREFRAME ──────────────── -->
+        <div id="wf-admin-dash" class="tab-panel">
+            <div class="grid md:grid-cols-[1fr_340px] gap-8">
+                <div class="wf-container" style="min-height: 480px;">
+                    <div class="flex" style="min-height: 480px;">
+                        <div class="wf-sidebar w-[180px] p-4">
+                            <div class="flex items-center gap-2 mb-6"><div class="w-8 h-8 rounded-lg border-2 border-dashed border-gray-400 bg-gray-200"></div><div class="wf-bar w-16" style="height:10px;"></div></div>
+                            <div class="space-y-3">
+                                <div class="flex items-center gap-2 bg-red-50 rounded-lg p-2"><div class="w-5 h-5 rounded bg-red-200"></div><div class="wf-bar-sm w-20"></div></div>
+                                <div class="flex items-center gap-2 p-2"><div class="w-5 h-5 rounded bg-gray-200"></div><div class="wf-bar-sm w-24"></div></div>
+                                <div class="flex items-center gap-2 p-2"><div class="w-5 h-5 rounded bg-gray-200"></div><div class="wf-bar-sm w-20"></div></div>
+                                <div class="flex items-center gap-2 p-2"><div class="w-5 h-5 rounded bg-gray-200"></div><div class="wf-bar-sm w-16"></div></div>
+                                <div class="flex items-center gap-2 p-2"><div class="w-5 h-5 rounded bg-gray-200"></div><div class="wf-bar-sm w-20"></div></div>
+                                <div class="flex items-center gap-2 p-2"><div class="w-5 h-5 rounded bg-gray-200"></div><div class="wf-bar-sm w-18"></div></div>
+                            </div>
+                        </div>
+                        <div class="flex-1 bg-gray-50 p-5">
+                            <div class="wf-bar w-40 mb-5" style="height:12px;"></div>
+                            <div class="grid grid-cols-4 gap-3 mb-5">
+                                <div class="wf-card p-3 text-center"><div class="wf-bar w-8 mx-auto mb-1" style="height:16px;"></div><div class="wf-bar-sm w-14 mx-auto"></div></div>
+                                <div class="wf-card p-3 text-center"><div class="wf-bar w-8 mx-auto mb-1" style="height:16px;"></div><div class="wf-bar-sm w-14 mx-auto"></div></div>
+                                <div class="wf-card p-3 text-center"><div class="wf-bar w-8 mx-auto mb-1" style="height:16px;"></div><div class="wf-bar-sm w-14 mx-auto"></div></div>
+                                <div class="wf-card p-3 text-center"><div class="wf-bar w-8 mx-auto mb-1" style="height:16px;"></div><div class="wf-bar-sm w-14 mx-auto"></div></div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3 mb-4">
+                                <div class="wf-card p-4" style="min-height:120px;">
+                                    <div class="wf-bar-sm w-20 mb-3"></div>
+                                    <div class="space-y-2">
+                                        <div class="flex items-center gap-2"><div class="wf-bar-sm w-16"></div><div class="flex-1 h-2 bg-gray-100 rounded-full"><div class="h-full bg-green-200 rounded-full" style="width:75%"></div></div></div>
+                                        <div class="flex items-center gap-2"><div class="wf-bar-sm w-16"></div><div class="flex-1 h-2 bg-gray-100 rounded-full"><div class="h-full bg-blue-200 rounded-full" style="width:60%"></div></div></div>
+                                        <div class="flex items-center gap-2"><div class="wf-bar-sm w-16"></div><div class="flex-1 h-2 bg-gray-100 rounded-full"><div class="h-full bg-yellow-200 rounded-full" style="width:45%"></div></div></div>
+                                    </div>
+                                </div>
+                                <div class="wf-card p-4" style="min-height:120px;">
+                                    <div class="wf-bar-sm w-20 mb-3"></div>
+                                    <div class="space-y-2">
+                                        <div class="flex items-center gap-3 p-1.5 bg-gray-50 rounded"><div class="w-2 h-2 rounded-full bg-green-400"></div><div class="wf-bar-sm w-24"></div><div class="ml-auto wf-bar-sm w-6" style="background:#22c55e;"></div></div>
+                                        <div class="flex items-center gap-3 p-1.5 bg-gray-50 rounded"><div class="w-2 h-2 rounded-full bg-green-400"></div><div class="wf-bar-sm w-20"></div><div class="ml-auto wf-bar-sm w-6" style="background:#22c55e;"></div></div>
+                                        <div class="flex items-center gap-3 p-1.5 bg-gray-50 rounded"><div class="w-2 h-2 rounded-full bg-yellow-400"></div><div class="wf-bar-sm w-28"></div><div class="ml-auto wf-bar-sm w-6" style="background:#eab308;"></div></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="wf-card p-4">
+                                <div class="wf-bar-sm w-24 mb-3"></div>
+                                <div class="space-y-1.5">
+                                    <div class="flex items-center gap-3 p-2 bg-gray-50 rounded text-[10px]"><div class="wf-bar-sm w-16"></div><div class="wf-bar-sm w-28"></div><div class="ml-auto wf-bar-sm w-12"></div></div>
+                                    <div class="flex items-center gap-3 p-2 bg-gray-50 rounded text-[10px]"><div class="wf-bar-sm w-16"></div><div class="wf-bar-sm w-24"></div><div class="ml-auto wf-bar-sm w-12"></div></div>
+                                    <div class="flex items-center gap-3 p-2 bg-gray-50 rounded text-[10px]"><div class="wf-bar-sm w-16"></div><div class="wf-bar-sm w-32"></div><div class="ml-auto wf-bar-sm w-12"></div></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="space-y-4">
+                    <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
+                        <div class="text-xs font-bold text-amber-400 mb-2">BỐ CỤC</div>
+                        <ul class="text-xs text-slate-400 space-y-2">
+                            <li class="flex items-start gap-2"><span class="text-amber-400 mt-0.5">&#9679;</span> Sidebar: Dashboard, Users, Môn học, Năm học, Cấu hình, Logs, Backup</li>
+                            <li class="flex items-start gap-2"><span class="text-amber-400 mt-0.5">&#9679;</span> KPI: Users, Lớp, Môn, Uptime</li>
+                            <li class="flex items-start gap-2"><span class="text-amber-400 mt-0.5">&#9679;</span> Hiệu năng hệ thống (CPU/RAM bars)</li>
+                            <li class="flex items-start gap-2"><span class="text-amber-400 mt-0.5">&#9679;</span> Service status monitor</li>
+                            <li class="flex items-start gap-2"><span class="text-amber-400 mt-0.5">&#9679;</span> Activity log gần nhất</li>
+                        </ul>
+                    </div>
+                    <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
+                        <div class="text-xs font-bold text-blue-400 mb-2">USE CASES</div>
+                        <div class="flex flex-wrap gap-1.5">
+                            <span class="badge bg-red-500/10 text-red-400">UC37</span>
+                            <span class="badge bg-red-500/10 text-red-400">UC40</span>
+                            <span class="badge bg-red-500/10 text-red-400">UC41</span>
+                            <span class="badge bg-red-500/10 text-red-400">UC42</span>
+                            <span class="badge bg-red-500/10 text-red-400">UC43</span>
+                            <span class="badge bg-red-500/10 text-red-400">UC44</span>
+                            <span class="badge bg-red-500/10 text-red-400">UC45</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── PROFILE WIREFRAME ──────────────────────── -->
+        <div id="wf-profile" class="tab-panel">
+            <div class="grid md:grid-cols-[1fr_340px] gap-8">
+                <div class="wf-container" style="min-height: 420px;">
+                    <div class="flex" style="min-height:420px;">
+                        <div class="wf-sidebar w-[180px] p-4">
+                            <div class="flex items-center gap-2 mb-6"><div class="w-8 h-8 rounded-lg border-2 border-dashed border-gray-400 bg-gray-200"></div><div class="wf-bar w-16" style="height:10px;"></div></div>
+                            <div class="space-y-3">
+                                <div class="flex items-center gap-2 p-2"><div class="w-5 h-5 rounded bg-gray-200"></div><div class="wf-bar-sm w-20"></div></div>
+                                <div class="flex items-center gap-2 bg-gray-200 rounded-lg p-2"><div class="w-5 h-5 rounded bg-gray-300"></div><div class="wf-bar-sm w-16"></div></div>
+                            </div>
+                        </div>
+                        <div class="flex-1 bg-gray-50 p-5">
+                            <div class="wf-bar w-28 mb-5" style="height:12px;"></div>
+                            <div class="flex gap-6">
+                                <div class="text-center">
+                                    <div class="wf-circle mx-auto mb-3" style="width:80px;height:80px;"></div>
+                                    <div class="wf-btn text-xs bg-gray-300 text-gray-600">Đổi ảnh</div>
+                                </div>
+                                <div class="flex-1 space-y-4">
+                                    <div class="grid grid-cols-2 gap-4">
+                                        <div><div class="wf-bar-sm w-12 mb-2"></div><div class="wf-input w-full"></div></div>
+                                        <div><div class="wf-bar-sm w-12 mb-2"></div><div class="wf-input w-full"></div></div>
+                                    </div>
+                                    <div><div class="wf-bar-sm w-12 mb-2"></div><div class="wf-input w-full"></div></div>
+                                    <div class="pt-4 border-t border-gray-200">
+                                        <div class="wf-bar-sm w-24 mb-3"></div>
+                                        <div class="grid grid-cols-2 gap-4">
+                                            <div><div class="wf-bar-sm w-16 mb-2"></div><div class="wf-input w-full"></div></div>
+                                            <div><div class="wf-bar-sm w-16 mb-2"></div><div class="wf-input w-full"></div></div>
+                                        </div>
+                                    </div>
+                                    <div class="flex gap-3 pt-2">
+                                        <div class="wf-btn">Lưu thay đổi</div>
+                                        <div class="wf-btn bg-gray-300 text-gray-600">Hủy</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="space-y-4">
+                    <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
+                        <div class="text-xs font-bold text-amber-400 mb-2">BỐ CỤC</div>
+                        <ul class="text-xs text-slate-400 space-y-2">
+                            <li class="flex items-start gap-2"><span class="text-amber-400 mt-0.5">&#9679;</span> Avatar + Nút đổi ảnh</li>
+                            <li class="flex items-start gap-2"><span class="text-amber-400 mt-0.5">&#9679;</span> Form: Họ tên, Email, SĐT</li>
+                            <li class="flex items-start gap-2"><span class="text-amber-400 mt-0.5">&#9679;</span> Section đổi mật khẩu</li>
+                            <li class="flex items-start gap-2"><span class="text-amber-400 mt-0.5">&#9679;</span> Nút Lưu / Hủy</li>
+                        </ul>
+                    </div>
+                    <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
+                        <div class="text-xs font-bold text-blue-400 mb-2">USE CASES</div>
+                        <div class="flex flex-wrap gap-1.5">
+                            <span class="badge bg-slate-500/10 text-slate-400">UC02</span>
+                            <span class="badge bg-slate-500/10 text-slate-400">UC03</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════
+     SECTION 3: MOCKUP
+     ═══════════════════════════════════════════════════════ -->
+<section id="sec-mockup" class="design-section">
+    <div class="max-w-6xl mx-auto px-6 py-10">
+        <div class="flex items-center gap-3 mb-2">
+            <div class="w-8 h-8 rounded-lg bg-blue-500/15 grid place-items-center text-blue-400 text-sm font-bold">M</div>
+            <h2 class="text-xl font-bold text-white">Mockup — Bản mẫu chi tiết</h2>
+        </div>
+        <p class="text-sm text-slate-400 mb-8 ml-11">Thiết kế chi tiết với màu sắc, typography, icon thực tế. Sử dụng Figma/Adobe XD.</p>
+
+        <!-- Screen tabs -->
+        <div class="flex flex-wrap gap-2 mb-8" id="mk-screen-tabs">
+            <button class="screen-tab active" data-mkscreen="mk-login" onclick="showMkScreen('mk-login')">Đăng nhập</button>
+            <button class="screen-tab" data-mkscreen="mk-student" onclick="showMkScreen('mk-student')">Dashboard HS</button>
+            <button class="screen-tab" data-mkscreen="mk-exam" onclick="showMkScreen('mk-exam')">Làm bài KT</button>
+        </div>
+
+        <!-- ── LOGIN MOCKUP ───────────────────────────── -->
+        <div id="mk-login" class="tab-panel active">
+            <div class="mk-container" style="max-width: 900px; margin: 0 auto;">
+                <div class="flex" style="min-height: 540px;">
+                    <!-- Left branding -->
+                    <div class="flex-1 mk-gradient flex items-center justify-center p-10 relative overflow-hidden">
+                        <div class="absolute inset-0 opacity-10">
+                            <div class="absolute w-64 h-64 rounded-full bg-white/20 -top-10 -left-10"></div>
+                            <div class="absolute w-48 h-48 rounded-full bg-white/15 bottom-10 right-10"></div>
+                            <div class="absolute w-32 h-32 rounded-full bg-white/10 top-1/2 left-1/2"></div>
+                        </div>
+                        <div class="text-center relative z-10">
+                            <div class="w-20 h-20 rounded-2xl bg-white/20 backdrop-blur-sm mx-auto mb-5 grid place-items-center">
+                                <span class="text-3xl font-black text-white">LA</span>
+                            </div>
+                            <h2 class="text-2xl font-bold text-white mb-2">Learning Analytics</h2>
+                            <p class="text-blue-100 text-sm leading-relaxed max-w-xs">Hệ thống phân tích học tập thông minh dành cho trường THPT</p>
+                        </div>
+                    </div>
+                    <!-- Right form -->
+                    <div class="w-[380px] bg-white p-10 flex flex-col justify-center">
+                        <h3 class="text-xl font-bold text-gray-900 mb-1">Chào mừng trở lại</h3>
+                        <p class="text-sm text-gray-500 mb-8">Đăng nhập để tiếp tục</p>
+
+                        <div class="mb-5">
+                            <label class="block text-xs font-semibold text-gray-700 mb-1.5">Email hoặc Username</label>
+                            <input type="text" placeholder="name@school.edu.vn" class="mk-input w-full">
+                        </div>
+                        <div class="mb-4">
+                            <label class="block text-xs font-semibold text-gray-700 mb-1.5">Mật khẩu</label>
+                            <input type="password" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" class="mk-input w-full">
+                        </div>
+                        <div class="flex items-center justify-between mb-6">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" class="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                <span class="text-xs text-gray-600">Ghi nhớ đăng nhập</span>
+                            </label>
+                            <a href="#" class="text-xs text-blue-600 font-medium hover:underline">Quên mật khẩu?</a>
+                        </div>
+                        <button class="mk-btn-primary w-full mb-6">Đăng nhập</button>
+                        <div class="relative mb-6">
+                            <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-gray-200"></div></div>
+                            <div class="relative flex justify-center"><span class="bg-white px-3 text-xs text-gray-400">hoặc</span></div>
+                        </div>
+                        <div class="flex gap-3">
+                            <button class="flex-1 flex items-center justify-center gap-2 py-2.5 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                                <svg class="w-4 h-4" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+                                <span class="text-xs font-medium text-gray-700">Google</span>
+                            </button>
+                            <button class="flex-1 flex items-center justify-center gap-2 py-2.5 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="#00a4ef"><path d="M11.4 24H0V12.6h11.4V24zM24 24H12.6V12.6H24V24zM11.4 11.4H0V0h11.4v11.4zM24 11.4H12.6V0H24v11.4z"/></svg>
+                                <span class="text-xs font-medium text-gray-700">Microsoft</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── STUDENT DASHBOARD MOCKUP ───────────────── -->
+        <div id="mk-student" class="tab-panel">
+            <div class="mk-container" style="max-width: 1000px; margin: 0 auto;">
+                <div class="flex" style="min-height: 580px;">
+                    <!-- Sidebar -->
+                    <div class="w-[220px] bg-gray-900 text-white p-5 flex flex-col">
+                        <div class="flex items-center gap-3 mb-8">
+                            <div class="w-9 h-9 rounded-xl bg-blue-600 grid place-items-center text-sm font-black">LA</div>
+                            <span class="text-sm font-bold">Analytics</span>
+                        </div>
+                        <nav class="space-y-1 flex-1">
+                            <a class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-blue-600/20 text-blue-400 text-xs font-semibold">
+                                <span class="text-sm">&#9632;</span> Dashboard
+                            </a>
+                            <a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 text-xs font-medium">
+                                <span class="text-sm">&#9998;</span> Bài kiểm tra
+                            </a>
+                            <a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 text-xs font-medium">
+                                <span class="text-sm">&#9733;</span> Luyện tập AI
+                            </a>
+                            <a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 text-xs font-medium">
+                                <span class="text-sm">&#9201;</span> Lịch sử
+                            </a>
+                            <a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 text-xs font-medium">
+                                <span class="text-sm">&#8862;</span> Knowledge Graph
+                            </a>
+                        </nav>
+                        <div class="flex items-center gap-3 pt-4 border-t border-gray-700">
+                            <div class="w-8 h-8 rounded-full bg-blue-500 grid place-items-center text-xs font-bold">NT</div>
+                            <div><div class="text-xs font-semibold">Nguyễn Tân</div><div class="text-[10px] text-gray-500">Học sinh</div></div>
+                        </div>
+                    </div>
+                    <!-- Main -->
+                    <div class="flex-1 bg-gray-50 p-6 overflow-hidden">
+                        <div class="flex items-center justify-between mb-6">
+                            <div>
+                                <h2 class="text-lg font-bold text-gray-900">Xin chào, Nguyễn Tân!</h2>
+                                <p class="text-xs text-gray-500">Lớp 12A1 — Học kỳ II, 2025-2026</p>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <div class="w-9 h-9 rounded-lg bg-white border border-gray-200 grid place-items-center text-gray-500 relative">
+                                    <span class="text-sm">&#128276;</span>
+                                    <div class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-[9px] text-white grid place-items-center font-bold">3</div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- KPI Cards -->
+                        <div class="grid grid-cols-4 gap-3 mb-5">
+                            <div class="mk-card p-4">
+                                <div class="text-xs text-gray-500 mb-1">Tổng bài KT</div>
+                                <div class="text-xl font-bold text-gray-900">24</div>
+                                <div class="text-[10px] text-green-600 font-semibold mt-1">+3 tuần này</div>
+                            </div>
+                            <div class="mk-card p-4">
+                                <div class="text-xs text-gray-500 mb-1">Điểm TB</div>
+                                <div class="text-xl font-bold text-blue-600">7.8</div>
+                                <div class="text-[10px] text-green-600 font-semibold mt-1">&#9650; 0.5 vs tháng trước</div>
+                            </div>
+                            <div class="mk-card p-4">
+                                <div class="text-xs text-gray-500 mb-1">Streak</div>
+                                <div class="text-xl font-bold text-amber-600">12</div>
+                                <div class="text-[10px] text-gray-500 font-medium mt-1">ngày liên tiếp</div>
+                            </div>
+                            <div class="mk-card p-4">
+                                <div class="text-xs text-gray-500 mb-1">Xếp hạng</div>
+                                <div class="text-xl font-bold text-violet-600">#5</div>
+                                <div class="text-[10px] text-gray-500 font-medium mt-1">/ 42 học sinh</div>
+                            </div>
+                        </div>
+                        <!-- Charts -->
+                        <div class="grid grid-cols-2 gap-3 mb-5">
+                            <div class="mk-card p-4">
+                                <div class="text-xs font-semibold text-gray-700 mb-3">Phân tích Điểm mạnh / Điểm yếu</div>
+                                <div class="space-y-2.5">
+                                    <div><div class="flex justify-between text-[10px] mb-1"><span class="text-gray-600">Đại số</span><span class="font-bold text-green-600">92%</span></div><div class="h-2 bg-gray-100 rounded-full"><div class="h-full bg-green-500 rounded-full" style="width:92%"></div></div></div>
+                                    <div><div class="flex justify-between text-[10px] mb-1"><span class="text-gray-600">Hình học</span><span class="font-bold text-blue-600">78%</span></div><div class="h-2 bg-gray-100 rounded-full"><div class="h-full bg-blue-500 rounded-full" style="width:78%"></div></div></div>
+                                    <div><div class="flex justify-between text-[10px] mb-1"><span class="text-gray-600">Giải tích</span><span class="font-bold text-amber-600">65%</span></div><div class="h-2 bg-gray-100 rounded-full"><div class="h-full bg-amber-500 rounded-full" style="width:65%"></div></div></div>
+                                    <div><div class="flex justify-between text-[10px] mb-1"><span class="text-gray-600">Xác suất</span><span class="font-bold text-red-600">45%</span></div><div class="h-2 bg-gray-100 rounded-full"><div class="h-full bg-red-500 rounded-full" style="width:45%"></div></div></div>
+                                </div>
+                            </div>
+                            <div class="mk-card p-4">
+                                <div class="text-xs font-semibold text-gray-700 mb-3">Xu hướng điểm số (6 bài gần nhất)</div>
+                                <div class="flex items-end gap-3 h-[120px] pt-4">
+                                    <div class="flex-1 flex flex-col items-center">
+                                        <div class="text-[9px] text-gray-500 font-bold mb-1">6.5</div>
+                                        <div class="w-full bg-blue-200 rounded-t" style="height:52%"></div>
+                                        <div class="text-[9px] text-gray-400 mt-1">KT1</div>
+                                    </div>
+                                    <div class="flex-1 flex flex-col items-center">
+                                        <div class="text-[9px] text-gray-500 font-bold mb-1">7.0</div>
+                                        <div class="w-full bg-blue-300 rounded-t" style="height:56%"></div>
+                                        <div class="text-[9px] text-gray-400 mt-1">KT2</div>
+                                    </div>
+                                    <div class="flex-1 flex flex-col items-center">
+                                        <div class="text-[9px] text-gray-500 font-bold mb-1">6.0</div>
+                                        <div class="w-full bg-blue-200 rounded-t" style="height:48%"></div>
+                                        <div class="text-[9px] text-gray-400 mt-1">KT3</div>
+                                    </div>
+                                    <div class="flex-1 flex flex-col items-center">
+                                        <div class="text-[9px] text-green-600 font-bold mb-1">8.5</div>
+                                        <div class="w-full bg-green-400 rounded-t" style="height:68%"></div>
+                                        <div class="text-[9px] text-gray-400 mt-1">KT4</div>
+                                    </div>
+                                    <div class="flex-1 flex flex-col items-center">
+                                        <div class="text-[9px] text-green-600 font-bold mb-1">8.0</div>
+                                        <div class="w-full bg-green-300 rounded-t" style="height:64%"></div>
+                                        <div class="text-[9px] text-gray-400 mt-1">KT5</div>
+                                    </div>
+                                    <div class="flex-1 flex flex-col items-center">
+                                        <div class="text-[9px] text-green-600 font-bold mb-1">9.0</div>
+                                        <div class="w-full bg-green-500 rounded-t" style="height:72%"></div>
+                                        <div class="text-[9px] text-gray-400 mt-1">KT6</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Recent tests -->
+                        <div class="mk-card p-4">
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="text-xs font-semibold text-gray-700">Bài kiểm tra gần đây</span>
+                                <a href="#" class="text-[11px] text-blue-600 font-medium">Xem tất cả &#8594;</a>
+                            </div>
+                            <div class="space-y-2">
+                                <div class="flex items-center gap-3 p-2.5 bg-gray-50 rounded-lg">
+                                    <div class="w-8 h-8 rounded-lg bg-blue-100 grid place-items-center text-blue-600 text-xs font-bold">T</div>
+                                    <div class="flex-1"><div class="text-xs font-semibold text-gray-800">Toán — Chương 5: Giải tích</div><div class="text-[10px] text-gray-500">2 ngày trước</div></div>
+                                    <div class="text-sm font-bold text-green-600">9.0</div>
+                                    <span class="badge bg-green-100 text-green-700 text-[10px]">Đạt</span>
+                                </div>
+                                <div class="flex items-center gap-3 p-2.5 bg-gray-50 rounded-lg">
+                                    <div class="w-8 h-8 rounded-lg bg-violet-100 grid place-items-center text-violet-600 text-xs font-bold">L</div>
+                                    <div class="flex-1"><div class="text-xs font-semibold text-gray-800">Lý — Chương 3: Điện từ</div><div class="text-[10px] text-gray-500">5 ngày trước</div></div>
+                                    <div class="text-sm font-bold text-blue-600">7.5</div>
+                                    <span class="badge bg-blue-100 text-blue-700 text-[10px]">Đạt</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── EXAM MOCKUP ────────────────────────────── -->
+        <div id="mk-exam" class="tab-panel">
+            <div class="mk-container" style="max-width: 1000px; margin: 0 auto;">
+                <div class="bg-white" style="min-height: 560px;">
+                    <!-- Header -->
+                    <div class="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <button class="text-gray-400 hover:text-gray-600">&larr;</button>
+                            <div>
+                                <div class="text-sm font-bold text-gray-900">Toán — Chương 5: Giải tích</div>
+                                <div class="text-[10px] text-gray-500">30 câu hỏi &middot; 45 phút</div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-4">
+                            <div class="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-1.5">
+                                <span class="text-red-500 text-sm">&#9201;</span>
+                                <span class="text-sm font-bold text-red-600 tabular-nums" id="timer-display">32:15</span>
+                            </div>
+                            <button class="mk-btn-primary text-xs py-2">Nộp bài</button>
+                        </div>
+                    </div>
+                    <!-- Progress -->
+                    <div class="px-6 pt-3">
+                        <div class="flex items-center justify-between text-[10px] text-gray-500 mb-1">
+                            <span>Tiến độ: 10/30 câu</span>
+                            <span class="font-semibold">33%</span>
+                        </div>
+                        <div class="w-full h-1.5 bg-gray-100 rounded-full"><div class="h-full bg-blue-500 rounded-full transition-all" style="width:33%"></div></div>
+                    </div>
+                    <!-- Content -->
+                    <div class="flex gap-6 p-6">
+                        <div class="flex-1">
+                            <!-- Question -->
+                            <div class="mb-5">
+                                <div class="flex items-center gap-2 mb-3">
+                                    <span class="badge bg-blue-100 text-blue-700 text-[10px]">Câu 11</span>
+                                    <span class="badge bg-violet-100 text-violet-700 text-[10px]">Giải tích</span>
+                                    <span class="badge bg-amber-100 text-amber-700 text-[10px]">Trung bình</span>
+                                </div>
+                                <p class="text-sm text-gray-800 leading-relaxed">Cho hàm số f(x) = x&sup3; - 3x&sup2; + 2. Tìm giá trị cực đại của hàm số trên đoạn [-1, 4].</p>
+                            </div>
+                            <!-- Answers -->
+                            <div class="space-y-2.5">
+                                <label class="flex items-center gap-3 p-3.5 border border-gray-200 rounded-xl cursor-pointer hover:border-blue-300 hover:bg-blue-50/30 transition-all">
+                                    <input type="radio" name="q11" class="w-4 h-4 text-blue-600"><span class="text-xs font-semibold text-gray-500">A.</span><span class="text-sm text-gray-800">f(x) = 2 tại x = 0</span>
+                                </label>
+                                <label class="flex items-center gap-3 p-3.5 border-2 border-blue-500 rounded-xl cursor-pointer bg-blue-50">
+                                    <input type="radio" name="q11" checked class="w-4 h-4 text-blue-600"><span class="text-xs font-semibold text-blue-600">B.</span><span class="text-sm text-gray-800 font-medium">f(x) = 2 tại x = 0</span>
+                                </label>
+                                <label class="flex items-center gap-3 p-3.5 border border-gray-200 rounded-xl cursor-pointer hover:border-blue-300 hover:bg-blue-50/30 transition-all">
+                                    <input type="radio" name="q11" class="w-4 h-4 text-blue-600"><span class="text-xs font-semibold text-gray-500">C.</span><span class="text-sm text-gray-800">f(x) = 18 tại x = 4</span>
+                                </label>
+                                <label class="flex items-center gap-3 p-3.5 border border-gray-200 rounded-xl cursor-pointer hover:border-blue-300 hover:bg-blue-50/30 transition-all">
+                                    <input type="radio" name="q11" class="w-4 h-4 text-blue-600"><span class="text-xs font-semibold text-gray-500">D.</span><span class="text-sm text-gray-800">f(x) = -2 tại x = 2</span>
+                                </label>
+                            </div>
+                            <!-- Nav -->
+                            <div class="flex justify-between mt-6">
+                                <button class="px-4 py-2 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-50">&larr; Câu trước</button>
+                                <button class="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700">Câu tiếp &rarr;</button>
+                            </div>
+                        </div>
+                        <!-- Question palette -->
+                        <div class="w-[160px] shrink-0">
+                            <div class="bg-white border border-gray-200 rounded-xl p-3.5">
+                                <div class="text-[10px] font-bold text-gray-700 mb-3">BẢNG CÂU HỎI</div>
+                                <div class="grid grid-cols-5 gap-1.5">
+                                    <div class="w-7 h-7 rounded-lg bg-blue-600 text-white text-[10px] grid place-items-center font-bold">1</div>
+                                    <div class="w-7 h-7 rounded-lg bg-blue-600 text-white text-[10px] grid place-items-center font-bold">2</div>
+                                    <div class="w-7 h-7 rounded-lg bg-blue-600 text-white text-[10px] grid place-items-center font-bold">3</div>
+                                    <div class="w-7 h-7 rounded-lg bg-blue-600 text-white text-[10px] grid place-items-center font-bold">4</div>
+                                    <div class="w-7 h-7 rounded-lg bg-blue-600 text-white text-[10px] grid place-items-center font-bold">5</div>
+                                    <div class="w-7 h-7 rounded-lg bg-blue-600 text-white text-[10px] grid place-items-center font-bold">6</div>
+                                    <div class="w-7 h-7 rounded-lg bg-blue-600 text-white text-[10px] grid place-items-center font-bold">7</div>
+                                    <div class="w-7 h-7 rounded-lg bg-blue-600 text-white text-[10px] grid place-items-center font-bold">8</div>
+                                    <div class="w-7 h-7 rounded-lg bg-blue-600 text-white text-[10px] grid place-items-center font-bold">9</div>
+                                    <div class="w-7 h-7 rounded-lg bg-blue-600 text-white text-[10px] grid place-items-center font-bold">10</div>
+                                    <div class="w-7 h-7 rounded-lg bg-blue-100 border-2 border-blue-500 text-blue-700 text-[10px] grid place-items-center font-bold">11</div>
+                                    <div class="w-7 h-7 rounded-lg bg-gray-100 text-gray-500 text-[10px] grid place-items-center font-medium">12</div>
+                                    <div class="w-7 h-7 rounded-lg bg-gray-100 text-gray-500 text-[10px] grid place-items-center font-medium">13</div>
+                                    <div class="w-7 h-7 rounded-lg bg-gray-100 text-gray-500 text-[10px] grid place-items-center font-medium">14</div>
+                                    <div class="w-7 h-7 rounded-lg bg-gray-100 text-gray-500 text-[10px] grid place-items-center font-medium">15</div>
+                                </div>
+                                <div class="mt-3 space-y-1.5 text-[9px] text-gray-500">
+                                    <div class="flex items-center gap-2"><div class="w-3 h-3 rounded bg-blue-600"></div> Đã trả lời</div>
+                                    <div class="flex items-center gap-2"><div class="w-3 h-3 rounded bg-blue-100 border border-blue-500"></div> Đang xem</div>
+                                    <div class="flex items-center gap-2"><div class="w-3 h-3 rounded bg-gray-100"></div> Chưa trả lời</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════
+     SECTION 4: PROTOTYPE
+     ═══════════════════════════════════════════════════════ -->
+<section id="sec-prototype" class="design-section">
+    <div class="max-w-6xl mx-auto px-6 py-10">
+        <div class="flex items-center gap-3 mb-2">
+            <div class="w-8 h-8 rounded-lg bg-violet-500/15 grid place-items-center text-violet-400 text-sm font-bold">P</div>
+            <h2 class="text-xl font-bold text-white">Prototype — Bản mẫu tương tác</h2>
+        </div>
+        <p class="text-sm text-slate-400 mb-8 ml-11">Mô phỏng luồng người dùng (User Flow) với các liên kết giữa các màn hình.</p>
+
+        <!-- User Flow Diagram -->
+        <h3 class="text-sm font-bold text-white mb-4">User Flow — Học sinh làm bài kiểm tra</h3>
+        <div class="bg-slate-800/50 border border-slate-700 rounded-2xl p-8 mb-10 overflow-x-auto">
+            <div class="flex items-center gap-4 min-w-[800px]">
+                <!-- Step 1 -->
+                <div class="proto-screen bg-slate-700/50 border border-slate-600 rounded-xl p-4 w-[140px] text-center shrink-0" onclick="showSection('mockup'); showMkScreen('mk-login')">
+                    <div class="w-10 h-10 rounded-xl bg-blue-500/15 grid place-items-center mx-auto mb-2"><span class="text-blue-400">&#128274;</span></div>
+                    <div class="text-xs font-bold text-white mb-0.5">Đăng nhập</div>
+                    <div class="text-[10px] text-slate-500">UC01</div>
+                </div>
+                <div class="text-blue-400 text-xl shrink-0">&#10132;</div>
+                <!-- Step 2 -->
+                <div class="proto-screen bg-slate-700/50 border border-slate-600 rounded-xl p-4 w-[140px] text-center shrink-0" onclick="showSection('mockup'); showMkScreen('mk-student')">
+                    <div class="w-10 h-10 rounded-xl bg-blue-500/15 grid place-items-center mx-auto mb-2"><span class="text-blue-400">&#128200;</span></div>
+                    <div class="text-xs font-bold text-white mb-0.5">Dashboard</div>
+                    <div class="text-[10px] text-slate-500">UC10</div>
+                </div>
+                <div class="text-blue-400 text-xl shrink-0">&#10132;</div>
+                <!-- Step 3 -->
+                <div class="proto-screen bg-slate-700/50 border border-slate-600 rounded-xl p-4 w-[140px] text-center shrink-0" onclick="showSection('wireframe'); showScreen('exam')">
+                    <div class="w-10 h-10 rounded-xl bg-blue-500/15 grid place-items-center mx-auto mb-2"><span class="text-blue-400">&#128221;</span></div>
+                    <div class="text-xs font-bold text-white mb-0.5">DS bài KT</div>
+                    <div class="text-[10px] text-slate-500">UC05</div>
+                </div>
+                <div class="text-blue-400 text-xl shrink-0">&#10132;</div>
+                <!-- Step 4 -->
+                <div class="proto-screen bg-slate-700/50 border border-blue-500/40 rounded-xl p-4 w-[140px] text-center shrink-0" onclick="showSection('mockup'); showMkScreen('mk-exam')">
+                    <div class="w-10 h-10 rounded-xl bg-blue-500/20 grid place-items-center mx-auto mb-2"><span class="text-blue-400 text-lg">&#9998;</span></div>
+                    <div class="text-xs font-bold text-blue-400 mb-0.5">Làm bài KT</div>
+                    <div class="text-[10px] text-slate-500">UC06</div>
+                </div>
+                <div class="text-blue-400 text-xl shrink-0">&#10132;</div>
+                <!-- Step 5 -->
+                <div class="proto-screen bg-slate-700/50 border border-slate-600 rounded-xl p-4 w-[140px] text-center shrink-0">
+                    <div class="w-10 h-10 rounded-xl bg-green-500/15 grid place-items-center mx-auto mb-2"><span class="text-green-400">&#10003;</span></div>
+                    <div class="text-xs font-bold text-white mb-0.5">Nộp bài</div>
+                    <div class="text-[10px] text-slate-500">UC07</div>
+                </div>
+                <div class="text-blue-400 text-xl shrink-0">&#10132;</div>
+                <!-- Step 6 -->
+                <div class="proto-screen bg-slate-700/50 border border-slate-600 rounded-xl p-4 w-[140px] text-center shrink-0">
+                    <div class="w-10 h-10 rounded-xl bg-violet-500/15 grid place-items-center mx-auto mb-2"><span class="text-violet-400">&#128202;</span></div>
+                    <div class="text-xs font-bold text-white mb-0.5">Xem kết quả</div>
+                    <div class="text-[10px] text-slate-500">UC09</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Interactive prototype demo -->
+        <h3 class="text-sm font-bold text-white mb-4">Interactive Prototype Demo</h3>
+        <p class="text-xs text-slate-400 mb-6">Nhấn vào các vùng được đánh dấu (hotspot) trên mockup để chuyển đến màn hình tiếp theo.</p>
+
+        <div class="bg-slate-800/50 border border-slate-700 rounded-2xl p-6">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-3 h-3 rounded-full bg-red-500"></div>
+                <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
+                <div class="w-3 h-3 rounded-full bg-green-500"></div>
+                <span class="text-xs text-slate-500 ml-2">Prototype Preview — Click để tương tác</span>
+            </div>
+
+            <div id="proto-container" class="bg-white rounded-lg overflow-hidden relative" style="max-width: 800px; margin: 0 auto; min-height: 400px;">
+                <!-- Proto Login Screen -->
+                <div id="proto-login" class="proto-page" style="min-height: 400px;">
+                    <div class="flex h-full" style="min-height: 400px;">
+                        <div class="flex-1 bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center p-8">
+                            <div class="text-center">
+                                <div class="w-16 h-16 rounded-2xl bg-white/20 mx-auto mb-4 grid place-items-center text-2xl font-black text-white">LA</div>
+                                <h3 class="text-xl font-bold text-white">Learning Analytics</h3>
+                            </div>
+                        </div>
+                        <div class="w-[320px] bg-white p-8 flex flex-col justify-center relative">
+                            <h4 class="text-lg font-bold text-gray-900 mb-6">Đăng nhập</h4>
+                            <div class="mb-4"><input type="text" placeholder="Email" class="mk-input w-full"></div>
+                            <div class="mb-6"><input type="password" placeholder="Mật khẩu" class="mk-input w-full"></div>
+                            <button onclick="protoNavigate('proto-dashboard')" class="mk-btn-primary w-full relative">
+                                Đăng nhập
+                                <div class="proto-hotspot" style="inset:-4px; border-radius: 12px;"></div>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Proto Dashboard Screen -->
+                <div id="proto-dashboard" class="proto-page" style="display:none; min-height: 400px;">
+                    <div class="flex" style="min-height: 400px;">
+                        <div class="w-[180px] bg-gray-900 p-4">
+                            <div class="flex items-center gap-2 mb-6">
+                                <div class="w-7 h-7 rounded-lg bg-blue-600 grid place-items-center text-xs font-black text-white">LA</div>
+                                <span class="text-white text-xs font-bold">Analytics</span>
+                            </div>
+                            <div class="space-y-1">
+                                <div class="bg-blue-600/20 rounded-lg px-3 py-2 text-blue-400 text-[11px] font-semibold">Dashboard</div>
+                                <div class="px-3 py-2 text-gray-400 text-[11px] cursor-pointer hover:text-white relative" onclick="protoNavigate('proto-exam')">
+                                    Bài kiểm tra
+                                    <div class="proto-hotspot" style="inset: -2px; border-radius: 8px;"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex-1 bg-gray-50 p-5">
+                            <h4 class="text-base font-bold text-gray-900 mb-4">Xin chào, Nguyễn Tân!</h4>
+                            <div class="grid grid-cols-3 gap-3 mb-4">
+                                <div class="bg-white rounded-xl p-3 shadow-sm"><div class="text-[10px] text-gray-500">Bài KT</div><div class="text-lg font-bold text-gray-900">24</div></div>
+                                <div class="bg-white rounded-xl p-3 shadow-sm"><div class="text-[10px] text-gray-500">Điểm TB</div><div class="text-lg font-bold text-blue-600">7.8</div></div>
+                                <div class="bg-white rounded-xl p-3 shadow-sm"><div class="text-[10px] text-gray-500">Xếp hạng</div><div class="text-lg font-bold text-violet-600">#5</div></div>
+                            </div>
+                            <div class="bg-white rounded-xl p-4 shadow-sm">
+                                <div class="text-xs font-semibold text-gray-700 mb-3">Bài KT sắp tới</div>
+                                <div class="p-3 bg-blue-50 rounded-lg cursor-pointer relative" onclick="protoNavigate('proto-exam')">
+                                    <div class="text-xs font-semibold text-gray-800">Toán — Chương 5: Giải tích</div>
+                                    <div class="text-[10px] text-gray-500">45 phút &middot; 30 câu &middot; Bắt đầu ngay</div>
+                                    <div class="proto-hotspot" style="inset: -2px; border-radius: 10px;"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Proto Exam Screen -->
+                <div id="proto-exam" class="proto-page" style="display:none; min-height: 400px;">
+                    <div class="bg-white border-b border-gray-200 px-5 py-3 flex items-center justify-between">
+                        <div class="text-sm font-bold text-gray-900">Toán — Giải tích</div>
+                        <div class="flex items-center gap-3">
+                            <div class="bg-red-50 border border-red-200 rounded-lg px-3 py-1"><span class="text-sm font-bold text-red-600">32:15</span></div>
+                            <button onclick="protoNavigate('proto-result')" class="mk-btn-primary text-xs py-1.5 px-4 relative">
+                                Nộp bài
+                                <div class="proto-hotspot" style="inset:-4px; border-radius: 10px;"></div>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="p-5">
+                        <div class="mb-4">
+                            <span class="badge bg-blue-100 text-blue-700 text-[10px]">Câu 1/30</span>
+                            <p class="text-sm text-gray-800 mt-2">Cho hàm số f(x) = x&sup3; - 3x&sup2; + 2. Tìm giá trị cực đại.</p>
+                        </div>
+                        <div class="space-y-2">
+                            <label class="flex items-center gap-3 p-3 border border-gray-200 rounded-xl cursor-pointer hover:border-blue-300"><input type="radio" name="pq1"><span class="text-sm text-gray-800">A. f(x) = 2</span></label>
+                            <label class="flex items-center gap-3 p-3 border-2 border-blue-500 rounded-xl bg-blue-50"><input type="radio" name="pq1" checked><span class="text-sm text-gray-800 font-medium">B. f(x) = 2 tại x = 0</span></label>
+                            <label class="flex items-center gap-3 p-3 border border-gray-200 rounded-xl cursor-pointer hover:border-blue-300"><input type="radio" name="pq1"><span class="text-sm text-gray-800">C. f(x) = 18</span></label>
+                            <label class="flex items-center gap-3 p-3 border border-gray-200 rounded-xl cursor-pointer hover:border-blue-300"><input type="radio" name="pq1"><span class="text-sm text-gray-800">D. f(x) = -2</span></label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Proto Result Screen -->
+                <div id="proto-result" class="proto-page" style="display:none; min-height: 400px;">
+                    <div class="flex items-center justify-center h-full p-10" style="min-height: 400px;">
+                        <div class="text-center">
+                            <div class="w-20 h-20 rounded-full bg-green-100 grid place-items-center mx-auto mb-5">
+                                <span class="text-4xl text-green-600">&#10003;</span>
+                            </div>
+                            <h3 class="text-xl font-bold text-gray-900 mb-2">Hoàn thành!</h3>
+                            <p class="text-sm text-gray-500 mb-6">Bạn đã nộp bài kiểm tra thành công</p>
+                            <div class="inline-flex gap-6 mb-6">
+                                <div class="text-center"><div class="text-2xl font-bold text-blue-600">9.0</div><div class="text-[10px] text-gray-500">Điểm số</div></div>
+                                <div class="w-px bg-gray-200"></div>
+                                <div class="text-center"><div class="text-2xl font-bold text-green-600">27/30</div><div class="text-[10px] text-gray-500">Đúng</div></div>
+                                <div class="w-px bg-gray-200"></div>
+                                <div class="text-center"><div class="text-2xl font-bold text-gray-700">12:45</div><div class="text-[10px] text-gray-500">Thời gian</div></div>
+                            </div>
+                            <div class="flex gap-3 justify-center">
+                                <button class="px-4 py-2 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-50">Xem đáp án</button>
+                                <button onclick="protoNavigate('proto-dashboard')" class="mk-btn-primary text-xs py-2 relative">
+                                    Về Dashboard
+                                    <div class="proto-hotspot" style="inset:-4px; border-radius: 10px;"></div>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-center gap-3 mt-4">
+                <button onclick="protoNavigate('proto-login')" class="text-[10px] text-slate-500 hover:text-slate-300 px-2 py-1 rounded bg-slate-700/50">Login</button>
+                <button onclick="protoNavigate('proto-dashboard')" class="text-[10px] text-slate-500 hover:text-slate-300 px-2 py-1 rounded bg-slate-700/50">Dashboard</button>
+                <button onclick="protoNavigate('proto-exam')" class="text-[10px] text-slate-500 hover:text-slate-300 px-2 py-1 rounded bg-slate-700/50">Exam</button>
+                <button onclick="protoNavigate('proto-result')" class="text-[10px] text-slate-500 hover:text-slate-300 px-2 py-1 rounded bg-slate-700/50">Result</button>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════
+     SECTION 5: DESIGN SYSTEM
+     ═══════════════════════════════════════════════════════ -->
+<section id="sec-designsystem" class="design-section">
+    <div class="max-w-6xl mx-auto px-6 py-10">
+        <div class="flex items-center gap-3 mb-2">
+            <div class="w-8 h-8 rounded-lg bg-emerald-500/15 grid place-items-center text-emerald-400 text-sm font-bold">DS</div>
+            <h2 class="text-xl font-bold text-white">Design System</h2>
+        </div>
+        <p class="text-sm text-slate-400 mb-8 ml-11">Hệ thống thiết kế thống nhất: màu sắc, typography, components tái sử dụng.</p>
+
+        <!-- Colors -->
+        <h3 class="text-sm font-bold text-white mb-4">Bảng màu (Color Palette)</h3>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
+            <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
+                <div class="text-xs font-bold text-slate-400 mb-3 uppercase tracking-wider">Primary</div>
+                <div class="space-y-2">
+                    <div class="flex items-center gap-3"><div class="w-8 h-8 rounded-lg" style="background: #2563eb;"></div><div><div class="text-xs font-semibold text-white">Blue 600</div><div class="text-[10px] text-slate-500">#2563EB</div></div></div>
+                    <div class="flex items-center gap-3"><div class="w-8 h-8 rounded-lg" style="background: #3b82f6;"></div><div><div class="text-xs font-semibold text-white">Blue 500</div><div class="text-[10px] text-slate-500">#3B82F6</div></div></div>
+                    <div class="flex items-center gap-3"><div class="w-8 h-8 rounded-lg" style="background: #dbeafe;"></div><div><div class="text-xs font-semibold text-white">Blue 100</div><div class="text-[10px] text-slate-500">#DBEAFE</div></div></div>
+                </div>
+            </div>
+            <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
+                <div class="text-xs font-bold text-slate-400 mb-3 uppercase tracking-wider">Success</div>
+                <div class="space-y-2">
+                    <div class="flex items-center gap-3"><div class="w-8 h-8 rounded-lg" style="background: #16a34a;"></div><div><div class="text-xs font-semibold text-white">Green 600</div><div class="text-[10px] text-slate-500">#16A34A</div></div></div>
+                    <div class="flex items-center gap-3"><div class="w-8 h-8 rounded-lg" style="background: #22c55e;"></div><div><div class="text-xs font-semibold text-white">Green 500</div><div class="text-[10px] text-slate-500">#22C55E</div></div></div>
+                    <div class="flex items-center gap-3"><div class="w-8 h-8 rounded-lg" style="background: #dcfce7;"></div><div><div class="text-xs font-semibold text-white">Green 100</div><div class="text-[10px] text-slate-500">#DCFCE7</div></div></div>
+                </div>
+            </div>
+            <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
+                <div class="text-xs font-bold text-slate-400 mb-3 uppercase tracking-wider">Warning</div>
+                <div class="space-y-2">
+                    <div class="flex items-center gap-3"><div class="w-8 h-8 rounded-lg" style="background: #ea580c;"></div><div><div class="text-xs font-semibold text-white">Orange 600</div><div class="text-[10px] text-slate-500">#EA580C</div></div></div>
+                    <div class="flex items-center gap-3"><div class="w-8 h-8 rounded-lg" style="background: #f59e0b;"></div><div><div class="text-xs font-semibold text-white">Amber 500</div><div class="text-[10px] text-slate-500">#F59E0B</div></div></div>
+                    <div class="flex items-center gap-3"><div class="w-8 h-8 rounded-lg" style="background: #fef3c7;"></div><div><div class="text-xs font-semibold text-white">Amber 100</div><div class="text-[10px] text-slate-500">#FEF3C7</div></div></div>
+                </div>
+            </div>
+            <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
+                <div class="text-xs font-bold text-slate-400 mb-3 uppercase tracking-wider">Danger</div>
+                <div class="space-y-2">
+                    <div class="flex items-center gap-3"><div class="w-8 h-8 rounded-lg" style="background: #dc2626;"></div><div><div class="text-xs font-semibold text-white">Red 600</div><div class="text-[10px] text-slate-500">#DC2626</div></div></div>
+                    <div class="flex items-center gap-3"><div class="w-8 h-8 rounded-lg" style="background: #ef4444;"></div><div><div class="text-xs font-semibold text-white">Red 500</div><div class="text-[10px] text-slate-500">#EF4444</div></div></div>
+                    <div class="flex items-center gap-3"><div class="w-8 h-8 rounded-lg" style="background: #fee2e2;"></div><div><div class="text-xs font-semibold text-white">Red 100</div><div class="text-[10px] text-slate-500">#FEE2E2</div></div></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Typography -->
+        <h3 class="text-sm font-bold text-white mb-4">Typography</h3>
+        <div class="bg-slate-800/50 border border-slate-700 rounded-2xl p-6 mb-10">
+            <div class="space-y-4">
+                <div class="flex items-baseline gap-6 pb-4 border-b border-slate-700">
+                    <div class="w-28 shrink-0"><span class="text-[10px] text-slate-500 font-semibold uppercase">Heading 1</span></div>
+                    <div class="text-2xl font-extrabold text-white">Inter ExtraBold 24px</div>
+                </div>
+                <div class="flex items-baseline gap-6 pb-4 border-b border-slate-700">
+                    <div class="w-28 shrink-0"><span class="text-[10px] text-slate-500 font-semibold uppercase">Heading 2</span></div>
+                    <div class="text-xl font-bold text-white">Inter Bold 20px</div>
+                </div>
+                <div class="flex items-baseline gap-6 pb-4 border-b border-slate-700">
+                    <div class="w-28 shrink-0"><span class="text-[10px] text-slate-500 font-semibold uppercase">Heading 3</span></div>
+                    <div class="text-base font-bold text-white">Inter Bold 16px</div>
+                </div>
+                <div class="flex items-baseline gap-6 pb-4 border-b border-slate-700">
+                    <div class="w-28 shrink-0"><span class="text-[10px] text-slate-500 font-semibold uppercase">Body</span></div>
+                    <div class="text-sm text-slate-300">Inter Regular 14px — Dùng cho nội dung chính</div>
+                </div>
+                <div class="flex items-baseline gap-6 pb-4 border-b border-slate-700">
+                    <div class="w-28 shrink-0"><span class="text-[10px] text-slate-500 font-semibold uppercase">Caption</span></div>
+                    <div class="text-xs text-slate-400">Inter Medium 12px — Dùng cho label, caption</div>
+                </div>
+                <div class="flex items-baseline gap-6">
+                    <div class="w-28 shrink-0"><span class="text-[10px] text-slate-500 font-semibold uppercase">Micro</span></div>
+                    <div class="text-[10px] text-slate-500">Inter SemiBold 10px — Badge, tag, timestamp</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Components -->
+        <h3 class="text-sm font-bold text-white mb-4">Components tái sử dụng</h3>
+        <div class="grid md:grid-cols-3 gap-4 mb-10">
+            <!-- Buttons -->
+            <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
+                <div class="text-xs font-bold text-slate-400 mb-4 uppercase tracking-wider">Buttons</div>
+                <div class="space-y-3">
+                    <button class="w-full py-2.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 transition-colors">Primary Button</button>
+                    <button class="w-full py-2.5 bg-white text-gray-700 border border-gray-200 rounded-lg text-xs font-semibold hover:bg-gray-50 transition-colors">Secondary Button</button>
+                    <button class="w-full py-2.5 bg-red-600 text-white rounded-lg text-xs font-semibold hover:bg-red-700 transition-colors">Danger Button</button>
+                    <button class="w-full py-2.5 text-blue-600 rounded-lg text-xs font-semibold hover:bg-blue-50 transition-colors">Text Button</button>
+                </div>
+            </div>
+            <!-- Inputs -->
+            <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
+                <div class="text-xs font-bold text-slate-400 mb-4 uppercase tracking-wider">Form Inputs</div>
+                <div class="space-y-3">
+                    <div>
+                        <label class="block text-[10px] font-semibold text-slate-400 mb-1">Default</label>
+                        <input type="text" placeholder="Nhập giá trị..." class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-xs text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-semibold text-slate-400 mb-1">Error</label>
+                        <input type="text" value="invalid@" class="w-full px-3 py-2 bg-slate-700 border border-red-500 rounded-lg text-xs text-white focus:outline-none">
+                        <span class="text-[10px] text-red-400 mt-1 block">Email không hợp lệ</span>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-semibold text-slate-400 mb-1">Select</label>
+                        <select class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-xs text-white focus:border-blue-500 focus:outline-none">
+                            <option>Chọn môn học...</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <!-- Badges & Cards -->
+            <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
+                <div class="text-xs font-bold text-slate-400 mb-4 uppercase tracking-wider">Badges & Status</div>
+                <div class="space-y-3">
+                    <div class="flex flex-wrap gap-2">
+                        <span class="badge bg-blue-500/15 text-blue-400">Đang làm</span>
+                        <span class="badge bg-green-500/15 text-green-400">Đạt</span>
+                        <span class="badge bg-red-500/15 text-red-400">Chưa đạt</span>
+                        <span class="badge bg-amber-500/15 text-amber-400">Chờ chấm</span>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <span class="badge bg-slate-600 text-slate-300">Dễ</span>
+                        <span class="badge bg-blue-600 text-blue-100">Trung bình</span>
+                        <span class="badge bg-red-600 text-red-100">Khó</span>
+                    </div>
+                    <div class="p-3 bg-slate-700/50 border border-slate-600 rounded-lg">
+                        <div class="text-xs font-semibold text-white mb-1">Notification Card</div>
+                        <div class="text-[10px] text-slate-400">Bạn có bài kiểm tra mới cần hoàn thành trước 17:00 hôm nay.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Spacing & Grid -->
+        <h3 class="text-sm font-bold text-white mb-4">Spacing System</h3>
+        <div class="bg-slate-800/50 border border-slate-700 rounded-2xl p-6">
+            <div class="flex items-end gap-4 mb-4">
+                <div class="text-center"><div class="w-2 h-2 bg-blue-500 rounded-sm mx-auto"></div><div class="text-[9px] text-slate-500 mt-1">4px</div></div>
+                <div class="text-center"><div class="w-4 h-4 bg-blue-500 rounded-sm mx-auto"></div><div class="text-[9px] text-slate-500 mt-1">8px</div></div>
+                <div class="text-center"><div class="w-6 h-6 bg-blue-500 rounded mx-auto"></div><div class="text-[9px] text-slate-500 mt-1">12px</div></div>
+                <div class="text-center"><div class="w-8 h-8 bg-blue-500 rounded mx-auto"></div><div class="text-[9px] text-slate-500 mt-1">16px</div></div>
+                <div class="text-center"><div class="w-12 h-12 bg-blue-500 rounded mx-auto"></div><div class="text-[9px] text-slate-500 mt-1">24px</div></div>
+                <div class="text-center"><div class="w-16 h-16 bg-blue-500 rounded mx-auto"></div><div class="text-[9px] text-slate-500 mt-1">32px</div></div>
+                <div class="text-center"><div class="w-20 h-20 bg-blue-500 rounded mx-auto"></div><div class="text-[9px] text-slate-500 mt-1">48px</div></div>
+            </div>
+            <p class="text-[10px] text-slate-500">Base unit: 4px. Tất cả spacing đều là bội số của 4px để đảm bảo sự nhất quán.</p>
+        </div>
+    </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════
+     SECTION 6: SO SÁNH WF vs MK
+     ═══════════════════════════════════════════════════════ -->
+<section id="sec-compare" class="design-section">
+    <div class="max-w-6xl mx-auto px-6 py-10">
+        <div class="flex items-center gap-3 mb-2">
+            <div class="w-8 h-8 rounded-lg bg-pink-500/15 grid place-items-center text-pink-400 text-sm font-bold">VS</div>
+            <h2 class="text-xl font-bold text-white">So sánh Wireframe vs Mockup</h2>
+        </div>
+        <p class="text-sm text-slate-400 mb-8 ml-11">Thấy rõ sự khác biệt giữa bản phác thảo (low-fidelity) và bản thiết kế chi tiết (high-fidelity).</p>
+
+        <div class="grid md:grid-cols-2 gap-6 mb-10">
+            <!-- Wireframe side -->
+            <div>
+                <div class="flex items-center gap-2 mb-4">
+                    <span class="badge bg-amber-500/15 text-amber-400">WIREFRAME</span>
+                    <span class="text-xs text-slate-500">Low-fidelity</span>
+                </div>
+                <div class="wf-container" style="height: 360px;">
+                    <div class="flex h-full">
+                        <div class="flex-1 bg-gray-100 flex items-center justify-center p-6">
+                            <div class="text-center">
+                                <div class="w-14 h-14 rounded-xl border-2 border-dashed border-gray-400 bg-gray-200 mx-auto mb-3 grid place-items-center"><span class="wf-text">LOGO</span></div>
+                                <div class="wf-bar w-32 mb-2 mx-auto" style="height:12px;"></div>
+                                <div class="wf-bar-sm w-40 mx-auto"></div>
+                            </div>
+                        </div>
+                        <div class="w-[240px] bg-white p-6 flex flex-col justify-center">
+                            <div class="wf-bar w-20 mb-6" style="height:10px;"></div>
+                            <div class="mb-3"><div class="wf-bar-sm w-12 mb-1.5"></div><div class="wf-input w-full"></div></div>
+                            <div class="mb-4"><div class="wf-bar-sm w-12 mb-1.5"></div><div class="wf-input w-full"></div></div>
+                            <div class="wf-btn text-center text-xs">ĐĂNG NHẬP</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Mockup side -->
+            <div>
+                <div class="flex items-center gap-2 mb-4">
+                    <span class="badge bg-blue-500/15 text-blue-400">MOCKUP</span>
+                    <span class="text-xs text-slate-500">High-fidelity</span>
+                </div>
+                <div class="mk-container" style="height: 360px;">
+                    <div class="flex h-full">
+                        <div class="flex-1 mk-gradient flex items-center justify-center p-6 relative overflow-hidden">
+                            <div class="absolute w-40 h-40 rounded-full bg-white/10 -top-8 -left-8"></div>
+                            <div class="text-center relative z-10">
+                                <div class="w-14 h-14 rounded-xl bg-white/20 mx-auto mb-3 grid place-items-center text-xl font-black text-white">LA</div>
+                                <h3 class="text-lg font-bold text-white mb-1">Learning Analytics</h3>
+                                <p class="text-blue-200 text-[11px]">Hệ thống phân tích học tập</p>
+                            </div>
+                        </div>
+                        <div class="w-[240px] bg-white p-6 flex flex-col justify-center">
+                            <h4 class="text-sm font-bold text-gray-900 mb-5">Đăng nhập</h4>
+                            <div class="mb-3"><label class="block text-[10px] font-semibold text-gray-700 mb-1">Email</label><input type="text" placeholder="name@school.edu.vn" class="mk-input w-full text-[11px]"></div>
+                            <div class="mb-4"><label class="block text-[10px] font-semibold text-gray-700 mb-1">Mật khẩu</label><input type="password" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" class="mk-input w-full text-[11px]"></div>
+                            <button class="mk-btn-primary w-full text-xs">Đăng nhập</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Comparison table -->
+        <div class="bg-slate-800/50 border border-slate-700 rounded-2xl overflow-hidden">
+            <table class="w-full">
+                <thead>
+                    <tr class="border-b border-slate-700">
+                        <th class="p-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider w-1/3">Tiêu chí</th>
+                        <th class="p-4 text-left text-xs font-bold text-amber-400 uppercase tracking-wider w-1/3">Wireframe</th>
+                        <th class="p-4 text-left text-xs font-bold text-blue-400 uppercase tracking-wider w-1/3">Mockup</th>
+                    </tr>
+                </thead>
+                <tbody class="text-xs text-slate-400">
+                    <tr class="border-b border-slate-700/50"><td class="p-4 font-semibold text-slate-300">Mục đích</td><td class="p-4">Xác định bố cục & cấu trúc</td><td class="p-4">Thiết kế giao diện chi tiết</td></tr>
+                    <tr class="border-b border-slate-700/50"><td class="p-4 font-semibold text-slate-300">Màu sắc</td><td class="p-4">Grayscale (đen, trắng, xám)</td><td class="p-4">Màu sắc thực tế theo brand</td></tr>
+                    <tr class="border-b border-slate-700/50"><td class="p-4 font-semibold text-slate-300">Typography</td><td class="p-4">Placeholder text, kích thước ước lượng</td><td class="p-4">Font thực tế, đúng kích thước</td></tr>
+                    <tr class="border-b border-slate-700/50"><td class="p-4 font-semibold text-slate-300">Nội dung</td><td class="p-4">Placeholder (hình khối, thanh xám)</td><td class="p-4">Nội dung thực hoặc gần thực</td></tr>
+                    <tr class="border-b border-slate-700/50"><td class="p-4 font-semibold text-slate-300">Tương tác</td><td class="p-4">Không có hoặc rất ít</td><td class="p-4">Hover, click, animation cơ bản</td></tr>
+                    <tr class="border-b border-slate-700/50"><td class="p-4 font-semibold text-slate-300">Công cụ</td><td class="p-4">Giấy bút, Balsamiq, Whimsical</td><td class="p-4">Figma, Adobe XD, Sketch</td></tr>
+                    <tr class="border-b border-slate-700/50"><td class="p-4 font-semibold text-slate-300">Thời gian</td><td class="p-4">Nhanh (vài giờ / màn hình)</td><td class="p-4">Lâu hơn (1-2 ngày / màn hình)</td></tr>
+                    <tr><td class="p-4 font-semibold text-slate-300">Khi nào dùng</td><td class="p-4">Giai đoạn đầu, brainstorm layout</td><td class="p-4">Sau khi wireframe được duyệt</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<!-- Footer -->
+<footer class="border-t border-slate-800 py-8 px-6">
+    <div class="max-w-6xl mx-auto flex items-center justify-between">
+        <div class="text-xs text-slate-600">High School Learning Analytics Dashboard — UI/UX Design Document</div>
+        <div class="flex items-center gap-4 text-xs text-slate-600">
+            <span>8 Màn hình</span>
+            <span>&middot;</span>
+            <span>4 Vai trò</span>
+            <span>&middot;</span>
+            <span>45 Use Cases</span>
+        </div>
+    </div>
+</footer>
+
+<!-- ═══════════════════════════════════════════════════════
+     JAVASCRIPT
+     ═══════════════════════════════════════════════════════ -->
+<script>
+function showSection(id) {
+    document.querySelectorAll('.design-section').forEach(s => s.classList.remove('active'));
+    document.getElementById('sec-' + id).classList.add('active');
+    document.querySelectorAll('.phase-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector(`.phase-btn[onclick*="${id}"]`).classList.add('active');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function showScreen(screen) {
+    document.querySelectorAll('#sec-wireframe .tab-panel').forEach(p => p.classList.remove('active'));
+    const panel = document.getElementById('wf-' + screen);
+    if (panel) panel.classList.add('active');
+    document.querySelectorAll('#wf-screen-tabs .screen-tab').forEach(t => t.classList.remove('active'));
+    document.querySelector(`#wf-screen-tabs .screen-tab[data-screen="${screen}"]`)?.classList.add('active');
+}
+
+function showMkScreen(screen) {
+    document.querySelectorAll('#sec-mockup .tab-panel').forEach(p => p.classList.remove('active'));
+    const panel = document.getElementById(screen);
+    if (panel) panel.classList.add('active');
+    document.querySelectorAll('#mk-screen-tabs .screen-tab').forEach(t => t.classList.remove('active'));
+    document.querySelector(`#mk-screen-tabs .screen-tab[data-mkscreen="${screen}"]`)?.classList.add('active');
+}
+
+function protoNavigate(screenId) {
+    document.querySelectorAll('.proto-page').forEach(p => {
+        p.style.display = 'none';
+        p.style.opacity = '0';
+    });
+    const target = document.getElementById(screenId);
+    if (target) {
+        target.style.display = 'block';
+        requestAnimationFrame(() => {
+            target.style.transition = 'opacity 0.3s ease';
+            target.style.opacity = '1';
+        });
+    }
+}
+
+// Timer animation for exam mockup
+let timerInterval;
+function startTimer() {
+    const display = document.getElementById('timer-display');
+    if (!display) return;
+    let minutes = 32, seconds = 15;
+    clearInterval(timerInterval);
+    timerInterval = setInterval(() => {
+        seconds--;
+        if (seconds < 0) { seconds = 59; minutes--; }
+        if (minutes < 0) { clearInterval(timerInterval); return; }
+        display.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    }, 1000);
+}
+startTimer();
+</script>
+
+</body>
+</html>

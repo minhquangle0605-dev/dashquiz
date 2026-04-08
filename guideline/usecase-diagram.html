@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Use-Case Diagram – High School Learning Analytics Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        * { margin: 0; box-sizing: border-box; }
+        body { overflow: hidden; background: #f1f5f9; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+
+        #canvas-wrap { flex: 1; overflow: auto; cursor: grab; position: relative; background: #f1f5f9; }
+        #canvas-wrap:active { cursor: grabbing; }
+        #canvas-wrap::-webkit-scrollbar { width: 8px; height: 8px; }
+        #canvas-wrap::-webkit-scrollbar-track { background: transparent; }
+        #canvas-wrap::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+
+        .uc-node { cursor: pointer; }
+        .uc-node:hover .uc-ring { stroke-width: 2.8; filter: url(#glow); }
+        .uc-node.focused .uc-ring { stroke-width: 3.2; stroke-dasharray: none; filter: url(#glow); }
+        .actor-fig { cursor: pointer; }
+
+        #tooltip {
+            position: fixed; max-width: 340px; background: #fff; border: 1px solid #e2e8f0;
+            border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.12); padding: 14px 18px;
+            font-size: 13px; line-height: 1.6; display: none; z-index: 999; pointer-events: none;
+        }
+        #tooltip .tid { font-weight: 700; color: #3b82f6; }
+        #tooltip .tname { font-weight: 600; color: #0f172a; margin-left: 4px; }
+        #tooltip .tdesc { color: #475569; margin-top: 6px; display: block; }
+
+        /* Sidebar */
+        #sidebar {
+            width: 275px; min-width: 275px; background: #fff; border-left: 1px solid #e2e8f0;
+            overflow-y: auto; transition: all .25s ease; display: flex; flex-direction: column;
+        }
+        #sidebar.collapsed { width: 0; min-width: 0; padding: 0; border: none; overflow: hidden; }
+        #sidebar::-webkit-scrollbar { width: 5px; }
+        #sidebar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 3px; }
+        .sb-head { padding: 14px 16px 10px; border-bottom: 1px solid #f1f5f9; }
+        .sb-stats { display: flex; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+        .sb-stat { font-size: 11px; color: #64748b; background: #f8fafc; padding: 3px 8px; border-radius: 6px; }
+        .sb-stat b { color: #334155; }
+        .sb-body { flex: 1; overflow-y: auto; padding: 6px 0; }
+        .sb-group-hdr {
+            display: flex; align-items: center; gap: 8px; padding: 8px 16px; cursor: pointer;
+            font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px;
+            user-select: none; transition: background .15s;
+        }
+        .sb-group-hdr:hover { background: #f8fafc; }
+        .sb-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+        .sb-count { margin-left: auto; font-size: 10px; font-weight: 600; background: #f1f5f9; color: #64748b; padding: 1px 7px; border-radius: 10px; }
+        .sb-chevron { font-size: 10px; color: #94a3b8; transition: transform .2s; }
+        .sb-chevron.open { transform: rotate(90deg); }
+        .sb-items { overflow: hidden; transition: max-height .25s ease; }
+        .sb-item {
+            display: flex; align-items: center; gap: 8px; padding: 6px 16px 6px 34px;
+            font-size: 12px; cursor: pointer; transition: background .12s; border-left: 3px solid transparent;
+        }
+        .sb-item:hover { background: #f8fafc; }
+        .sb-item.active { background: #eff6ff; border-left-color: #3b82f6; }
+        .sb-item-id { font-weight: 600; color: #94a3b8; font-size: 10px; min-width: 34px; }
+        .sb-item-name { color: #334155; }
+
+        .legend-row { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #64748b; padding: 2px 0; }
+        .legend-line { width: 24px; height: 0; border-top: 2px dashed #64748b; }
+        .legend-line.solid { border-top-style: solid; }
+    </style>
+</head>
+
+<body class="flex flex-col h-screen">
+
+    <!-- Toolbar -->
+    <div class="h-[52px] bg-white border-b border-gray-200 flex items-center justify-between px-4 shadow-sm z-20 shrink-0">
+        <div class="flex items-center gap-2">
+            <h1 class="text-sm font-bold text-gray-800 mr-3 whitespace-nowrap">Use-Case Diagram</h1>
+            <div class="flex gap-1.5" id="filter-bar">
+                <button data-f="all" onclick="setFilter('all')" class="fbtn px-2.5 py-1 rounded-md text-[11px] font-semibold bg-gray-800 text-white">Tất cả</button>
+                <button data-f="student" onclick="setFilter('student')" class="fbtn px-2.5 py-1 rounded-md text-[11px] font-semibold bg-blue-50 text-blue-700 hover:bg-blue-100">Học sinh</button>
+                <button data-f="parent" onclick="setFilter('parent')" class="fbtn px-2.5 py-1 rounded-md text-[11px] font-semibold bg-green-50 text-green-700 hover:bg-green-100">Phụ huynh</button>
+                <button data-f="teacher" onclick="setFilter('teacher')" class="fbtn px-2.5 py-1 rounded-md text-[11px] font-semibold bg-orange-50 text-orange-700 hover:bg-orange-100">Giáo viên</button>
+                <button data-f="admin" onclick="setFilter('admin')" class="fbtn px-2.5 py-1 rounded-md text-[11px] font-semibold bg-red-50 text-red-700 hover:bg-red-100">Admin</button>
+            </div>
+        </div>
+        <div class="flex items-center gap-4">
+            <div class="hidden md:flex items-center gap-4 mr-4 border-r border-gray-200 pr-4">
+                <div class="legend-row"><span class="legend-line solid" style="border-color:#64748b"></span> Association</div>
+                <div class="legend-row"><span class="legend-line" style="border-color:#6366f1"></span> &laquo;include&raquo;</div>
+                <div class="legend-row"><span class="legend-line" style="border-color:#f59e0b"></span> &laquo;extend&raquo;</div>
+            </div>
+            <span class="text-xs text-gray-400 tabular-nums w-10 text-right" id="zoom-pct">72%</span>
+            <button onclick="zoomBy(-.12)" class="w-7 h-7 rounded bg-gray-100 hover:bg-gray-200 text-base font-bold text-gray-500 grid place-items-center">−</button>
+            <button onclick="zoomBy(.12)" class="w-7 h-7 rounded bg-gray-100 hover:bg-gray-200 text-base font-bold text-gray-500 grid place-items-center">+</button>
+            <button onclick="fitToScreen()" class="h-7 px-2.5 rounded bg-gray-100 hover:bg-gray-200 text-[11px] font-semibold text-gray-600">Fit</button>
+            <button onclick="toggleSidebar()" class="h-7 px-2 rounded bg-gray-100 hover:bg-gray-200 text-sm text-gray-500" title="Toggle sidebar">☰</button>
+        </div>
+    </div>
+
+    <!-- Main -->
+    <div class="flex flex-1 overflow-hidden">
+        <div id="canvas-wrap"><svg id="svg" xmlns="http://www.w3.org/2000/svg"></svg></div>
+        <div id="sidebar">
+            <div class="sb-head">
+                <div class="text-xs font-bold text-gray-800 uppercase tracking-wider">Danh sách Use Cases</div>
+                <div class="sb-stats">
+                    <span class="sb-stat"><b>45</b> Use Cases</span>
+                    <span class="sb-stat"><b>4</b> Actors</span>
+                    <span class="sb-stat"><b>10</b> include</span>
+                    <span class="sb-stat"><b>7</b> extend</span>
+                </div>
+            </div>
+            <div class="sb-body" id="sb-list"></div>
+        </div>
+    </div>
+
+    <!-- Tooltip -->
+    <div id="tooltip"><span class="tid"></span><span class="tname"></span><span class="tdesc"></span></div>
+
+<script>
+// ─── CONSTANTS ─────────────────────────────────────────
+const CW = 2600, CH = 1950, RX = 114, RY = 26;
+
+// ─── GROUPS ────────────────────────────────────────────
+const groups = {
+    'auth':   { label:'Xác thực & Hồ sơ',        color:'#64748b', bg:'#f8fafc',  border:'#cbd5e1' },
+    's-test': { label:'Kiểm tra Trực tuyến',      color:'#2563eb', bg:'#eff6ff',  border:'#93c5fd' },
+    's-ana':  { label:'Analytics & Dashboard',     color:'#4f46e5', bg:'#eef2ff',  border:'#a5b4fc' },
+    's-ai':   { label:'Học Thích ứng (AI)',        color:'#7c3aed', bg:'#f5f3ff',  border:'#c4b5fd' },
+    'parent': { label:'Giám sát Phụ huynh',       color:'#16a34a', bg:'#f0fdf4',  border:'#86efac' },
+    't-test': { label:'Quản lý Đề thi & Câu hỏi', color:'#ea580c', bg:'#fff7ed', border:'#fdba74' },
+    't-cls':  { label:'Quản lý Lớp học',          color:'#ca8a04', bg:'#fefce8',  border:'#fde047' },
+    't-ana':  { label:'Analytics & Báo cáo (GV)', color:'#e11d48', bg:'#fff1f2',  border:'#fda4af' },
+    'admin':  { label:'Quản trị Hệ thống',        color:'#dc2626', bg:'#fef2f2',  border:'#fca5a5' },
+};
+const groupOrder = ['auth','s-test','s-ana','s-ai','parent','t-test','t-cls','t-ana','admin'];
+
+const groupToActors = {
+    'auth':['student','parent','teacher','admin'],
+    's-test':['student'],'s-ana':['student'],'s-ai':['student'],
+    'parent':['parent'],
+    't-test':['teacher'],'t-cls':['teacher'],'t-ana':['teacher'],
+    'admin':['admin'],
+};
+
+// ─── ACTORS ────────────────────────────────────────────
+const actors = [
+    { id:'student', label:'Học sinh',       sub:'Student',  x:125,  y:700,  color:'#2563eb' },
+    { id:'parent',  label:'Phụ huynh',      sub:'Parent',   x:125,  y:1420, color:'#16a34a' },
+    { id:'teacher', label:'Giáo viên',      sub:'Teacher',  x:2475, y:770,  color:'#ea580c' },
+    { id:'admin',   label:'Quản trị viên',  sub:'Admin',    x:2475, y:1590, color:'#dc2626' },
+];
+const actorMap = {}; actors.forEach(a => actorMap[a.id] = a);
+
+// ─── USE CASES ─────────────────────────────────────────
+const ucs = [
+    // Auth (top-center)
+    { id:'UC01', name:'Đăng nhập hệ thống',       x:950,  y:148, g:'auth',   desc:'Người dùng nhập email/username và mật khẩu để truy cập hệ thống theo vai trò được phân quyền.' },
+    { id:'UC02', name:'Đăng xuất',                 x:1300, y:148, g:'auth',   desc:'Người dùng kết thúc phiên đăng nhập và thoát khỏi hệ thống an toàn.' },
+    { id:'UC03', name:'Quản lý hồ sơ cá nhân',    x:1650, y:148, g:'auth',   desc:'Người dùng xem và cập nhật thông tin cá nhân (tên, email, ảnh đại diện, mật khẩu).' },
+    { id:'UC04', name:'Đặt lại mật khẩu',         x:1300, y:232, g:'auth',   desc:'Người dùng yêu cầu đặt lại mật khẩu qua email khi quên mật khẩu đăng nhập.' },
+
+    // Student – Test (top-left)
+    { id:'UC05', name:'Xem DS bài kiểm tra',      x:495,  y:360, g:'s-test', desc:'Học sinh xem danh sách bài kiểm tra được phân công, bao gồm trạng thái, thời hạn, môn học.' },
+    { id:'UC06', name:'Làm bài kiểm tra',         x:495,  y:455, g:'s-test', desc:'Học sinh thực hiện bài kiểm tra trắc nghiệm trực tuyến với đồng hồ đếm ngược.' },
+    { id:'UC07', name:'Nộp bài kiểm tra',         x:820,  y:405, g:'s-test', desc:'Hệ thống ghi nhận và lưu trữ bài làm khi học sinh chủ động nộp bài.' },
+    { id:'UC08', name:'Tự động nộp khi hết giờ',  x:820,  y:510, g:'s-test', desc:'Hệ thống tự động nộp bài khi thời gian làm bài kết thúc.' },
+    { id:'UC09', name:'Xem kết quả & đáp án',     x:495,  y:560, g:'s-test', desc:'Học sinh xem điểm số, đáp án đúng, và giải thích cho từng câu hỏi sau khi nộp bài.' },
+
+    // Student – Analytics (mid-left)
+    { id:'UC10', name:'Xem Dashboard cá nhân',    x:495,  y:695, g:'s-ana',  desc:'Học sinh truy cập dashboard tổng hợp hiển thị tiến độ học tập theo thời gian.' },
+    { id:'UC11', name:'Phân tích điểm mạnh/yếu',  x:820,  y:665, g:'s-ana',  desc:'Hệ thống phân tích và hiển thị biểu đồ các chủ đề học sinh làm tốt và chưa tốt.' },
+    { id:'UC12', name:'Phân tích Time-on-Task',   x:820,  y:755, g:'s-ana',  desc:'Hệ thống phân tích thời gian trung bình học sinh dành cho mỗi câu hỏi/chủ đề.' },
+    { id:'UC13', name:'Phân tích Answer Patterns', x:820,  y:845, g:'s-ana', desc:'Hệ thống phân tích hành vi thay đổi đáp án của học sinh trong quá trình làm bài.' },
+    { id:'UC14', name:'Xem Knowledge Graph',      x:495,  y:830, g:'s-ana',  desc:'Học sinh xem đồ thị tri thức trực quan hiển thị mối liên hệ giữa các chủ đề đã học.' },
+    { id:'UC15', name:'Xem lịch sử bài KT',      x:495,  y:930, g:'s-ana',  desc:'Học sinh xem danh sách tất cả bài kiểm tra đã làm, bao gồm điểm, thời gian, xu hướng.' },
+
+    // Student – AI (lower-left)
+    { id:'UC16', name:'Luyện tập câu hỏi AI',    x:495,  y:1060, g:'s-ai',  desc:'Học sinh luyện tập với bộ câu hỏi được AI tạo dựa trên những câu đã trả lời sai.' },
+    { id:'UC17', name:'AI sinh câu hỏi từ bài sai', x:830, y:1060, g:'s-ai', desc:'Hệ thống AI tự động phân tích câu sai và sinh câu hỏi mới cùng chủ đề/dạng bài.' },
+
+    // Parent (bottom-left)
+    { id:'UC18', name:'Liên kết TK với học sinh',  x:495,  y:1270, g:'parent', desc:'Phụ huynh liên kết tài khoản với tài khoản học sinh (con) bằng mã xác nhận.' },
+    { id:'UC19', name:'Xem kết quả của con',      x:495,  y:1360, g:'parent', desc:'Phụ huynh xem tổng hợp kết quả bài kiểm tra của con theo môn học và thời gian.' },
+    { id:'UC20', name:'Xem Dashboard của con',    x:495,  y:1450, g:'parent', desc:'Phụ huynh truy cập dashboard tiến độ học tập tổng quan của con.' },
+    { id:'UC21', name:'Xem điểm mạnh/yếu con',   x:830,  y:1450, g:'parent', desc:'Phụ huynh xem biểu đồ phân tích điểm mạnh và điểm yếu của con theo chủ đề.' },
+    { id:'UC22', name:'Nhận thông báo kết quả',   x:495,  y:1545, g:'parent', desc:'Phụ huynh nhận thông báo tự động khi con hoàn thành bài kiểm tra hoặc có kết quả mới.' },
+
+    // Teacher – Test (top-right)
+    { id:'UC23', name:'QL ngân hàng câu hỏi',     x:2105, y:370, g:'t-test', desc:'Giáo viên quản lý kho câu hỏi (thêm, sửa, xóa) phân loại theo môn, chương, mức độ khó.' },
+    { id:'UC24', name:'Import câu hỏi',           x:1785, y:345, g:'t-test', desc:'Giáo viên import hàng loạt câu hỏi từ file Excel/CSV vào ngân hàng câu hỏi.' },
+    { id:'UC25', name:'Gắn tag chủ đề/chương',    x:1785, y:435, g:'t-test', desc:'Giáo viên gắn tag chủ đề, chương, và mức độ khó cho từng câu hỏi.' },
+    { id:'UC26', name:'Tạo & cấu hình bài KT',   x:2105, y:500, g:'t-test', desc:'Giáo viên tạo bài kiểm tra mới và cấu hình (thời gian, số câu, trộn đề, điểm đạt).' },
+    { id:'UC27', name:'Đặt lịch kiểm tra',        x:1785, y:535, g:'t-test', desc:'Giáo viên đặt lịch tự động mở/đóng bài kiểm tra theo thời gian xác định.' },
+    { id:'UC28', name:'Phân công bài KT cho lớp', x:2105, y:625, g:'t-test', desc:'Giáo viên gán bài kiểm tra cho một hoặc nhiều lớp học.' },
+
+    // Teacher – Class (mid-right)
+    { id:'UC29', name:'Quản lý lớp học',           x:2105, y:755, g:'t-cls',  desc:'Giáo viên quản lý danh sách lớp học (tạo, sửa, xóa lớp; thêm/xóa học sinh).' },
+
+    // Teacher – Analytics (mid-right)
+    { id:'UC30', name:'Xem Dashboard phân tích lớp', x:2105, y:890, g:'t-ana', desc:'Giáo viên truy cập dashboard phân tích tổng hợp kết quả kiểm tra của cả lớp.' },
+    { id:'UC31', name:'Phân tích hiệu suất lớp',  x:1785, y:860, g:'t-ana',  desc:'Hệ thống tính toán và hiển thị các chỉ số hiệu suất lớp (điểm TB, tỷ lệ đạt).' },
+    { id:'UC32', name:'Xem phân bố điểm',         x:1785, y:950, g:'t-ana',  desc:'Hệ thống hiển thị biểu đồ phân bố điểm của lớp cho từng bài kiểm tra.' },
+    { id:'UC33', name:'Nhận diện HS yếu',         x:1785, y:1040, g:'t-ana', desc:'Hệ thống tự động nhận diện học sinh có kết quả yếu liên tục và cảnh báo giáo viên.' },
+    { id:'UC34', name:'So sánh giữa các lớp',     x:2105, y:1025, g:'t-ana', desc:'Giáo viên so sánh kết quả kiểm tra giữa các lớp khác nhau cùng môn học.' },
+    { id:'UC35', name:'Chấm điểm / Xem KQ',       x:2105, y:1130, g:'t-ana', desc:'Giáo viên xem chi tiết kết quả từng học sinh và chấm điểm bổ sung nếu cần.' },
+    { id:'UC36', name:'Xuất báo cáo',             x:2105, y:1225, g:'t-ana', desc:'Giáo viên xuất báo cáo phân tích dưới dạng PDF/Excel.' },
+
+    // Admin (bottom-right)
+    { id:'UC37', name:'QL tài khoản người dùng',  x:2105, y:1385, g:'admin', desc:'Admin quản lý tài khoản người dùng (tạo, sửa, kích hoạt/vô hiệu hóa tài khoản).' },
+    { id:'UC38', name:'Import DS người dùng',     x:1785, y:1355, g:'admin', desc:'Admin import danh sách người dùng hàng loạt từ file Excel/CSV.' },
+    { id:'UC39', name:'Phân quyền',               x:1785, y:1445, g:'admin', desc:'Admin gán vai trò (Student, Teacher, Parent, Admin) cho từng tài khoản.' },
+    { id:'UC40', name:'Quản lý môn học',           x:2105, y:1500, g:'admin', desc:'Admin quản lý danh mục môn học (Toán, Lý, Hóa) và cấu hình liên quan.' },
+    { id:'UC41', name:'QL năm học / Học kỳ',      x:2105, y:1595, g:'admin', desc:'Admin quản lý cấu trúc năm học, học kỳ, và các mốc thời gian quan trọng.' },
+    { id:'UC42', name:'Cấu hình hệ thống',        x:2105, y:1690, g:'admin', desc:'Admin cấu hình các thiết lập hệ thống (logo, tên trường, email, v.v.).' },
+    { id:'UC43', name:'Giám sát hiệu năng',       x:2105, y:1780, g:'admin', desc:'Admin giám sát hiệu năng hệ thống (CPU, RAM, response time, uptime).' },
+    { id:'UC44', name:'Xem nhật ký hoạt động',    x:1785, y:1640, g:'admin', desc:'Admin xem nhật ký hoạt động chi tiết của người dùng và hệ thống.' },
+    { id:'UC45', name:'Sao lưu / Phục hồi DL',   x:1785, y:1735, g:'admin', desc:'Admin thực hiện sao lưu và phục hồi dữ liệu hệ thống.' },
+];
+const ucMap = {}; ucs.forEach(u => ucMap[u.id] = u);
+
+// ─── ASSOCIATIONS (actor ↔ UC) ────────────────────────
+const assocs = [
+    { a:'student', u:'UC05' },{ a:'student', u:'UC06' },{ a:'student', u:'UC09' },
+    { a:'student', u:'UC10' },{ a:'student', u:'UC14' },{ a:'student', u:'UC15' },
+    { a:'student', u:'UC16' },
+    { a:'parent', u:'UC18' },{ a:'parent', u:'UC19' },{ a:'parent', u:'UC20' },{ a:'parent', u:'UC22' },
+    { a:'teacher', u:'UC23' },{ a:'teacher', u:'UC26' },{ a:'teacher', u:'UC28' },
+    { a:'teacher', u:'UC29' },{ a:'teacher', u:'UC30' },{ a:'teacher', u:'UC35' },{ a:'teacher', u:'UC36' },
+    { a:'admin', u:'UC37' },{ a:'admin', u:'UC40' },{ a:'admin', u:'UC41' },
+    { a:'admin', u:'UC42' },{ a:'admin', u:'UC43' },{ a:'admin', u:'UC44' },{ a:'admin', u:'UC45' },
+];
+
+// ─── RELATIONSHIPS (include / extend) ─────────────────
+const rels = [
+    { from:'UC06', to:'UC07', t:'include' },
+    { from:'UC10', to:'UC11', t:'include' },{ from:'UC10', to:'UC12', t:'include' },{ from:'UC10', to:'UC13', t:'include' },
+    { from:'UC16', to:'UC17', t:'include' },
+    { from:'UC20', to:'UC21', t:'include' },
+    { from:'UC30', to:'UC31', t:'include' },{ from:'UC30', to:'UC32', t:'include' },{ from:'UC30', to:'UC33', t:'include' },
+    { from:'UC37', to:'UC39', t:'include' },
+    { from:'UC04', to:'UC01', t:'extend' },
+    { from:'UC08', to:'UC06', t:'extend' },
+    { from:'UC24', to:'UC23', t:'extend' },{ from:'UC25', to:'UC23', t:'extend' },
+    { from:'UC27', to:'UC26', t:'extend' },
+    { from:'UC34', to:'UC30', t:'extend' },
+    { from:'UC38', to:'UC37', t:'extend' },
+];
+
+// ─── SVG HELPERS ───────────────────────────────────────
+const NS = 'http://www.w3.org/2000/svg';
+function mk(tag, attrs, par) {
+    const e = document.createElementNS(NS, tag);
+    if (attrs) for (const [k,v] of Object.entries(attrs)) e.setAttribute(k, v);
+    if (par) par.appendChild(e);
+    return e;
+}
+function ePt(cx, cy, tx, ty) {
+    const a = Math.atan2(ty-cy, tx-cx);
+    return { x: cx + RX*Math.cos(a), y: cy + RY*Math.sin(a) };
+}
+function wrap(t, max) {
+    if (t.length <= max) return [t];
+    const m = Math.floor(t.length/2);
+    let i = t.lastIndexOf(' ', m+5);
+    if (i <= 2) i = t.indexOf(' ', m);
+    if (i < 0) return [t];
+    return [t.slice(0,i), t.slice(i+1)];
+}
+
+// ─── COMPUTE SUBSYSTEM BOUNDS ──────────────────────────
+function computeBounds() {
+    const res = {};
+    for (const gid of groupOrder) {
+        const gu = ucs.filter(u => u.g === gid);
+        if (!gu.length) continue;
+        const px = 28, pt = 32, pb = 18;
+        const x1 = Math.min(...gu.map(u => u.x - RX)) - px;
+        const y1 = Math.min(...gu.map(u => u.y - RY)) - pt;
+        const x2 = Math.max(...gu.map(u => u.x + RX)) + px;
+        const y2 = Math.max(...gu.map(u => u.y + RY)) + pb;
+        res[gid] = { x:x1, y:y1, w:x2-x1, h:y2-y1 };
+    }
+    return res;
+}
+
+// ─── ZOOM & PAN ────────────────────────────────────────
+const svgEl = document.getElementById('svg');
+const wrapEl = document.getElementById('canvas-wrap');
+let scale = 0.72, gRoot;
+
+function applyZoom() {
+    svgEl.setAttribute('width', CW*scale);
+    svgEl.setAttribute('height', CH*scale);
+    gRoot.setAttribute('transform', `scale(${scale})`);
+    document.getElementById('zoom-pct').textContent = Math.round(scale*100) + '%';
+}
+function zoomBy(d) { scale = Math.max(.25, Math.min(2.2, scale+d)); applyZoom(); }
+function fitToScreen() {
+    const cw = wrapEl.clientWidth, ch = wrapEl.clientHeight;
+    scale = Math.min(cw/CW, ch/CH) * .97;
+    applyZoom();
+    wrapEl.scrollTo({ left:0, top:0, behavior:'smooth' });
+}
+
+// ─── TOOLTIP ───────────────────────────────────────────
+const tip = document.getElementById('tooltip');
+function showTip(ev, uc) {
+    tip.querySelector('.tid').textContent = uc.id;
+    tip.querySelector('.tname').textContent = ' – ' + uc.name;
+    tip.querySelector('.tdesc').textContent = uc.desc;
+    tip.style.display = 'block';
+    tip.style.left = Math.min(ev.clientX+14, innerWidth-360)+'px';
+    tip.style.top = Math.min(ev.clientY+14, innerHeight-100)+'px';
+}
+function hideTip() { tip.style.display = 'none'; }
+
+// ─── FILTER ────────────────────────────────────────────
+let curFilter = 'all';
+function setFilter(f) {
+    curFilter = f;
+    document.querySelectorAll('.fbtn').forEach(b => {
+        const active = b.dataset.f === f;
+        b.style.fontWeight = active ? '800' : '600';
+        if (f === 'all') {
+            b.style.background = b.dataset.f === 'all' ? '#1e293b' : '';
+            b.style.color = b.dataset.f === 'all' ? '#fff' : '';
+        } else {
+            b.style.background = active ? actorMap[f]?.color || '#1e293b' : '';
+            b.style.color = active ? '#fff' : '';
+        }
+    });
+    applyVis();
+}
+
+function applyVis() {
+    const f = curFilter;
+    document.querySelectorAll('.assoc-path').forEach(p => {
+        const a = p.dataset.actor;
+        p.style.opacity = f==='all' ? .65 : a===f ? 1 : .06;
+        p.style.strokeWidth = f==='all' ? 1.3 : a===f ? 2 : .5;
+    });
+    document.querySelectorAll('.uc-node').forEach(n => {
+        const ga = groupToActors[n.dataset.group] || [];
+        n.style.opacity = f==='all' ? 1 : ga.includes(f) ? 1 : .14;
+    });
+    document.querySelectorAll('.actor-fig').forEach(g => {
+        g.style.opacity = f==='all' ? 1 : g.dataset.actor===f ? 1 : .15;
+    });
+    document.querySelectorAll('.rel-g').forEach(g => {
+        const fg = ucMap[g.dataset.from]?.g, tg = ucMap[g.dataset.to]?.g;
+        const a = [...(groupToActors[fg]||[]),...(groupToActors[tg]||[])];
+        g.style.opacity = f==='all' ? .85 : a.includes(f) ? 1 : .08;
+    });
+    document.querySelectorAll('.sub-bg').forEach(r => {
+        const ga = groupToActors[r.dataset.group] || [];
+        r.style.opacity = f==='all' ? 1 : ga.includes(f) ? 1 : .15;
+    });
+}
+
+// ─── SIDEBAR ───────────────────────────────────────────
+function toggleSidebar() { document.getElementById('sidebar').classList.toggle('collapsed'); }
+let focusedUC = null;
+function focusUC(id) {
+    focusedUC = focusedUC === id ? null : id;
+    document.querySelectorAll('.uc-node').forEach(n => n.classList.toggle('focused', n.dataset.id === focusedUC));
+    document.querySelectorAll('.sb-item').forEach(i => i.classList.toggle('active', i.dataset.uc === focusedUC));
+    if (focusedUC) {
+        const uc = ucMap[focusedUC];
+        const cx = uc.x*scale - wrapEl.clientWidth/2;
+        const cy = uc.y*scale - wrapEl.clientHeight/2;
+        wrapEl.scrollTo({ left:cx, top:cy, behavior:'smooth' });
+    }
+}
+function buildSidebar() {
+    const el = document.getElementById('sb-list');
+    let h = '';
+    for (const gid of groupOrder) {
+        const g = groups[gid];
+        const gu = ucs.filter(u => u.g === gid);
+        h += `<div class="sb-group">
+            <div class="sb-group-hdr" onclick="this.nextElementSibling.style.maxHeight = this.nextElementSibling.style.maxHeight ? '' : '600px'; this.querySelector('.sb-chevron').classList.toggle('open')">
+                <span class="sb-dot" style="background:${g.color}"></span>
+                <span style="color:${g.color}">${g.label}</span>
+                <span class="sb-count">${gu.length}</span>
+                <span class="sb-chevron open">▸</span>
+            </div>
+            <div class="sb-items" style="max-height:600px">`;
+        gu.forEach(u => {
+            h += `<div class="sb-item" data-uc="${u.id}" onclick="focusUC('${u.id}')">
+                <span class="sb-item-id">${u.id}</span><span class="sb-item-name">${u.name}</span></div>`;
+        });
+        h += `</div></div>`;
+    }
+    el.innerHTML = h;
+}
+
+// ─── RENDER ────────────────────────────────────────────
+function render() {
+    svgEl.setAttribute('viewBox', `0 0 ${CW} ${CH}`);
+    gRoot = mk('g', {}, svgEl);
+
+    // Defs: shadows & glow
+    const defs = mk('defs', {}, gRoot);
+    const fShadow = mk('filter', { id:'shadow', x:'-10%', y:'-10%', width:'130%', height:'140%' }, defs);
+    mk('feDropShadow', { dx:0, dy:2, stdDeviation:3, 'flood-opacity':.08 }, fShadow);
+    const fGlow = mk('filter', { id:'glow', x:'-20%', y:'-20%', width:'140%', height:'140%' }, defs);
+    mk('feDropShadow', { dx:0, dy:0, stdDeviation:5, 'flood-color':'#3b82f6', 'flood-opacity':.3 }, fGlow);
+
+    // System boundary
+    mk('rect', { x:260, y:60, width:2080, height:1830, rx:16, fill:'#ffffff', stroke:'#94a3b8', 'stroke-width':2.2 }, gRoot);
+    mk('text', { x:1300, y:44, 'text-anchor':'middle', 'font-size':14.5, 'font-weight':'700', fill:'#1e293b', 'letter-spacing':'.3' }, gRoot).textContent = 'High School Learning Analytics Dashboard';
+
+    // Subsystem backgrounds (auto-computed)
+    const bounds = computeBounds();
+    for (const [gid, b] of Object.entries(bounds)) {
+        const g = groups[gid];
+        const bg = mk('g', { class:'sub-bg', 'data-group':gid }, gRoot);
+        mk('rect', { x:b.x, y:b.y, width:b.w, height:b.h, rx:10, fill:g.bg, stroke:g.border, 'stroke-width':1.2, 'stroke-dasharray':'6 3' }, bg);
+        mk('text', { x:b.x+10, y:b.y+15, 'font-size':10, 'font-weight':'700', fill:g.color, 'dominant-baseline':'hanging', opacity:.85 }, bg).textContent = g.label;
+    }
+
+    // Auth "shared" annotation
+    const authB = bounds['auth'];
+    if (authB) {
+        const noteG = mk('g', {}, gRoot);
+        const nx = authB.x + authB.w/2, ny = authB.y + authB.h + 14;
+        mk('rect', { x:nx-72, y:ny-10, width:144, height:20, rx:10, fill:'#f1f5f9', stroke:'#cbd5e1', 'stroke-width':.8 }, noteG);
+        mk('text', { x:nx, y:ny+4, 'text-anchor':'middle', 'font-size':9, fill:'#64748b', 'font-weight':'600' }, noteG).textContent = 'Dùng chung: Tất cả Actors';
+    }
+
+    // Vertical divider between left & right halves
+    mk('line', { x1:1300, y1:295, x2:1300, y2:1870, stroke:'#e2e8f0', 'stroke-width':1, 'stroke-dasharray':'4 4' }, gRoot);
+
+    // ── Association lines ──
+    const assocLayer = mk('g', {}, gRoot);
+    assocs.forEach(as => {
+        const ac = actorMap[as.a], uc = ucMap[as.u];
+        if (!ac || !uc) return;
+        const ep = ePt(uc.x, uc.y, ac.x, ac.y);
+        mk('line', {
+            x1:ac.x, y1:ac.y, x2:ep.x, y2:ep.y,
+            stroke:ac.color, 'stroke-width':1.3, 'stroke-opacity':.65,
+            class:'assoc-path', 'data-actor':as.a
+        }, assocLayer);
+    });
+
+    // ── Relationship lines (include / extend) ──
+    const relLayer = mk('g', {}, gRoot);
+    rels.forEach(r => {
+        const fr = ucMap[r.from], to = ucMap[r.to];
+        if (!fr || !to) return;
+        const p1 = ePt(fr.x, fr.y, to.x, to.y);
+        const p2 = ePt(to.x, to.y, fr.x, fr.y);
+        const rg = mk('g', { class:'rel-g', 'data-from':r.from, 'data-to':r.to }, relLayer);
+        const isInc = r.t === 'include';
+        const col = isInc ? '#6366f1' : '#f59e0b';
+        mk('line', { x1:p1.x, y1:p1.y, x2:p2.x, y2:p2.y, stroke:col, 'stroke-width':1.2, 'stroke-dasharray':'5 3' }, rg);
+        // Arrowhead
+        const ang = Math.atan2(p2.y-p1.y, p2.x-p1.x);
+        const a1x = p2.x-9*Math.cos(ang-.4), a1y = p2.y-9*Math.sin(ang-.4);
+        const a2x = p2.x-9*Math.cos(ang+.4), a2y = p2.y-9*Math.sin(ang+.4);
+        mk('polygon', { points:`${p2.x},${p2.y} ${a1x},${a1y} ${a2x},${a2y}`, fill:col }, rg);
+        // Label
+        const mx = (p1.x+p2.x)/2, my = (p1.y+p2.y)/2;
+        mk('rect', { x:mx-30, y:my-8, width:60, height:15, rx:3, fill:'#fff', 'fill-opacity':.93 }, rg);
+        const lbl = isInc ? '«include»' : '«extend»';
+        mk('text', { x:mx, y:my+4, 'text-anchor':'middle', 'font-size':8, fill:col, 'font-style':'italic', 'font-weight':'600' }, rg).textContent = lbl;
+    });
+
+    // ── Use Case Ellipses ──
+    const ucLayer = mk('g', {}, gRoot);
+    ucs.forEach(uc => {
+        const g = mk('g', { class:'uc-node', 'data-id':uc.id, 'data-group':uc.g }, ucLayer);
+        const gc = groups[uc.g]?.color || '#64748b';
+        mk('ellipse', { cx:uc.x, cy:uc.y, rx:RX, ry:RY, fill:'#fff', filter:'url(#shadow)', class:'uc-bg' }, g);
+        mk('ellipse', { cx:uc.x, cy:uc.y, rx:RX, ry:RY, fill:'none', stroke:gc, 'stroke-width':1.8, class:'uc-ring' }, g);
+
+        const lines = wrap(uc.name, 22);
+        if (lines.length === 1) {
+            mk('text', { x:uc.x, y:uc.y+4, 'text-anchor':'middle', 'font-size':10.5, fill:'#1e293b', 'font-weight':'500' }, g).textContent = lines[0];
+        } else {
+            mk('text', { x:uc.x, y:uc.y-4, 'text-anchor':'middle', 'font-size':10, fill:'#1e293b', 'font-weight':'500' }, g).textContent = lines[0];
+            mk('text', { x:uc.x, y:uc.y+10, 'text-anchor':'middle', 'font-size':10, fill:'#1e293b', 'font-weight':'500' }, g).textContent = lines[1];
+        }
+        mk('text', { x:uc.x, y:uc.y-RY-6, 'text-anchor':'middle', 'font-size':8.5, fill:'#94a3b8', 'font-weight':'700' }, g).textContent = uc.id;
+
+        g.addEventListener('mouseenter', e => showTip(e, uc));
+        g.addEventListener('mousemove', e => showTip(e, uc));
+        g.addEventListener('mouseleave', hideTip);
+        g.addEventListener('click', () => focusUC(uc.id));
+    });
+
+    // ── Actors ──
+    const actorLayer = mk('g', {}, gRoot);
+    actors.forEach(a => {
+        const g = mk('g', { class:'actor-fig', 'data-actor':a.id, transform:`translate(${a.x},${a.y})` }, actorLayer);
+        // White background circle for clarity
+        mk('circle', { cx:0, cy:-30, r:14, fill:'#fff', stroke:a.color, 'stroke-width':2.4 }, g);
+        // Body
+        mk('line', { x1:0, y1:-16, x2:0, y2:14, stroke:a.color, 'stroke-width':2.4 }, g);
+        mk('line', { x1:-18, y1:-2, x2:18, y2:-2, stroke:a.color, 'stroke-width':2.4 }, g);
+        mk('line', { x1:0, y1:14, x2:-14, y2:36, stroke:a.color, 'stroke-width':2.4 }, g);
+        mk('line', { x1:0, y1:14, x2:14, y2:36, stroke:a.color, 'stroke-width':2.4 }, g);
+        // Label
+        mk('text', { x:0, y:55, 'text-anchor':'middle', 'font-size':13, 'font-weight':'700', fill:a.color }, g).textContent = a.label;
+        mk('text', { x:0, y:69, 'text-anchor':'middle', 'font-size':10, fill:a.color, 'font-style':'italic', opacity:.7 }, g).textContent = '(' + a.sub + ')';
+    });
+
+    applyZoom();
+    applyVis();
+}
+
+// ─── INIT ──────────────────────────────────────────────
+wrapEl.addEventListener('wheel', e => { e.preventDefault(); zoomBy(e.deltaY < 0 ? .08 : -.08); }, { passive:false });
+render();
+buildSidebar();
+setTimeout(fitToScreen, 80);
+</script>
+</body>
+</html>

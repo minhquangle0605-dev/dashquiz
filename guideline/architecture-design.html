@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Architecture Design – High School Learning Analytics Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        *{margin:0;box-sizing:border-box}
+        body{overflow:hidden;background:#f1f5f9;font-family:'Segoe UI',system-ui,-apple-system,sans-serif}
+        #canvas-wrap{flex:1;overflow:auto;cursor:grab;position:relative;background:#f1f5f9}
+        #canvas-wrap:active{cursor:grabbing}
+        #canvas-wrap::-webkit-scrollbar{width:8px;height:8px}
+        #canvas-wrap::-webkit-scrollbar-track{background:transparent}
+        #canvas-wrap::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px}
+        .comp-box{cursor:pointer;transition:filter .15s}
+        .comp-box:hover .comp-bg{filter:url(#glow)}
+        .comp-box.focused .comp-bg{filter:url(#glowStrong)}
+        .layer-box{cursor:pointer}
+        #tooltip{position:fixed;max-width:400px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.12);padding:14px 18px;font-size:13px;line-height:1.6;display:none;z-index:999;pointer-events:none}
+        #tooltip .tt{font-weight:700;font-size:14px;margin-bottom:4px}
+        #tooltip .ttech{color:#3b82f6;font-size:11px;font-weight:600;margin-bottom:6px}
+        #tooltip .td{color:#475569;font-size:12px}
+        #sidebar{width:300px;min-width:300px;background:#fff;border-left:1px solid #e2e8f0;overflow-y:auto;display:flex;flex-direction:column;transition:all .25s}
+        #sidebar.collapsed{width:0;min-width:0;padding:0;border:none;overflow:hidden}
+        #sidebar::-webkit-scrollbar{width:5px}
+        #sidebar::-webkit-scrollbar-thumb{background:#e2e8f0;border-radius:3px}
+        .sb-head{padding:14px 16px 10px;border-bottom:1px solid #f1f5f9}
+        .sb-stats{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+        .sb-stat{font-size:11px;color:#64748b;background:#f8fafc;padding:3px 8px;border-radius:6px}
+        .sb-stat b{color:#334155}
+        .sb-body{flex:1;overflow-y:auto;padding:6px 0}
+        .sb-ghdr{display:flex;align-items:center;gap:8px;padding:8px 16px;cursor:pointer;font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;user-select:none;transition:background .15s}
+        .sb-ghdr:hover{background:#f8fafc}
+        .sb-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+        .sb-cnt{margin-left:auto;font-size:10px;font-weight:600;background:#f1f5f9;color:#64748b;padding:1px 7px;border-radius:10px}
+        .sb-chev{font-size:10px;color:#94a3b8;transition:transform .2s}
+        .sb-chev.open{transform:rotate(90deg)}
+        .sb-items{overflow:hidden;transition:max-height .25s ease}
+        .sb-item{display:flex;align-items:center;gap:8px;padding:6px 16px 6px 34px;font-size:12px;cursor:pointer;transition:background .12s;border-left:3px solid transparent}
+        .sb-item:hover{background:#f8fafc}
+        .sb-item.active{background:#eff6ff;border-left-color:#3b82f6}
+        .sb-item-icon{font-size:14px;min-width:20px;text-align:center}
+        .sb-item-name{color:#334155;font-weight:600;font-size:12px}
+        .sb-item-tech{color:#94a3b8;font-size:10px;margin-left:auto;white-space:nowrap}
+        .fbtn{transition:all .15s}
+    </style>
+</head>
+<body class="flex flex-col h-screen">
+
+<div class="h-[52px] bg-white border-b border-gray-200 flex items-center justify-between px-4 shadow-sm z-20 shrink-0">
+    <div class="flex items-center gap-2">
+        <h1 class="text-sm font-bold text-gray-800 mr-3 whitespace-nowrap">Architecture Design</h1>
+        <div class="flex gap-1.5" id="filter-bar"></div>
+    </div>
+    <div class="flex items-center gap-3">
+        <span class="text-xs text-gray-400 tabular-nums w-10 text-right" id="zoom-pct">100%</span>
+        <button onclick="zoomBy(-.1)" class="w-7 h-7 rounded bg-gray-100 hover:bg-gray-200 font-bold text-gray-500 grid place-items-center">−</button>
+        <button onclick="zoomBy(.1)" class="w-7 h-7 rounded bg-gray-100 hover:bg-gray-200 font-bold text-gray-500 grid place-items-center">+</button>
+        <button onclick="fitToScreen()" class="h-7 px-2.5 rounded bg-gray-100 hover:bg-gray-200 text-[11px] font-semibold text-gray-600">Fit</button>
+        <button onclick="openProgressModal()" class="h-7 px-3 rounded-md text-[11px] font-bold flex items-center gap-1.5" style="background:linear-gradient(135deg,#2563eb,#7c3aed);color:#fff;box-shadow:0 2px 8px rgba(37,99,235,.3)" title="Kiểm tra tiến độ dự án">📊 Tiến độ</button>
+        <button onclick="document.getElementById('sidebar').classList.toggle('collapsed')" class="h-7 px-2 rounded bg-gray-100 hover:bg-gray-200 text-sm text-gray-500" title="Toggle sidebar">☰</button>
+    </div>
+</div>
+
+<div class="flex flex-1 overflow-hidden">
+    <div id="canvas-wrap"><svg id="svg" xmlns="http://www.w3.org/2000/svg"></svg></div>
+    <div id="sidebar">
+        <div class="sb-head">
+            <div class="text-xs font-bold text-gray-800 uppercase tracking-wider">Kiến trúc Hệ thống</div>
+            <div class="sb-stats">
+                <span class="sb-stat"><b>25</b> Components</span>
+                <span class="sb-stat"><b>6</b> Layers</span>
+                <span class="sb-stat"><b>3-Tier</b> Architecture</span>
+            </div>
+        </div>
+        <div class="sb-body" id="sb-list"></div>
+    </div>
+</div>
+
+<div id="tooltip"><div class="tt"></div><div class="ttech"></div><div class="td"></div></div>
+
+<!-- Progress Checker Modal -->
+<div id="pm-overlay" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);backdrop-filter:blur(4px);transition:opacity .2s" onclick="if(event.target===this)closeProgressModal()">
+<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:720px;max-width:95vw;max-height:88vh;background:#fff;border-radius:16px;box-shadow:0 25px 60px rgba(0,0,0,.3);display:flex;flex-direction:column;overflow:hidden">
+    <div style="padding:18px 24px;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;gap:14px;background:linear-gradient(135deg,#f8fafc,#eff6ff)">
+        <div style="width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#2563eb,#7c3aed);display:grid;place-items:center;color:#fff;font-size:18px;font-weight:800">📊</div>
+        <div style="flex:1">
+            <div style="font-size:15px;font-weight:800;color:#0f172a">Kiểm tra Tiến độ Dự án</div>
+            <div style="font-size:11px;color:#64748b;margin-top:2px" id="pm-sub">Quét thư mục dự án để kiểm tra tự động</div>
+        </div>
+        <div id="pm-overall" style="display:none;text-align:right">
+            <div style="font-size:22px;font-weight:900;color:#2563eb" id="pm-pct">0%</div>
+            <div style="font-size:10px;color:#94a3b8">tổng tiến độ</div>
+        </div>
+        <button onclick="closeProgressModal()" style="width:32px;height:32px;border-radius:8px;border:1px solid #e2e8f0;background:#fff;cursor:pointer;font-size:16px;color:#94a3b8;display:grid;place-items:center" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='#fff'">✕</button>
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:20px 24px" id="pm-body">
+        <div style="text-align:center;padding:50px 0">
+            <div style="font-size:56px;margin-bottom:16px">📁</div>
+            <p style="color:#334155;font-size:15px;font-weight:600;margin-bottom:6px">Chọn thư mục gốc của dự án</p>
+            <p style="color:#94a3b8;font-size:12px;margin-bottom:24px;max-width:380px;margin-left:auto;margin-right:auto;line-height:1.6">Thư mục chứa <b style="color:#334155">client/</b>, <b style="color:#334155">server/</b>, <b style="color:#334155">prisma/</b>.<br>Hệ thống sẽ quét cấu trúc file để kiểm tra tiến độ 13 giai đoạn.</p>
+            <button onclick="selectProjectFolder()" style="padding:12px 32px;border-radius:10px;border:none;background:linear-gradient(135deg,#2563eb,#7c3aed);color:#fff;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(37,99,235,.3);transition:all .2s" onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 6px 20px rgba(37,99,235,.4)'" onmouseout="this.style.transform='';this.style.boxShadow='0 4px 16px rgba(37,99,235,.3)'">📂 Chọn thư mục dự án</button>
+            <p style="color:#cbd5e1;font-size:10px;margin-top:16px">🔒 Chỉ đọc — không sửa đổi bất kỳ file nào</p>
+            <div id="pm-compat" style="display:none;margin-top:20px;padding:12px 16px;border-radius:8px;background:#fef2f2;border:1px solid #fca5a5;color:#dc2626;font-size:12px;font-weight:500;max-width:400px;margin-left:auto;margin-right:auto">
+                ⚠️ Trình duyệt không hỗ trợ File System Access API. Vui lòng sử dụng <b>Google Chrome</b> hoặc <b>Microsoft Edge</b>.
+            </div>
+        </div>
+    </div>
+</div>
+</div>
+
+<script>
+const NS='http://www.w3.org/2000/svg';
+const CW=1920,CH=1100;
+function mk(t,a,p){const e=document.createElementNS(NS,t);if(a)for(const[k,v]of Object.entries(a))e.setAttribute(k,v);if(p)p.appendChild(e);return e}
+
+// ─── LAYERS ─────────────────────────────────
+const layers=[
+    {id:'presentation',label:'PRESENTATION TIER',sub:'React.js 18 · Vite · TypeScript · Tailwind CSS · Chart.js · D3.js · Socket.IO Client',
+     x:55,y:45,w:1310,h:185,color:'#3b82f6',bg:'#eff6ff',border:'#93c5fd'},
+    {id:'network',label:'REVERSE PROXY / LOAD BALANCER',sub:'Nginx · SSL/TLS Termination · Rate Limiting · Gzip Compression · WebSocket Upgrade',
+     x:55,y:270,w:1310,h:52,color:'#64748b',bg:'#f1f5f9',border:'#cbd5e1'},
+    {id:'application',label:'APPLICATION TIER',sub:'Node.js 20 LTS · Express.js 4 · TypeScript · Prisma ORM · Socket.IO · Bull Queue · Winston Logger',
+     x:55,y:362,w:1310,h:278,color:'#10b981',bg:'#ecfdf5',border:'#6ee7b7'},
+    {id:'data',label:'DATA TIER',sub:'Persistent Storage · Caching · File Management',
+     x:55,y:680,w:1310,h:170,color:'#f97316',bg:'#fff7ed',border:'#fdba74'},
+    {id:'infrastructure',label:'INFRASTRUCTURE & DevOps',sub:'Containerization · CI/CD · Monitoring · Logging',
+     x:55,y:890,w:1310,h:78,color:'#e11d48',bg:'#fff1f2',border:'#fda4af'},
+    {id:'external',label:'EXTERNAL SERVICES',sub:'Third-party APIs',
+     x:1460,y:362,w:260,h:278,color:'#0d9488',bg:'#f0fdfa',border:'#5eead4'},
+];
+const layerMap={};layers.forEach(l=>layerMap[l.id]=l);
+
+// ─── COMPONENTS ─────────────────────────────
+const comps=[
+// Presentation
+{id:'student_portal',name:'Student Portal',icon:'🎓',tech:'React.js',layer:'presentation',
+ desc:'Giao diện học sinh: làm bài kiểm tra trực tuyến, xem dashboard cá nhân, phân tích điểm mạnh/yếu, knowledge graph, luyện tập AI thích ứng.',
+ x:190,y:88,w:230,h:56},
+{id:'parent_portal',name:'Parent Portal',icon:'👪',tech:'React.js',layer:'presentation',
+ desc:'Giao diện phụ huynh: giám sát kết quả học tập của con, xem dashboard tiến độ, nhận thông báo tự động khi có kết quả mới.',
+ x:460,y:88,w:230,h:56},
+{id:'teacher_portal',name:'Teacher Portal',icon:'👨‍🏫',tech:'React.js',layer:'presentation',
+ desc:'Giao diện giáo viên: quản lý ngân hàng câu hỏi, tạo đề kiểm tra, phân công lớp, dashboard phân tích hiệu suất lớp, xuất báo cáo.',
+ x:730,y:88,w:230,h:56},
+{id:'admin_portal',name:'Admin Portal',icon:'⚙️',tech:'React.js',layer:'presentation',
+ desc:'Giao diện quản trị: quản lý tài khoản, phân quyền RBAC, cấu hình hệ thống, giám sát hiệu năng, sao lưu/phục hồi dữ liệu.',
+ x:1000,y:88,w:230,h:56},
+
+// Network
+{id:'nginx',name:'Nginx Reverse Proxy',icon:'🌐',tech:'Nginx 1.25',layer:'network',
+ desc:'Reverse proxy phân tải request đến backend, SSL/TLS termination cho HTTPS, nén Gzip response, rate limiting chống DDoS, upgrade WebSocket connections.',
+ x:55,y:270,w:1310,h:52,isFullWidth:true},
+
+// Application — Gateway
+{id:'api_gateway',name:'Express.js API Gateway',icon:'🚪',tech:'JWT · Helmet · CORS · Morgan',layer:'application',
+ desc:'API Gateway xử lý xác thực JWT token, validate request body (Joi/Zod), CORS policy, helmet security headers, rate limiter per-route, error handler tập trung, request logging.',
+ x:100,y:392,w:1225,h:36,isGateway:true},
+
+// Application — Services
+{id:'auth_svc',name:'Auth Service',icon:'🔐',tech:'JWT · bcrypt · Passport',layer:'application',
+ desc:'Xử lý đăng nhập/đăng xuất, cấp Access Token + Refresh Token, đặt lại mật khẩu qua email, phân quyền RBAC cho 4 vai trò (Student, Parent, Teacher, Admin).',
+ x:170,y:448,w:252,h:52},
+{id:'user_svc',name:'User Service',icon:'👥',tech:'Prisma · Multer',layer:'application',
+ desc:'CRUD tài khoản người dùng, quản lý hồ sơ cá nhân, liên kết phụ huynh-học sinh, import danh sách từ Excel/CSV, quản lý lớp học.',
+ x:442,y:448,w:252,h:52},
+{id:'exam_svc',name:'Exam Service',icon:'📝',tech:'Prisma · node-cron',layer:'application',
+ desc:'Tạo & cấu hình bài kiểm tra (trộn đề, thời gian, điểm đạt), đặt lịch tự động mở/đóng, phân công cho lớp, xử lý nộp bài & tự động nộp khi hết giờ.',
+ x:714,y:448,w:252,h:52},
+{id:'question_svc',name:'Question Service',icon:'❓',tech:'Prisma · xlsx',layer:'application',
+ desc:'Quản lý ngân hàng câu hỏi trắc nghiệm, import hàng loạt từ Excel, gắn tag chủ đề/chương/độ khó, tìm kiếm & lọc câu hỏi.',
+ x:986,y:448,w:252,h:52},
+{id:'analytics_svc',name:'Analytics Service',icon:'📊',tech:'Prisma · PDFKit',layer:'application',
+ desc:'Dashboard cá nhân & lớp học, phân tích điểm mạnh/yếu, time-on-task, answer patterns, phân bố điểm, nhận diện HS yếu, so sánh lớp, xuất báo cáo PDF/Excel.',
+ x:170,y:520,w:252,h:52},
+{id:'ai_svc',name:'AI Service',icon:'🤖',tech:'OpenAI SDK · Prisma',layer:'application',
+ desc:'Gọi OpenAI GPT-4 sinh câu hỏi thích ứng dựa trên câu trả lời sai, quản lý phiên luyện tập AI, đề xuất chủ đề cần ôn tập theo knowledge graph.',
+ x:442,y:520,w:252,h:52},
+{id:'notification_svc',name:'Notification Service',icon:'🔔',tech:'Nodemailer · web-push',layer:'application',
+ desc:'Gửi thông báo in-app, email (kết quả bài KT, xác nhận tài khoản, đặt lại mật khẩu), push notification đến trình duyệt phụ huynh.',
+ x:714,y:520,w:252,h:52},
+{id:'file_svc',name:'File Service',icon:'📁',tech:'MinIO SDK · xlsx · Archiver',layer:'application',
+ desc:'Import/export file Excel/CSV (câu hỏi, danh sách user), xuất báo cáo PDF, upload avatar, quản lý backup & restore dữ liệu hệ thống.',
+ x:986,y:520,w:252,h:52},
+
+// Data
+{id:'postgresql',name:'PostgreSQL 16',icon:'🐘',tech:'Primary Database',layer:'data',
+ desc:'Cơ sở dữ liệu chính – 28 bảng, ACID transactions, full-text search (tsvector), JSONB cho flexible data, connection pooling (PgBouncer), trigger & stored procedures, backup pg_dump.',
+ x:140,y:712,w:340,h:100},
+{id:'redis',name:'Redis 7',icon:'⚡',tech:'Cache & Sessions',layer:'data',
+ desc:'Cache kết quả query thường xuyên (dashboard, analytics), lưu JWT session & refresh token, pub/sub cho real-time notification (Socket.IO adapter), Bull queue broker.',
+ x:540,y:712,w:340,h:100},
+{id:'minio',name:'MinIO',icon:'📦',tech:'Object Storage (S3)',layer:'data',
+ desc:'Lưu trữ file upload (avatar, đề thi), file import Excel/CSV, báo cáo PDF đã xuất, bản sao lưu database. S3-compatible API, versioning, lifecycle policy.',
+ x:940,y:712,w:340,h:100},
+{id:'pgbouncer',name:'PgBouncer',icon:'🔀',tech:'Connection Pool',layer:'data',
+ desc:'Connection pooler cho PostgreSQL – quản lý pool kết nối giữa application services và database, giảm overhead, hỗ trợ transaction/session pooling.',
+ x:180,y:690,w:200,h:22,isCompact:true},
+
+// External
+{id:'openai_api',name:'OpenAI API',icon:'🧠',tech:'GPT-4 · REST',layer:'external',
+ desc:'Gọi GPT-4 để sinh câu hỏi trắc nghiệm thích ứng dựa trên phân tích câu trả lời sai. Sử dụng prompt engineering với ngữ cảnh môn học THPT Việt Nam.',
+ x:1480,y:400,w:220,h:60},
+{id:'smtp_server',name:'SMTP Server',icon:'📧',tech:'Nodemailer · Gmail',layer:'external',
+ desc:'Gửi email thông báo kết quả bài kiểm tra cho phụ huynh, email xác nhận tài khoản mới, email đặt lại mật khẩu với OTP/link.',
+ x:1480,y:480,w:220,h:60},
+{id:'web_push_api',name:'Web Push API',icon:'📱',tech:'VAPID · web-push',layer:'external',
+ desc:'Push notification trực tiếp đến trình duyệt phụ huynh khi con hoàn thành bài kiểm tra, có kết quả mới hoặc giáo viên gửi nhận xét.',
+ x:1480,y:560,w:220,h:60},
+
+// Infrastructure
+{id:'docker',name:'Docker Compose',icon:'🐳',tech:'Containerization',layer:'infrastructure',
+ desc:'Container hóa toàn bộ stack: Node.js app, PostgreSQL 16, Redis 7, MinIO, Nginx. Docker Compose orchestration cho môi trường dev/staging/production.',
+ x:130,y:907,w:270,h:42},
+{id:'github_actions',name:'GitHub Actions',icon:'🔄',tech:'CI/CD Pipeline',layer:'infrastructure',
+ desc:'Pipeline tự động: lint (ESLint) → test (Jest + Supertest) → build (TypeScript) → Docker build → deploy. Branch protection, PR review, auto-versioning.',
+ x:420,y:907,w:270,h:42},
+{id:'prometheus',name:'Prometheus + Grafana',icon:'📈',tech:'Monitoring & Alerting',layer:'infrastructure',
+ desc:'Thu thập metrics (CPU, RAM, response time, error rate, active users). Grafana dashboard trực quan. Alert qua email/Slack khi vượt ngưỡng.',
+ x:710,y:907,w:270,h:42},
+{id:'logging',name:'Loki + Promtail',icon:'📋',tech:'Centralized Logging',layer:'infrastructure',
+ desc:'Thu thập log từ tất cả services (Winston JSON format), structured logging, trace request qua correlation ID, Grafana log explorer.',
+ x:1000,y:907,w:270,h:42},
+];
+const compMap={};comps.forEach(c=>compMap[c.id]=c);
+
+// ─── CONNECTIONS ────────────────────────────
+const connections=[
+// Layer-to-layer (vertical arrows)
+{type:'layer',y1:230,y2:270,x:710,label:'HTTPS / WSS',color:'#3b82f6'},
+{type:'layer',y1:322,y2:362,x:710,label:'Reverse Proxy',color:'#64748b'},
+{type:'layer',y1:640,y2:680,x:710,label:'TCP / Prisma ORM',color:'#10b981'},
+{type:'layer',y1:850,y2:890,x:710,label:'Docker Volumes',color:'#f97316'},
+
+// Service → External (horizontal dashed)
+{type:'ext',from:'ai_svc',to:'openai_api',label:'REST API',color:'#0d9488'},
+{type:'ext',from:'notification_svc',to:'smtp_server',label:'SMTP',color:'#0d9488'},
+{type:'ext',from:'notification_svc',to:'web_push_api',label:'Push',color:'#0d9488'},
+
+// Service → Data (vertical thin lines)
+{type:'data',from:'auth_svc',to:'redis',label:'Sessions',color:'#f97316'},
+{type:'data',from:'analytics_svc',to:'redis',label:'Cache',color:'#f97316'},
+{type:'data',from:'file_svc',to:'minio',label:'S3 API',color:'#f97316'},
+];
+
+// ─── SVG SETUP ──────────────────────────────
+const svgEl=document.getElementById('svg'),wrapEl=document.getElementById('canvas-wrap');
+let scale=1,gRoot;
+
+function applyZoom(){
+    svgEl.setAttribute('width',CW*scale);
+    svgEl.setAttribute('height',CH*scale);
+    gRoot.setAttribute('transform',`scale(${scale})`);
+    document.getElementById('zoom-pct').textContent=Math.round(scale*100)+'%';
+}
+function zoomBy(d){scale=Math.max(.25,Math.min(2.2,scale+d));applyZoom()}
+function fitToScreen(){
+    const cw=wrapEl.clientWidth,ch=wrapEl.clientHeight;
+    scale=Math.min(cw/CW,ch/CH)*.95;
+    applyZoom();wrapEl.scrollTo({left:0,top:0,behavior:'smooth'});
+}
+
+// ─── TOOLTIP ────────────────────────────────
+const tip=document.getElementById('tooltip');
+function showTip(ev,c){
+    const ly=layerMap[c.layer];
+    tip.querySelector('.tt').innerHTML=`${c.icon} ${c.name}`;
+    tip.querySelector('.ttech').textContent=c.tech;
+    tip.querySelector('.td').textContent=c.desc;
+    tip.style.display='block';
+    tip.style.left=Math.min(ev.clientX+14,innerWidth-420)+'px';
+    tip.style.top=Math.min(ev.clientY+14,innerHeight-140)+'px';
+}
+function hideTip(){tip.style.display='none'}
+
+// ─── FILTER ─────────────────────────────────
+let curFilter='all';
+function setFilter(f){
+    curFilter=f;
+    document.querySelectorAll('.fbtn').forEach(b=>{
+        const act=b.dataset.f===f;
+        if(f==='all'){b.style.background=b.dataset.f==='all'?'#1e293b':'';b.style.color=b.dataset.f==='all'?'#fff':''}
+        else{const lc=layerMap[f]?.color||'#1e293b';b.style.background=act?lc:'';b.style.color=act?'#fff':''}
+    });
+    applyVis();
+}
+function applyVis(){
+    const f=curFilter;
+    document.querySelectorAll('.layer-box').forEach(g=>{g.style.opacity=f==='all'||g.dataset.layer===f?1:.1});
+    document.querySelectorAll('.comp-box').forEach(g=>{g.style.opacity=f==='all'||g.dataset.layer===f?1:.08});
+    document.querySelectorAll('.conn-line').forEach(g=>{
+        if(f==='all'){g.style.opacity=.6;return}
+        const isMatch=g.dataset.layers&&g.dataset.layers.includes(f);
+        g.style.opacity=isMatch?.8:.06;
+    });
+}
+
+// ─── FOCUS ──────────────────────────────────
+let focusedComp=null;
+function focusComp(id){
+    focusedComp=focusedComp===id?null:id;
+    if(!focusedComp){applyVis();document.querySelectorAll('.comp-box').forEach(g=>g.classList.remove('focused'));document.querySelectorAll('.sb-item').forEach(i=>i.classList.remove('active'));return}
+    const c=compMap[id];
+    document.querySelectorAll('.comp-box').forEach(g=>{
+        const same=g.dataset.id===id;
+        const sameLayer=g.dataset.layer===c.layer;
+        const connected=connections.some(cn=>(cn.from===id&&cn.to===g.dataset.id)||(cn.to===id&&cn.from===g.dataset.id));
+        g.style.opacity=same||connected?1:sameLayer?.5:.12;
+        g.classList.toggle('focused',same);
+    });
+    document.querySelectorAll('.conn-line').forEach(g=>{
+        const match=g.dataset.from===id||g.dataset.to===id;
+        g.style.opacity=match?.9:.06;
+    });
+    document.querySelectorAll('.layer-box').forEach(g=>{
+        g.style.opacity=g.dataset.layer===c.layer?1:.3;
+    });
+    document.querySelectorAll('.sb-item').forEach(i=>i.classList.toggle('active',i.dataset.comp===id));
+    const cx=(c.x+c.w/2)*scale-wrapEl.clientWidth/2;
+    const cy=(c.y+c.h/2)*scale-wrapEl.clientHeight/2;
+    wrapEl.scrollTo({left:cx,top:cy,behavior:'smooth'});
+}
+
+// ─── RENDER ─────────────────────────────────
+function render(){
+    svgEl.setAttribute('viewBox',`0 0 ${CW} ${CH}`);
+    gRoot=mk('g',{},svgEl);
+
+    // Defs
+    const defs=mk('defs',{},gRoot);
+    const fs=mk('filter',{id:'shadow',x:'-4%',y:'-4%',width:'112%',height:'116%'},defs);
+    mk('feDropShadow',{dx:0,dy:2,stdDeviation:3,'flood-opacity':.06},fs);
+    const fg=mk('filter',{id:'glow',x:'-10%',y:'-10%',width:'125%',height:'125%'},defs);
+    mk('feDropShadow',{dx:0,dy:0,stdDeviation:5,'flood-color':'#3b82f6','flood-opacity':.2},fg);
+    const fgs=mk('filter',{id:'glowStrong',x:'-12%',y:'-12%',width:'130%',height:'130%'},defs);
+    mk('feDropShadow',{dx:0,dy:0,stdDeviation:7,'flood-color':'#3b82f6','flood-opacity':.35},fgs);
+
+    // Arrow marker
+    const marker=mk('marker',{id:'arrowDown',markerWidth:10,markerHeight:8,refX:5,refY:4,orient:'auto'},defs);
+    mk('polygon',{points:'0,0 10,4 0,8',fill:'#94a3b8'},marker);
+
+    // Canvas bg
+    mk('rect',{x:0,y:0,width:CW,height:CH,fill:'#f8fafc'},gRoot);
+
+    // Title
+    mk('text',{x:CW/2,y:26,'text-anchor':'middle','font-size':14,'font-weight':'700',fill:'#1e293b','letter-spacing':'.3'},gRoot).textContent='System Architecture – High School Learning Analytics Dashboard';
+
+    // ── Draw Layers ──
+    const layerGroup=mk('g',{},gRoot);
+    layers.forEach(l=>{
+        const lg=mk('g',{class:'layer-box','data-layer':l.id},layerGroup);
+        mk('rect',{x:l.x,y:l.y,width:l.w,height:l.h,rx:12,fill:l.bg,stroke:l.border,'stroke-width':1.2},lg);
+
+        // Layer label
+        const labelY=l.id==='network'?l.y+l.h/2+1:l.y+16;
+        if(l.id!=='network'){
+            mk('text',{x:l.x+14,y:labelY,'font-size':10,'font-weight':'800',fill:l.color,opacity:.9,'letter-spacing':'.5'},lg).textContent=l.label;
+        }
+
+        // Tech subtitle
+        if(l.id==='presentation'){
+            mk('text',{x:l.x+l.w/2,y:l.y+l.h-14,'text-anchor':'middle','font-size':9.5,'font-weight':'500',fill:l.color,opacity:.55},lg).textContent=l.sub;
+        }else if(l.id==='network'){
+            mk('text',{x:l.x+l.w/2,y:l.y+l.h/2+4,'text-anchor':'middle','font-size':10.5,'font-weight':'700',fill:l.color,opacity:.7},lg).textContent=l.sub;
+        }else if(l.id==='application'){
+            mk('text',{x:l.x+14,y:l.y+l.h-10,'font-size':9,'font-weight':'500',fill:l.color,opacity:.5},lg).textContent=l.sub;
+        }else if(l.id==='external'){
+            mk('text',{x:l.x+l.w/2,y:l.y+l.h-8,'text-anchor':'middle','font-size':8.5,'font-weight':'500',fill:l.color,opacity:.5},lg).textContent=l.sub;
+        }
+    });
+
+    // ── Draw Layer-to-Layer Arrows ──
+    const arrowLayer=mk('g',{},gRoot);
+    connections.filter(c=>c.type==='layer').forEach(c=>{
+        const ag=mk('g',{class:'conn-line','data-layers':'all'},arrowLayer);
+        const x=c.x,y1=c.y1,y2=c.y2,my=(y1+y2)/2;
+        mk('line',{x1:x,y1:y1,x2:x,y2:y2,stroke:c.color,'stroke-width':2,'stroke-opacity':.4},ag);
+        // Arrowhead
+        const as=5;
+        mk('polygon',{points:`${x},${y2} ${x-as},${y2-as*1.5} ${x+as},${y2-as*1.5}`,fill:c.color,'fill-opacity':.5},ag);
+        // Label
+        const tw=c.label.length*6+16;
+        mk('rect',{x:x+12,y:my-8,width:tw,height:16,rx:4,fill:'#fff','fill-opacity':.95,stroke:c.color,'stroke-width':.5,'stroke-opacity':.3},ag);
+        mk('text',{x:x+12+tw/2,y:my+3.5,'text-anchor':'middle','font-size':8.5,fill:c.color,'font-weight':'600'},ag).textContent=c.label;
+    });
+
+    // ── Draw Components ──
+    const compLayer=mk('g',{},gRoot);
+    comps.forEach(c=>{
+        const ly=layerMap[c.layer];
+        const g=mk('g',{class:'comp-box','data-id':c.id,'data-layer':c.layer},compLayer);
+
+        if(c.isFullWidth){
+            // Network layer — already drawn in layer, skip box
+            g.addEventListener('mouseenter',e=>showTip(e,c));
+            g.addEventListener('mousemove',e=>showTip(e,c));
+            g.addEventListener('mouseleave',hideTip);
+            g.addEventListener('click',()=>focusComp(c.id));
+            return;
+        }
+
+        if(c.isGateway){
+            // API Gateway — special wide box
+            mk('rect',{x:c.x,y:c.y,width:c.w,height:c.h,rx:6,fill:'#fff',stroke:ly.color,'stroke-width':1.5,'stroke-dasharray':'6 3',filter:'url(#shadow)',class:'comp-bg'},g);
+            mk('rect',{x:c.x,y:c.y,width:5,height:c.h,rx:0,fill:ly.color,opacity:.8},g);
+            mk('text',{x:c.x+c.w/2,y:c.y+c.h/2+1,'text-anchor':'middle','dominant-baseline':'middle','font-size':10.5,'font-weight':'600',fill:'#1e293b'},g).textContent=`${c.icon}  ${c.name}  —  ${c.tech}`;
+        }else if(c.isCompact){
+            mk('rect',{x:c.x,y:c.y,width:c.w,height:c.h,rx:4,fill:'#fff',stroke:ly.border,'stroke-width':1,filter:'url(#shadow)',class:'comp-bg'},g);
+            mk('rect',{x:c.x,y:c.y,width:3,height:c.h,fill:ly.color,rx:0,opacity:.8},g);
+            mk('text',{x:c.x+10,y:c.y+c.h/2+1,'font-size':11,'dominant-baseline':'middle'},g).textContent=c.icon;
+            mk('text',{x:c.x+28,y:c.y+c.h/2,'font-size':9.5,'font-weight':'600',fill:'#1e293b','dominant-baseline':'middle'},g).textContent=c.name;
+            mk('text',{x:c.x+c.w-6,y:c.y+c.h/2,'text-anchor':'end','font-size':8,fill:'#94a3b8','dominant-baseline':'middle'},g).textContent=c.tech;
+        }else if(c.layer==='data'){
+            // Data tier — larger boxes
+            mk('rect',{x:c.x,y:c.y,width:c.w,height:c.h,rx:10,fill:'#fff',stroke:ly.border,'stroke-width':1.2,filter:'url(#shadow)',class:'comp-bg'},g);
+            mk('rect',{x:c.x,y:c.y,width:c.w,height:30,rx:10,fill:ly.color},g);
+            mk('rect',{x:c.x,y:c.y+24,width:c.w,height:6,fill:ly.color},g);
+            mk('text',{x:c.x+c.w/2,y:c.y+17,'text-anchor':'middle','font-size':13,'font-weight':'700',fill:'#fff'},g).textContent=`${c.icon}  ${c.name}`;
+            // Tech subtitle inside
+            mk('text',{x:c.x+c.w/2,y:c.y+48,'text-anchor':'middle','font-size':10,'font-weight':'600',fill:ly.color,opacity:.8},g).textContent=c.tech;
+            // Feature bullets
+            const features=c.id==='postgresql'?['28 bảng · ACID · Prisma ORM','Full-text Search · JSONB · PgBouncer']:
+                           c.id==='redis'?['Cache Queries · JWT Sessions','Pub/Sub · Bull Queue Broker']:
+                           ['File Uploads · PDF Reports','Backup Storage · Versioning'];
+            features.forEach((f,i)=>{
+                mk('text',{x:c.x+c.w/2,y:c.y+66+i*14,'text-anchor':'middle','font-size':9,fill:'#64748b'},g).textContent=f;
+            });
+        }else if(c.layer==='external'){
+            // External — dashed border
+            mk('rect',{x:c.x,y:c.y,width:c.w,height:c.h,rx:8,fill:'#fff',stroke:ly.color,'stroke-width':1.2,'stroke-dasharray':'5 3',filter:'url(#shadow)',class:'comp-bg'},g);
+            mk('rect',{x:c.x,y:c.y,width:5,height:c.h,rx:0,fill:ly.color,opacity:.6},g);
+            mk('text',{x:c.x+30,y:c.y+c.h/2-6,'font-size':14,fill:'#0f172a','dominant-baseline':'middle'},g).textContent=c.icon;
+            mk('text',{x:c.x+50,y:c.y+c.h/2-6,'font-size':11,'font-weight':'600',fill:'#0f172a','dominant-baseline':'middle'},g).textContent=c.name;
+            mk('text',{x:c.x+50,y:c.y+c.h/2+10,'font-size':9,fill:'#64748b','dominant-baseline':'middle'},g).textContent=c.tech;
+        }else if(c.layer==='infrastructure'){
+            // Infrastructure — compact
+            mk('rect',{x:c.x,y:c.y,width:c.w,height:c.h,rx:6,fill:'#fff',stroke:ly.border,'stroke-width':1,filter:'url(#shadow)',class:'comp-bg'},g);
+            mk('rect',{x:c.x,y:c.y,width:4,height:c.h,rx:0,fill:ly.color,opacity:.7},g);
+            mk('text',{x:c.x+12,y:c.y+c.h/2+1,'font-size':13,'dominant-baseline':'middle'},g).textContent=c.icon;
+            mk('text',{x:c.x+32,y:c.y+c.h/2-4,'font-size':10.5,'font-weight':'600',fill:'#1e293b','dominant-baseline':'middle'},g).textContent=c.name;
+            mk('text',{x:c.x+32,y:c.y+c.h/2+10,'font-size':8.5,fill:'#94a3b8','dominant-baseline':'middle'},g).textContent=c.tech;
+        }else{
+            // Standard service/portal boxes
+            mk('rect',{x:c.x,y:c.y,width:c.w,height:c.h,rx:8,fill:'#fff',stroke:'#e2e8f0','stroke-width':1,filter:'url(#shadow)',class:'comp-bg'},g);
+            mk('rect',{x:c.x,y:c.y,width:5,height:c.h,fill:ly.color,rx:0,opacity:.9},g);
+            // Icon
+            mk('text',{x:c.x+18,y:c.y+c.h/2-5,'font-size':16,'dominant-baseline':'middle'},g).textContent=c.icon;
+            // Name
+            mk('text',{x:c.x+40,y:c.y+c.h/2-5,'font-size':11,'font-weight':'600',fill:'#1e293b','dominant-baseline':'middle'},g).textContent=c.name;
+            // Tech
+            mk('text',{x:c.x+40,y:c.y+c.h/2+11,'font-size':9,fill:'#94a3b8','dominant-baseline':'middle'},g).textContent=c.tech;
+        }
+
+        g.addEventListener('mouseenter',e=>showTip(e,c));
+        g.addEventListener('mousemove',e=>showTip(e,c));
+        g.addEventListener('mouseleave',hideTip);
+        g.addEventListener('click',()=>focusComp(c.id));
+    });
+
+    // ── Draw Component Connections (ext & data) ──
+    const connLayer=mk('g',{},gRoot);
+    connections.filter(c=>c.type==='ext').forEach(c=>{
+        const from=compMap[c.from],to=compMap[c.to];
+        if(!from||!to)return;
+        const cg=mk('g',{class:'conn-line','data-from':c.from,'data-to':c.to,'data-layers':from.layer+' '+to.layer},connLayer);
+        const x1=from.x+from.w,y1=from.y+from.h/2;
+        const x2=to.x,y2=to.y+to.h/2;
+        // Orthogonal route
+        const mx=x1+(x2-x1)*0.5;
+        mk('path',{d:`M${x1},${y1}L${mx},${y1}L${mx},${y2}L${x2},${y2}`,fill:'none',stroke:c.color,'stroke-width':1.5,'stroke-dasharray':'6 3','stroke-opacity':.5},cg);
+        const as=4;
+        mk('polygon',{points:`${x2},${y2} ${x2-as*1.5},${y2-as} ${x2-as*1.5},${y2+as}`,fill:c.color,'fill-opacity':.6},cg);
+        // Label
+        const lx=(mx+x2)/2,ly=y2-8;
+        mk('text',{x:lx,y:ly,'text-anchor':'middle','font-size':8,fill:c.color,'font-weight':'600',opacity:.7},cg).textContent=c.label;
+    });
+
+    connections.filter(c=>c.type==='data').forEach(c=>{
+        const from=compMap[c.from],to=compMap[c.to];
+        if(!from||!to)return;
+        const cg=mk('g',{class:'conn-line','data-from':c.from,'data-to':c.to,'data-layers':from.layer+' '+to.layer},connLayer);
+        const x1=from.x+from.w/2,y1=from.y+from.h;
+        const x2=to.x+to.w/2,y2=to.y;
+        const my=(y1+y2)/2;
+        mk('path',{d:`M${x1},${y1}L${x1},${my}L${x2},${my}L${x2},${y2}`,fill:'none',stroke:c.color,'stroke-width':1.2,'stroke-dasharray':'4 3','stroke-opacity':.35},cg);
+        const as=4;
+        mk('polygon',{points:`${x2},${y2} ${x2-as},${y2-as*1.5} ${x2+as},${y2-as*1.5}`,fill:c.color,'fill-opacity':.4},cg);
+        const lx=(x1+x2)/2+12,ly=my-4;
+        mk('text',{x:lx,y:ly,'text-anchor':'middle','font-size':7.5,fill:c.color,'font-weight':'600',opacity:.5},cg).textContent=c.label;
+    });
+
+    // ── Broad data flow: all services → PostgreSQL ──
+    const dfg=mk('g',{class:'conn-line','data-layers':'application data'},connLayer);
+    const svcCenterX=710,svcBottomY=572,dbTopY=712;
+    const dfy=(svcBottomY+dbTopY)/2;
+    // Central thick arrow
+    mk('line',{x1:svcCenterX,y1:svcBottomY+12,x2:svcCenterX,y2:dbTopY-6,stroke:'#f97316','stroke-width':2.5,'stroke-opacity':.2},dfg);
+    // Spread lines from services to the central line
+    [296,568,840,1112].forEach(sx=>{
+        mk('line',{x1:sx,y1:svcBottomY,x2:sx,y2:dfy,stroke:'#f97316','stroke-width':1,'stroke-opacity':.12},dfg);
+    });
+    mk('line',{x1:296,y1:dfy,x2:1112,y2:dfy,stroke:'#f97316','stroke-width':1,'stroke-opacity':.12},dfg);
+
+    // ── Annotation: Real-time channel ──
+    const annG=mk('g',{},gRoot);
+    // Socket.IO annotation between presentation and application
+    const ax=1260,ay=310;
+    mk('rect',{x:ax,y:ay-8,width:100,height:16,rx:4,fill:'#8b5cf6',opacity:.12},annG);
+    mk('text',{x:ax+50,y:ay+3,'text-anchor':'middle','font-size':8,'font-weight':'700',fill:'#7c3aed'},annG).textContent='Socket.IO (WSS)';
+    mk('line',{x1:ax+50,y1:ay-8,x2:ax+50,y2:270,stroke:'#7c3aed','stroke-width':1,'stroke-dasharray':'3 2','stroke-opacity':.3},annG);
+    mk('line',{x1:ax+50,y1:ay+8,x2:ax+50,y2:362,stroke:'#7c3aed','stroke-width':1,'stroke-dasharray':'3 2','stroke-opacity':.3},annG);
+
+    applyZoom();
+}
+
+// ─── SIDEBAR ────────────────────────────────
+function buildSidebar(){
+    const el=document.getElementById('sb-list');
+    let h='';
+    layers.forEach(l=>{
+        const lComps=comps.filter(c=>c.layer===l.id);
+        if(!lComps.length)return;
+        h+=`<div>
+            <div class="sb-ghdr" onclick="this.nextElementSibling.style.maxHeight=this.nextElementSibling.style.maxHeight?'':'800px';this.querySelector('.sb-chev').classList.toggle('open')">
+                <span class="sb-dot" style="background:${l.color}"></span>
+                <span style="color:${l.color}">${l.label}</span>
+                <span class="sb-cnt">${lComps.length}</span>
+                <span class="sb-chev open">▸</span>
+            </div>
+            <div class="sb-items" style="max-height:800px">`;
+        lComps.forEach(c=>{
+            h+=`<div class="sb-item" data-comp="${c.id}" onclick="focusComp('${c.id}')">
+                <span class="sb-item-icon">${c.icon}</span>
+                <span class="sb-item-name">${c.name}</span>
+                <span class="sb-item-tech">${c.tech}</span>
+            </div>`;
+        });
+        h+=`</div></div>`;
+    });
+
+    // Tech stack summary
+    h+=`<div style="padding:16px;border-top:1px solid #f1f5f9;margin-top:8px">
+        <div style="font-size:11px;font-weight:700;color:#334155;text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">Technology Stack</div>
+        <div style="display:flex;flex-direction:column;gap:6px;font-size:11px;color:#64748b">
+            <div><b style="color:#3b82f6">Frontend:</b> React 18, Vite, TypeScript, Tailwind CSS</div>
+            <div><b style="color:#10b981">Backend:</b> Node.js 20, Express.js 4, Prisma ORM</div>
+            <div><b style="color:#f97316">Database:</b> PostgreSQL 16, Redis 7, MinIO</div>
+            <div><b style="color:#0d9488">AI/ML:</b> OpenAI GPT-4 API</div>
+            <div><b style="color:#8b5cf6">Real-time:</b> Socket.IO, Web Push API</div>
+            <div><b style="color:#e11d48">DevOps:</b> Docker, GitHub Actions, Prometheus</div>
+            <div><b style="color:#64748b">Security:</b> JWT, bcrypt, Helmet, Rate Limit</div>
+        </div>
+    </div>`;
+
+    el.innerHTML=h;
+}
+
+// ─── FILTER BAR ─────────────────────────────
+function buildFilterBar(){
+    const bar=document.getElementById('filter-bar');
+    let h='<button data-f="all" onclick="setFilter(\'all\')" class="fbtn px-2.5 py-1 rounded-md text-[11px] font-semibold bg-gray-800 text-white">Tất cả</button>';
+    const filterLayers=['presentation','application','data','external','infrastructure'];
+    filterLayers.forEach(lid=>{
+        const l=layerMap[lid];
+        const shortLabel=l.label.split(' ').slice(0,2).join(' ');
+        h+=`<button data-f="${lid}" onclick="setFilter('${lid}')" class="fbtn px-2.5 py-1 rounded-md text-[11px] font-semibold hover:opacity-80" style="background:${l.bg};color:${l.color}">${shortLabel}</button>`;
+    });
+    bar.innerHTML=h;
+}
+
+// ─── INIT ───────────────────────────────────
+wrapEl.addEventListener('wheel',e=>{e.preventDefault();zoomBy(e.deltaY<0?.08:-.08)},{passive:false});
+buildFilterBar();
+render();
+buildSidebar();
+setTimeout(fitToScreen,80);
+
+// ══════════════════════════════════════════════════════════════
+// PROJECT PROGRESS CHECKER — File System Access API
+// ══════════════════════════════════════════════════════════════
+let _projRoot=null;
+
+const _phases=[
+{n:0,t:'Khởi tạo Dự án',c:'#64748b',d:'Ngày 1–2',checks:[
+ {p:'server',tp:'dir',l:'Thư mục server/'},
+ {p:'client',tp:'dir',l:'Thư mục client/'},
+ {p:'prisma',tp:'dir',l:'Thư mục prisma/'},
+ {p:'docker-compose.yml',tp:'file',l:'docker-compose.yml'},
+ {p:'.gitignore',tp:'file',l:'.gitignore'},
+ {p:'server/package.json',tp:'file',l:'server/package.json'},
+ {p:'server/tsconfig.json',tp:'file',l:'server/tsconfig.json'},
+ {p:'client/package.json',tp:'file',l:'client/package.json'},
+ {p:'server/src',tp:'dir',l:'server/src/ directory'},
+ {p:'client/src',tp:'dir',l:'client/src/ directory'},
+]},
+{n:1,t:'Database + Prisma Schema',c:'#f97316',d:'Ngày 3–5',checks:[
+ {p:'prisma/schema.prisma',tp:'file',l:'prisma/schema.prisma'},
+ {p:'prisma/schema.prisma',tp:'has',s:'model User',l:'Prisma: model User'},
+ {p:'prisma/schema.prisma',tp:'has',s:'model Exam',l:'Prisma: model Exam'},
+ {p:'prisma/schema.prisma',tp:'has',s:'model Question',l:'Prisma: model Question'},
+ {p:'prisma/schema.prisma',tp:'has',s:'model Notification',l:'Prisma: model Notification'},
+ {p:'prisma/schema.prisma',tp:'has',s:'model AiPracticeSession',l:'Prisma: model AI Practice'},
+ {p:'prisma/schema.prisma',tp:'has',s:'model TopicRelation',l:'Prisma: model TopicRelation'},
+ {p:'prisma/schema.prisma',tp:'has',s:'model WebPushSubscription',l:'Prisma: model WebPushSubscription'},
+ {p:'prisma/schema.prisma',tp:'has',s:'model PasswordResetToken',l:'Prisma: model PasswordResetToken'},
+ {p:'prisma/migrations',tp:'dir',l:'prisma/migrations/ (đã migrate)'},
+ {p:'prisma/seed.ts',tp:'any',l:'prisma/seed.ts hoặc seed.js',a:'prisma/seed.js'},
+ {p:'server/src/config',tp:'dir',l:'server/src/config/ directory'},
+]},
+{n:2,t:'Auth Service (UC01–04)',c:'#3b82f6',d:'Ngày 6–10',checks:[
+ {p:'server/src/modules/auth',tp:'dir',l:'modules/auth/ directory'},
+ {p:'server/src/modules/auth',tp:'dirHas',l:'Auth module có source files'},
+ {p:'server/src/middlewares',tp:'dir',l:'middlewares/ directory'},
+ {p:'server/src/middlewares',tp:'dirHas',l:'Middlewares có source files'},
+ {p:'client/src/pages/auth',tp:'dir',l:'pages/auth/ directory'},
+ {p:'client/src/pages/auth',tp:'dirHas',l:'Auth pages có source files'},
+ {p:'client/src/stores',tp:'dir',l:'stores/ directory (state management)'},
+ {p:'client/src/services',tp:'dir',l:'services/ directory (API calls)'},
+ {p:'client/src/layouts',tp:'dir',l:'layouts/ directory'},
+ {p:'server/package.json',tp:'has',s:'jsonwebtoken',l:'Dependency: jsonwebtoken'},
+ {p:'server/package.json',tp:'has',s:'bcrypt',l:'Dependency: bcrypt/bcryptjs'},
+]},
+{n:3,t:'Admin Portal (UC37–45)',c:'#dc2626',d:'Ngày 11–17',checks:[
+ {p:'server/src/modules/user',tp:'dir',l:'modules/user/ directory'},
+ {p:'server/src/modules/user',tp:'dirHas',l:'User module có source files'},
+ {p:'server/src/modules/academic',tp:'dir',l:'modules/academic/ directory',a:'server/src/modules/admin'},
+ {p:'server/src/modules/system',tp:'dir',l:'modules/system/ directory',a:'server/src/modules/admin'},
+ {p:'client/src/pages/admin',tp:'dir',l:'pages/admin/ directory'},
+ {p:'client/src/pages/admin',tp:'dirHas',l:'Admin pages có source files'},
+ {p:'server/package.json',tp:'has',s:'xlsx',l:'Dependency: xlsx (import Excel)'},
+]},
+{n:4,t:'Ngân hàng Câu hỏi (UC23–25)',c:'#ea580c',d:'Ngày 18–23',checks:[
+ {p:'server/src/modules/question',tp:'dir',l:'modules/question/ directory'},
+ {p:'server/src/modules/question',tp:'dirHas',l:'Question module có source files'},
+ {p:'client/src/pages/teacher',tp:'dir',l:'pages/teacher/ directory'},
+ {p:'client/src/pages/teacher',tp:'dirHas',l:'Teacher pages có source files'},
+]},
+{n:5,t:'Bài KT + Lớp học (UC26–29)',c:'#8b5cf6',d:'Ngày 24–31',checks:[
+ {p:'server/src/modules/exam',tp:'dir',l:'modules/exam/ directory'},
+ {p:'server/src/modules/exam',tp:'dirHas',l:'Exam module có source files'},
+ {p:'server/src/modules/class',tp:'dir',l:'modules/class/ directory',a:'server/src/modules/classroom'},
+ {p:'server/package.json',tp:'has',s:'node-cron',l:'Dependency: node-cron (đặt lịch)'},
+]},
+{n:6,t:'Làm bài Kiểm tra (UC05–09)',c:'#2563eb',d:'Ngày 32–39',checks:[
+ {p:'client/src/pages/student',tp:'dir',l:'pages/student/ directory'},
+ {p:'client/src/pages/student',tp:'dirHas',l:'Student pages có source files'},
+ {p:'server/package.json',tp:'has',s:'ioredis',l:'Dependency: ioredis (auto-save)'},
+]},
+{n:7,t:'Analytics & Dashboard (UC10–15, 30–36)',c:'#6366f1',d:'Ngày 40–50',checks:[
+ {p:'server/src/modules/analytics',tp:'dir',l:'modules/analytics/ directory'},
+ {p:'server/src/modules/analytics',tp:'dirHas',l:'Analytics module có source files'},
+ {p:'server/package.json',tp:'has',s:'pdfkit',l:'Dependency: pdfkit (xuất PDF)',a:'puppeteer'},
+ {p:'client/package.json',tp:'has',s:'chart.js',l:'Dependency: chart.js'},
+ {p:'client/package.json',tp:'has',s:'d3',l:'Dependency: d3 (Knowledge Graph)'},
+]},
+{n:8,t:'Parent + Thông báo (UC18–22)',c:'#16a34a',d:'Ngày 51–57',checks:[
+ {p:'server/src/modules/notification',tp:'dir',l:'modules/notification/ directory',a:'server/src/modules/parent'},
+ {p:'client/src/pages/parent',tp:'dir',l:'pages/parent/ directory'},
+ {p:'client/src/pages/parent',tp:'dirHas',l:'Parent pages có source files'},
+ {p:'server/package.json',tp:'has',s:'nodemailer',l:'Dependency: nodemailer (email)'},
+ {p:'server/package.json',tp:'has',s:'web-push',l:'Dependency: web-push'},
+]},
+{n:9,t:'AI Thích ứng (UC16–17)',c:'#a855f7',d:'Ngày 58–64',checks:[
+ {p:'server/src/modules/ai',tp:'dir',l:'modules/ai/ directory'},
+ {p:'server/src/modules/ai',tp:'dirHas',l:'AI module có source files'},
+ {p:'server/package.json',tp:'has',s:'openai',l:'Dependency: openai (GPT-4)'},
+ {p:'server/package.json',tp:'has',s:'bull',l:'Dependency: bull (job queue)',a:'bullmq'},
+]},
+{n:10,t:'Real-time + Polish',c:'#0d9488',d:'Ngày 65–72',checks:[
+ {p:'server/package.json',tp:'has',s:'socket.io',l:'Dependency: socket.io (server)'},
+ {p:'client/package.json',tp:'has',s:'socket.io-client',l:'Dependency: socket.io-client'},
+ {p:'client/src/hooks',tp:'dir',l:'hooks/ directory'},
+ {p:'client/src/hooks',tp:'dirHas',l:'Custom hooks có source files'},
+]},
+{n:11,t:'Testing + CI/CD',c:'#e11d48',d:'Ngày 73–80',checks:[
+ {p:'server/package.json',tp:'has',s:'jest',l:'Dependency: jest (unit tests)'},
+ {p:'server/package.json',tp:'has',s:'supertest',l:'Dependency: supertest (integration)'},
+ {p:'.github/workflows',tp:'dir',l:'.github/workflows/ directory'},
+ {p:'.github/workflows',tp:'dirHas',l:'CI/CD pipeline YAML file'},
+ {p:'client/package.json',tp:'has',s:'vitest',l:'Dependency: vitest (frontend tests)'},
+]},
+{n:12,t:'Docker + Deploy + Monitoring',c:'#7c3aed',d:'Ngày 81–87',checks:[
+ {p:'docker',tp:'dir',l:'docker/ directory'},
+ {p:'docker',tp:'dirHas',l:'Dockerfiles có trong docker/'},
+ {p:'server/package.json',tp:'has',s:'prom-client',l:'Dependency: prom-client (metrics)'},
+ {p:'server/package.json',tp:'has',s:'winston',l:'Dependency: winston (logging)'},
+]},
+];
+
+async function _exists(root,path,asDir){
+    const pts=path.split('/');let cur=root;
+    try{
+        for(let i=0;i<pts.length;i++){
+            if(i<pts.length-1){cur=await cur.getDirectoryHandle(pts[i]);continue}
+            if(asDir===true){await cur.getDirectoryHandle(pts[i]);return true}
+            if(asDir===false){await cur.getFileHandle(pts[i]);return true}
+            try{await cur.getDirectoryHandle(pts[i]);return true}catch(_){await cur.getFileHandle(pts[i]);return true}
+        }return true;
+    }catch(_){return false}
+}
+
+async function _fcontains(root,path,str){
+    const pts=path.split('/');let cur=root;
+    try{
+        for(let i=0;i<pts.length-1;i++)cur=await cur.getDirectoryHandle(pts[i]);
+        const fh=await cur.getFileHandle(pts[pts.length-1]),f=await fh.getFile(),txt=await f.text();
+        return txt.includes(str);
+    }catch(_){return false}
+}
+
+async function _dirHasFiles(root,path){
+    const pts=path.split('/');let cur=root;
+    try{
+        for(const p of pts)cur=await cur.getDirectoryHandle(p);
+        for await(const e of cur.values())if(e.kind==='file'&&/\.(ts|tsx|js|jsx|mjs)$/.test(e.name))return true;
+        return false;
+    }catch(_){return false}
+}
+
+async function _runCheck(root,ck){
+    let ok=false;
+    if(ck.tp==='dir') ok=await _exists(root,ck.p,true);
+    else if(ck.tp==='file') ok=await _exists(root,ck.p,false);
+    else if(ck.tp==='any') ok=await _exists(root,ck.p,null);
+    else if(ck.tp==='has') ok=await _fcontains(root,ck.p,ck.s);
+    else if(ck.tp==='dirHas') ok=await _dirHasFiles(root,ck.p);
+    if(!ok&&ck.a){
+        if(ck.tp==='has') ok=await _fcontains(root,ck.a,ck.s);
+        else if(ck.tp==='dir') ok=await _exists(root,ck.a,true);
+        else if(ck.tp==='dirHas') ok=await _dirHasFiles(root,ck.a);
+        else ok=await _exists(root,ck.a,null);
+    }
+    return ok;
+}
+
+function openProgressModal(){
+    document.getElementById('pm-overlay').style.display='block';
+    if(!('showDirectoryPicker' in window)){document.getElementById('pm-compat').style.display='block'}
+    if(_projRoot) runScan();
+}
+function closeProgressModal(){document.getElementById('pm-overlay').style.display='none'}
+
+async function selectProjectFolder(){
+    try{
+        _projRoot=await window.showDirectoryPicker({mode:'read'});
+        document.getElementById('pm-sub').textContent='Đang quét: '+_projRoot.name+'/';
+        await runScan();
+    }catch(e){if(e.name!=='AbortError')alert('Lỗi: '+e.message)}
+}
+
+async function runScan(){
+    const body=document.getElementById('pm-body');
+    body.innerHTML='<div style="text-align:center;padding:40px"><div style="font-size:32px;animation:spin 1s linear infinite;display:inline-block">⏳</div><p style="color:#64748b;margin-top:12px;font-size:13px">Đang quét thư mục dự án...</p></div><style>@keyframes spin{to{transform:rotate(360deg)}}</style>';
+    document.getElementById('pm-overall').style.display='block';
+
+    const results=[];
+    let totalChecks=0,totalPass=0;
+    for(const phase of _phases){
+        const pr=[];
+        for(const ck of phase.checks){
+            const ok=await _runCheck(_projRoot,ck);
+            pr.push({...ck,ok});
+            totalChecks++;if(ok)totalPass++;
+        }
+        const pass=pr.filter(r=>r.ok).length;
+        results.push({...phase,results:pr,pass,total:pr.length,pct:Math.round(pass/pr.length*100)});
+    }
+
+    const overallPct=Math.round(totalPass/totalChecks*100);
+    document.getElementById('pm-pct').textContent=overallPct+'%';
+    document.getElementById('pm-pct').style.color=overallPct>=80?'#10b981':overallPct>=40?'#f59e0b':'#3b82f6';
+    document.getElementById('pm-sub').textContent=_projRoot.name+'/ — '+totalPass+'/'+totalChecks+' checks passed';
+
+    let h='<div style="margin-bottom:16px;padding:12px 16px;border-radius:10px;background:linear-gradient(135deg,#eff6ff,#f5f3ff);border:1px solid #c7d2fe">';
+    h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">';
+    h+='<span style="font-size:13px;font-weight:700;color:#1e293b">Tổng tiến độ dự án</span>';
+    h+='<span style="font-size:15px;font-weight:900;color:'+(overallPct>=80?'#10b981':overallPct>=40?'#f59e0b':'#2563eb')+'">'+overallPct+'%</span></div>';
+    h+='<div style="height:8px;background:#e2e8f0;border-radius:4px;overflow:hidden"><div style="height:100%;width:'+overallPct+'%;background:linear-gradient(90deg,#2563eb,#7c3aed);border-radius:4px;transition:width .5s"></div></div>';
+    h+='<div style="display:flex;gap:16px;margin-top:8px;font-size:11px;color:#64748b"><span>✅ '+totalPass+' passed</span><span>❌ '+(totalChecks-totalPass)+' missing</span><span>📋 '+totalChecks+' total checks</span></div>';
+    h+='</div>';
+
+    results.forEach((r,ri)=>{
+        const isComplete=r.pct===100;
+        const barColor=isComplete?'#10b981':r.pct>0?r.c:'#e2e8f0';
+        h+='<div style="margin-bottom:6px;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;'+(isComplete?'opacity:.75':'')+'">';
+        h+='<div onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display===\'none\'?\'block\':\'none\';this.querySelector(\'.chv\').textContent=this.nextElementSibling.style.display===\'none\'?\'▸\':\'▾\'" style="padding:12px 16px;cursor:pointer;display:flex;align-items:center;gap:10px;background:'+(isComplete?'#f0fdf4':'#fafafa')+';transition:background .15s" onmouseover="this.style.background=\'#f1f5f9\'" onmouseout="this.style.background=\''+(isComplete?'#f0fdf4':'#fafafa')+'\'">';
+        h+='<span class="chv" style="font-size:10px;color:#94a3b8;min-width:12px">'+(isComplete?'▸':'▾')+'</span>';
+        h+='<div style="width:8px;height:8px;border-radius:50%;background:'+r.c+';flex-shrink:0"></div>';
+        h+='<span style="font-size:12px;font-weight:700;color:#334155;flex:1">GĐ '+r.n+' · '+r.t+'</span>';
+        h+='<span style="font-size:10px;color:#94a3b8;margin-right:8px">'+r.d+'</span>';
+        h+='<span style="font-size:11px;font-weight:800;color:'+barColor+';min-width:32px;text-align:right">'+r.pass+'/'+r.total+'</span>';
+        h+='<div style="width:80px;height:6px;background:#e2e8f0;border-radius:3px;overflow:hidden;flex-shrink:0"><div style="height:100%;width:'+r.pct+'%;background:'+barColor+';border-radius:3px"></div></div>';
+        if(isComplete)h+='<span style="font-size:12px" title="Hoàn thành">✅</span>';
+        h+='</div>';
+
+        h+='<div style="display:'+(isComplete?'none':'block')+';padding:8px 16px 12px;border-top:1px solid #f1f5f9">';
+        r.results.forEach(ck=>{
+            h+='<div style="display:flex;align-items:center;gap:8px;padding:5px 0;font-size:12px">';
+            h+='<span style="font-size:14px">'+(ck.ok?'✅':'❌')+'</span>';
+            h+='<span style="color:'+(ck.ok?'#64748b':'#334155')+';'+(ck.ok?'':'font-weight:500')+'">'+ck.l+'</span>';
+            if(!ck.ok)h+='<code style="margin-left:auto;font-size:10px;color:#94a3b8;background:#f1f5f9;padding:2px 6px;border-radius:4px">'+ck.p+'</code>';
+            h+='</div>';
+        });
+        h+='</div></div>';
+    });
+
+    h+='<div style="margin-top:16px;text-align:center">';
+    h+='<button onclick="runScan()" style="padding:8px 20px;border-radius:8px;border:1px solid #e2e8f0;background:#fff;color:#334155;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s" onmouseover="this.style.background=\'#f8fafc\'" onmouseout="this.style.background=\'#fff\'">🔄 Quét lại</button>';
+    h+='<button onclick="_projRoot=null;closeProgressModal();openProgressModal()" style="margin-left:8px;padding:8px 20px;border-radius:8px;border:1px solid #e2e8f0;background:#fff;color:#334155;font-size:12px;font-weight:600;cursor:pointer" onmouseover="this.style.background=\'#f8fafc\'" onmouseout="this.style.background=\'#fff\'">📂 Đổi thư mục</button>';
+    h+='</div>';
+
+    body.innerHTML=h;
+}
+</script>
+</body>
+</html>
