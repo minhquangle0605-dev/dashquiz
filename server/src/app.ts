@@ -10,6 +10,7 @@ import { errorHandler, notFoundHandler } from './middlewares/errorHandler';
 // Route imports
 import authRoutes from './modules/auth/auth.routes';
 import userRoutes from './modules/user/user.routes';
+import adminUserRoutes from './modules/user/user.admin.routes';
 import examRoutes from './modules/exam/exam.routes';
 import questionRoutes from './modules/question/question.routes';
 import analyticsRoutes from './modules/analytics/analytics.routes';
@@ -62,6 +63,7 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/classes', classRoutes);
+app.use('/api/admin/users', adminUserRoutes);
 app.use('/api/admin/academic', academicRoutes);
 app.use('/api/admin/system', systemRoutes);
 
@@ -81,6 +83,7 @@ app.get('/api', (_req, res) => {
         ai: '/api/ai/*',
         notifications: '/api/notifications/*',
         classes: '/api/classes/*',
+        adminUsers: '/api/admin/users/*',
         academic: '/api/admin/academic/*',
         system: '/api/admin/system/*',
       },

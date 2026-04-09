@@ -50,15 +50,15 @@ const iconProfile = (
 export default function AdminLayout() {
   return (
     <DashboardShell
-      roleLabel="Quản trị"
+      roleLabel="Administrator"
       sidebarClassName="bg-gradient-to-b from-slate-800 to-slate-950"
       activeNavClassName="bg-white text-slate-900 shadow-sm"
       navItems={[
         { to: '/admin/dashboard', label: 'Dashboard', end: true, icon: iconDashboard },
-        { to: '/admin/users', label: 'Người dùng', icon: iconUsers },
-        { to: '/admin/academic', label: 'Học vụ', icon: iconAcademic },
-        { to: '/admin/system', label: 'Hệ thống', icon: iconSystem },
-        { to: '/admin/profile', label: 'Hồ sơ', icon: iconProfile },
+        { to: '/admin/users', label: 'Users', icon: iconUsers },
+        { to: '/admin/academic', label: 'Academic', icon: iconAcademic },
+        { to: '/admin/system', label: 'System', icon: iconSystem },
+        { to: '/admin/profile', label: 'Profile', icon: iconProfile },
       ]}
     />
   );

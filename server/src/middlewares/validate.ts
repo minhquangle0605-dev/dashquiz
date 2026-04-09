@@ -1,16 +1,36 @@
 import { Request, Response, NextFunction } from 'express';
+import { z } from 'zod';
+import { AppError } from './errorHandler';
 
-/**
- * Request validation middleware — placeholder for Zod integration in Phase 2
- * Will accept a Zod schema and validate req.body
- */
-export const validate = (_schema: unknown) => {
-  return (_req: Request, _res: Response, next: NextFunction): void => {
-    // TODO: Phase 2 — implement Zod validation
-    // const result = schema.safeParse(req.body);
-    // if (!result.success) {
-    //   throw new AppError('Validation failed', 400);
-    // }
-    next();
+export const validate = (schema: z.ZodType, source: 'body' | 'query' = 'body') => {
+  return (req: Request, _res: Response, next: NextFunction): void => {
+    try {
+      const data = source === 'query' ? req.query : req.body;
+      const result = schema.safeParse(data);
+      if (!result.success) {
+        const errors = result.error.issues.map((issue) => ({
+          field: issue.path.join('.'),
+          message: issue.message,
+        }));
+
+        const error = new AppError('Validation failed', 400);
+        error.errors = errors;
+        next(error);
+        return;
+      }
+
+      if (source === 'query') {
+        (req as Request & { validatedQuery: unknown }).validatedQuery = result.data;
+      } else {
+        req.body = result.data;
+      }
+      next();
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        next(new AppError('Validation failed', 400));
+        return;
+      }
+      next(error);
+    }
   };
 };

@@ -17,16 +17,16 @@ export default function ForbiddenPage() {
               />
             </svg>
           </div>
-          <h1 className="text-xl font-bold text-slate-900">Truy cập bị từ chối</h1>
+          <h1 className="text-xl font-bold text-slate-900">Access denied</h1>
           <p className="mt-2 text-sm leading-relaxed text-slate-600">
-            Bạn không có quyền xem nội dung này. Nếu đây là lỗi, hãy liên hệ quản trị viên hoặc đăng nhập
-            bằng tài khoản phù hợp.
+            You do not have permission to view this page. If you believe this is an error,
+            please contact your administrator or sign in with the correct account.
           </p>
           <Link
             to="/"
-            className="mt-6 inline-flex items-center justify-center rounded-lg bg-slate-800 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-700"
+            className="mt-6 inline-flex items-center justify-center rounded-lg bg-slate-800 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 transition-colors"
           >
-            Về trang chủ
+            Go home
           </Link>
         </div>
       </div>

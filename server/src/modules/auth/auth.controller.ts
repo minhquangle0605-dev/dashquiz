@@ -1,28 +1,28 @@
 import type { Request, Response, NextFunction } from 'express';
-
 import { authService } from './auth.service';
 
-export async function login(_req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function login(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const result = await authService.login();
+    const result = await authService.login(req.body);
     res.json(result);
   } catch (error: unknown) {
     next(error instanceof Error ? error : new Error('Unexpected error'));
   }
 }
 
-export async function logout(_req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function logout(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const result = await authService.logout();
+    const { refreshToken } = req.body;
+    const result = await authService.logout(refreshToken);
     res.json(result);
   } catch (error: unknown) {
     next(error instanceof Error ? error : new Error('Unexpected error'));
   }
 }
 
-export async function refresh(_req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function refresh(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const result = await authService.refresh();
+    const result = await authService.refresh(req.body);
     res.json(result);
   } catch (error: unknown) {
     next(error instanceof Error ? error : new Error('Unexpected error'));
@@ -30,12 +30,12 @@ export async function refresh(_req: Request, res: Response, next: NextFunction):
 }
 
 export async function forgotPassword(
-  _req: Request,
+  req: Request,
   res: Response,
   next: NextFunction,
 ): Promise<void> {
   try {
-    const result = await authService.forgotPassword();
+    const result = await authService.forgotPassword(req.body);
     res.json(result);
   } catch (error: unknown) {
     next(error instanceof Error ? error : new Error('Unexpected error'));
@@ -43,12 +43,12 @@ export async function forgotPassword(
 }
 
 export async function resetPassword(
-  _req: Request,
+  req: Request,
   res: Response,
   next: NextFunction,
 ): Promise<void> {
   try {
-    const result = await authService.resetPassword();
+    const result = await authService.resetPassword(req.body);
     res.json(result);
   } catch (error: unknown) {
     next(error instanceof Error ? error : new Error('Unexpected error'));

@@ -2,9 +2,17 @@ export const ROLES = {
   ADMIN: 'admin',
   TEACHER: 'teacher',
   STUDENT: 'student',
+  PARENT: 'parent',
 } as const;
 
 export type UserRole = (typeof ROLES)[keyof typeof ROLES];
+
+export const ROLE_DASHBOARDS: Record<UserRole, string> = {
+  [ROLES.ADMIN]: '/admin/dashboard',
+  [ROLES.TEACHER]: '/teacher/dashboard',
+  [ROLES.STUDENT]: '/student/dashboard',
+  [ROLES.PARENT]: '/parent/dashboard',
+};
 
 export const EXAM_STATUS = {
   DRAFT: 'draft',
@@ -20,14 +28,9 @@ export type ExamStatus = (typeof EXAM_STATUS)[keyof typeof EXAM_STATUS];
 export const ROUTES = {
   HOME: '/',
   LOGIN: '/login',
-  REGISTER: '/register',
-  DASHBOARD: '/dashboard',
-  EXAMS: '/exams',
-  EXAM_DETAIL: '/exams/:examId',
-  ATTEMPT: '/exams/:examId/attempt',
-  RESULTS: '/results',
-  ANALYTICS: '/analytics',
-  SETTINGS: '/settings',
+  FORGOT_PASSWORD: '/forgot-password',
+  RESET_PASSWORD: '/reset-password',
+  FORBIDDEN: '/403',
 } as const;
 
 export const API_ENDPOINTS = {
@@ -51,9 +54,12 @@ export const API_ENDPOINTS = {
     BY_ID: (id: string) => `/api/exams/${id}`,
     ATTEMPTS: (examId: string) => `/api/exams/${examId}/attempts`,
     START: (examId: string) => `/api/exams/${examId}/start`,
-    ATTEMPT_ANSWERS: (attemptId: string) => `/api/exams/attempts/${attemptId}/answers`,
-    ATTEMPT_SUBMIT: (attemptId: string) => `/api/exams/attempts/${attemptId}/submit`,
-    ATTEMPT_RESULT: (attemptId: string) => `/api/exams/attempts/${attemptId}/result`,
+    ATTEMPT_ANSWERS: (attemptId: string) =>
+      `/api/exams/attempts/${attemptId}/answers`,
+    ATTEMPT_SUBMIT: (attemptId: string) =>
+      `/api/exams/attempts/${attemptId}/submit`,
+    ATTEMPT_RESULT: (attemptId: string) =>
+      `/api/exams/attempts/${attemptId}/result`,
   },
   ANALYTICS: {
     OVERVIEW: '/api/analytics/overview',

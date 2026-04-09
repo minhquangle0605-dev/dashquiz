@@ -45,15 +45,15 @@ const iconProfile = (
 export default function TeacherLayout() {
   return (
     <DashboardShell
-      roleLabel="Giáo viên"
+      roleLabel="Teacher"
       sidebarClassName="bg-gradient-to-b from-emerald-700 to-teal-900"
       activeNavClassName="bg-white text-emerald-900 shadow-sm"
       navItems={[
         { to: '/teacher/dashboard', label: 'Dashboard', end: true, icon: iconDashboard },
-        { to: '/teacher/questions', label: 'Ngân hàng câu hỏi', icon: iconBank },
-        { to: '/teacher/exams/create', label: 'Tạo đề', icon: iconCreate },
-        { to: '/teacher/classes', label: 'Lớp học', icon: iconClass },
-        { to: '/teacher/profile', label: 'Hồ sơ', icon: iconProfile },
+        { to: '/teacher/questions', label: 'Question Bank', icon: iconBank },
+        { to: '/teacher/exams/create', label: 'Create Exam', icon: iconCreate },
+        { to: '/teacher/classes', label: 'Classes', icon: iconClass },
+        { to: '/teacher/profile', label: 'Profile', icon: iconProfile },
       ]}
     />
   );

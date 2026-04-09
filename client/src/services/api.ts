@@ -3,20 +3,14 @@ import axios, {
   type InternalAxiosRequestConfig,
 } from 'axios';
 
-import {
-  syncTokensFromRefresh,
-  useAuthStore,
-} from '@/stores/authStore';
+import { syncTokensFromRefresh, useAuthStore } from '@/stores/authStore';
 import { API_ENDPOINTS } from '@/utils/constants';
 
-const baseURL = 'http://localhost:3000';
+const baseURL = '/api';
 
-/** Plain client for refresh (avoids interceptor recursion). */
-export const rawApi = axios.create({ baseURL });
+export const rawApi = axios.create({ baseURL: '' });
 
-const api = axios.create({ baseURL });
-
-const ACCESS_TOKEN_KEY = 'accessToken';
+const api = axios.create({ baseURL: '' });
 
 interface RefreshResponseBody {
   accessToken: string;
@@ -25,10 +19,6 @@ interface RefreshResponseBody {
 
 let refreshPromise: Promise<string | null> | null = null;
 
-/**
- * Skeleton: exchange refresh token for new access (and optional rotation).
- * Wire to your backend contract; on failure callers should clear the session.
- */
 async function performTokenRefresh(): Promise<string | null> {
   const refreshToken = useAuthStore.getState().refreshToken;
   if (!refreshToken) {
@@ -64,13 +54,7 @@ function queueRefresh(): Promise<string | null> {
 }
 
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-  const fromStore = useAuthStore.getState().accessToken;
-  const fromStorage =
-    typeof localStorage !== 'undefined'
-      ? localStorage.getItem(ACCESS_TOKEN_KEY)
-      : null;
-  const token = fromStore ?? fromStorage;
-
+  const token = useAuthStore.getState().accessToken;
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }

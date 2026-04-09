@@ -17,16 +17,16 @@ export default function NotFoundPage() {
               />
             </svg>
           </div>
-          <h1 className="text-xl font-bold text-slate-900">Không tìm thấy trang</h1>
+          <h1 className="text-xl font-bold text-slate-900">Page not found</h1>
           <p className="mt-2 text-sm leading-relaxed text-slate-600">
-            Minh họa: một chú robot đang nhìn vào bản đồ bị lỗi — đường dẫn bạn mở không tồn tại hoặc đã
-            được di chuyển.
+            The page you are looking for does not exist or has been moved.
+            Please check the URL or go back to the home page.
           </p>
           <Link
             to="/"
-            className="mt-6 inline-flex items-center justify-center rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500"
+            className="mt-6 inline-flex items-center justify-center rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 transition-colors"
           >
-            Go Home
+            Go home
           </Link>
         </div>
       </div>

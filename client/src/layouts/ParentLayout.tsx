@@ -31,13 +31,13 @@ const iconProfile = (
 export default function ParentLayout() {
   return (
     <DashboardShell
-      roleLabel="Phụ huynh"
+      roleLabel="Parent"
       sidebarClassName="bg-gradient-to-b from-amber-600 to-orange-900"
       activeNavClassName="bg-white text-amber-900 shadow-sm"
       navItems={[
         { to: '/parent/dashboard', label: 'Dashboard', end: true, icon: iconDashboard },
-        { to: '/parent/results', label: 'Kết quả con', icon: iconResults },
-        { to: '/parent/profile', label: 'Hồ sơ', icon: iconProfile },
+        { to: '/parent/results', label: "Child's Results", icon: iconResults },
+        { to: '/parent/profile', label: 'Profile', icon: iconProfile },
       ]}
     />
   );

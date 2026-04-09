@@ -40,14 +40,14 @@ const iconProfile = (
 export default function StudentLayout() {
   return (
     <DashboardShell
-      roleLabel="Học sinh"
+      roleLabel="Student"
       sidebarClassName="bg-gradient-to-b from-indigo-700 to-indigo-900"
       activeNavClassName="bg-white text-indigo-900 shadow-sm"
       navItems={[
         { to: '/student/dashboard', label: 'Dashboard', end: true, icon: iconDashboard },
-        { to: '/student/exams', label: 'Bài kiểm tra', icon: iconExam },
-        { to: '/student/ai-practice', label: 'Luyện tập AI', icon: iconAI },
-        { to: '/student/profile', label: 'Hồ sơ', icon: iconProfile },
+        { to: '/student/exams', label: 'Exams', icon: iconExam },
+        { to: '/student/ai-practice', label: 'AI Practice', icon: iconAI },
+        { to: '/student/profile', label: 'Profile', icon: iconProfile },
       ]}
     />
   );

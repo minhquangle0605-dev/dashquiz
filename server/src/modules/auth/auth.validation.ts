@@ -1,13 +1,42 @@
-/**
- * Planned Zod schemas (auth module):
- * - loginBodySchema — email, password
- * - refreshBodySchema — refreshToken
- * - forgotPasswordBodySchema — email
- * - resetPasswordBodySchema — token, newPassword, confirmPassword
- * - registerBodySchema (if applicable) — email, password, role, profile fields
- * - changePasswordBodySchema — currentPassword, newPassword
- *
- * Wire with a validation middleware (e.g. parse req.body) in Phase 2+.
- */
+import { z } from 'zod';
 
-export const authSchemas = {} as const;
+export const loginSchema = z.object({
+  email: z
+    .string({ error: 'Email is required' })
+    .email('Invalid email format'),
+  password: z
+    .string({ error: 'Password is required' })
+    .min(6, 'Password must be at least 6 characters'),
+});
+
+export const refreshTokenSchema = z.object({
+  refreshToken: z
+    .string({ error: 'Refresh token is required' })
+    .min(1, 'Refresh token cannot be empty'),
+});
+
+export const forgotPasswordSchema = z.object({
+  email: z
+    .string({ error: 'Email is required' })
+    .email('Invalid email format'),
+});
+
+export const resetPasswordSchema = z.object({
+  token: z
+    .string({ error: 'Reset token is required' })
+    .min(1, 'Reset token cannot be empty'),
+  newPassword: z
+    .string({ error: 'New password is required' })
+    .min(6, 'Password must be at least 6 characters')
+    .max(100, 'Password must not exceed 100 characters'),
+  confirmPassword: z
+    .string({ error: 'Confirm password is required' }),
+}).refine((data) => data.newPassword === data.confirmPassword, {
+  message: 'Passwords do not match',
+  path: ['confirmPassword'],
+});
+
+export type LoginInput = z.infer<typeof loginSchema>;
+export type RefreshTokenInput = z.infer<typeof refreshTokenSchema>;
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
