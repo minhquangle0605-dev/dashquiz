@@ -6,38 +6,21 @@ import axios, {
 import { syncTokensFromRefresh, useAuthStore } from '@/stores/authStore';
 import { API_ENDPOINTS } from '@/utils/constants';
 
-const baseURL = '/api';
+export const rawApi = axios.create({ baseURL: '', withCredentials: true });
 
-export const rawApi = axios.create({ baseURL: '' });
-
-const api = axios.create({ baseURL: '' });
-
-interface RefreshResponseBody {
-  accessToken: string;
-  refreshToken?: string;
-}
+const api = axios.create({ baseURL: '', withCredentials: true });
 
 let refreshPromise: Promise<string | null> | null = null;
 
 async function performTokenRefresh(): Promise<string | null> {
-  const refreshToken = useAuthStore.getState().refreshToken;
-  if (!refreshToken) {
-    useAuthStore.getState().logout();
-    return null;
-  }
-
   try {
-    const { data } = await rawApi.post<RefreshResponseBody>(
+    const { data } = await rawApi.post<{ data: { accessToken: string } }>(
       API_ENDPOINTS.AUTH.REFRESH,
-      { refreshToken }
     );
 
-    const nextRefresh = data.refreshToken ?? refreshToken;
-    syncTokensFromRefresh({
-      accessToken: data.accessToken,
-      refreshToken: nextRefresh,
-    });
-    return data.accessToken;
+    const accessToken = data.data.accessToken;
+    syncTokensFromRefresh({ accessToken });
+    return accessToken;
   } catch {
     useAuthStore.getState().logout();
     return null;

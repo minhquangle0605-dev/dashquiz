@@ -48,11 +48,11 @@ jobs:
 
       - name: Server ESLint
         working-directory: server
-        run: npx eslint src/**/*.ts --max-warnings=50 || true
+        run: npx eslint src/**/*.ts --max-warnings=50
 
       - name: Client ESLint
         working-directory: client
-        run: npx eslint . --max-warnings=50 || true
+        run: npx eslint . --max-warnings=50
 
   # ─── Job 2: Backend Tests ─────────────────────────
   backend-tests:
@@ -114,7 +114,7 @@ jobs:
           DATABASE_URL: postgresql://webquiz:webquiz_test@localhost:5432/webquiz_test
 
       - name: Run database migrations
-        run: npx prisma migrate deploy || true
+        run: npx prisma migrate deploy
         env:
           DATABASE_URL: postgresql://webquiz:webquiz_test@localhost:5432/webquiz_test
 

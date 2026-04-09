@@ -2,6 +2,7 @@ import { Router } from 'express';
 
 import { authenticate, authorize } from '../../middlewares/auth';
 import { validate } from '../../middlewares/validate';
+import { ROLES } from '../../utils/constants';
 import * as analyticsController from './analytics.controller';
 import {
   studentDashboardQuerySchema,
@@ -27,7 +28,7 @@ export const studentAnalyticsRouter = Router();
 studentAnalyticsRouter.get(
   '/dashboard',
   authenticate,
-  authorize('Student'),
+  authorize(ROLES.STUDENT),
   validate(studentDashboardQuerySchema, 'query'),
   analyticsController.getStudentDashboard,
 );
@@ -35,7 +36,7 @@ studentAnalyticsRouter.get(
 studentAnalyticsRouter.get(
   '/analytics/strengths',
   authenticate,
-  authorize('Student'),
+  authorize(ROLES.STUDENT),
   validate(studentStrengthsQuerySchema, 'query'),
   analyticsController.getStudentStrengths,
 );
@@ -43,7 +44,7 @@ studentAnalyticsRouter.get(
 studentAnalyticsRouter.get(
   '/analytics/time',
   authenticate,
-  authorize('Student'),
+  authorize(ROLES.STUDENT),
   validate(studentTimeAnalysisQuerySchema, 'query'),
   analyticsController.getStudentTimeAnalysis,
 );
@@ -51,7 +52,7 @@ studentAnalyticsRouter.get(
 studentAnalyticsRouter.get(
   '/analytics/patterns',
   authenticate,
-  authorize('Student'),
+  authorize(ROLES.STUDENT),
   validate(studentPatternsQuerySchema, 'query'),
   analyticsController.getStudentPatterns,
 );
@@ -59,7 +60,7 @@ studentAnalyticsRouter.get(
 studentAnalyticsRouter.get(
   '/analytics/knowledge-graph',
   authenticate,
-  authorize('Student'),
+  authorize(ROLES.STUDENT),
   validate(studentKnowledgeGraphQuerySchema, 'query'),
   analyticsController.getStudentKnowledgeGraph,
 );
@@ -67,7 +68,7 @@ studentAnalyticsRouter.get(
 studentAnalyticsRouter.get(
   '/analytics/attempts',
   authenticate,
-  authorize('Student'),
+  authorize(ROLES.STUDENT),
   validate(studentAttemptsQuerySchema, 'query'),
   analyticsController.getStudentAttempts,
 );
@@ -82,14 +83,14 @@ export const teacherAnalyticsRouter = Router();
 teacherAnalyticsRouter.get(
   '/classes/:id/dashboard',
   authenticate,
-  authorize('Teacher'),
+  authorize(ROLES.TEACHER),
   analyticsController.getClassDashboard,
 );
 
 teacherAnalyticsRouter.get(
   '/classes/:id/analytics/performance',
   authenticate,
-  authorize('Teacher'),
+  authorize(ROLES.TEACHER),
   validate(classPerformanceQuerySchema, 'query'),
   analyticsController.getClassPerformance,
 );
@@ -97,14 +98,14 @@ teacherAnalyticsRouter.get(
 teacherAnalyticsRouter.get(
   '/exams/:id/analytics/distribution',
   authenticate,
-  authorize('Teacher'),
+  authorize(ROLES.TEACHER),
   analyticsController.getExamDistribution,
 );
 
 teacherAnalyticsRouter.get(
   '/classes/:id/analytics/weak-students',
   authenticate,
-  authorize('Teacher'),
+  authorize(ROLES.TEACHER),
   validate(weakStudentsQuerySchema, 'query'),
   analyticsController.getWeakStudents,
 );
@@ -112,7 +113,7 @@ teacherAnalyticsRouter.get(
 teacherAnalyticsRouter.get(
   '/analytics/compare-classes',
   authenticate,
-  authorize('Teacher'),
+  authorize(ROLES.TEACHER),
   validate(compareClassesQuerySchema, 'query'),
   analyticsController.compareClasses,
 );
@@ -120,7 +121,7 @@ teacherAnalyticsRouter.get(
 teacherAnalyticsRouter.get(
   '/exams/:id/results',
   authenticate,
-  authorize('Teacher'),
+  authorize(ROLES.TEACHER),
   validate(examResultsQuerySchema, 'query'),
   analyticsController.getExamResults,
 );
@@ -128,13 +129,7 @@ teacherAnalyticsRouter.get(
 teacherAnalyticsRouter.post(
   '/reports/export',
   authenticate,
-  authorize('Teacher'),
+  authorize(ROLES.TEACHER),
   validate(exportReportBodySchema, 'body'),
   analyticsController.exportReport,
 );
-
-// Default export for backward compatibility
-const router = Router();
-router.use('/student', studentAnalyticsRouter);
-router.use('/teacher', teacherAnalyticsRouter);
-export default router;

@@ -38,7 +38,6 @@ export const API_ENDPOINTS = {
     REFRESH: '/api/auth/refresh',
     FORGOT_PASSWORD: '/api/auth/forgot-password',
     RESET_PASSWORD: '/api/auth/reset-password',
-    ME: '/api/auth/me',
   },
   USERS: {
     BASE: '/api/users',
@@ -104,10 +103,6 @@ export const API_ENDPOINTS = {
       `/api/classes/${classId}/students/${studentId}`,
     IMPORT_STUDENTS: (id: number) => `/api/classes/${id}/students/import`,
     IMPORT_TEMPLATE: '/api/classes/import-template',
-  },
-  ANALYTICS: {
-    OVERVIEW: '/api/analytics/overview',
-    CLASS: (classId: string) => `/api/analytics/classes/${classId}`,
   },
   STUDENT_ANALYTICS: {
     DASHBOARD: '/api/student/dashboard',

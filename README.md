@@ -1,16 +1,17 @@
 # WebQuiz — High School Learning Analytics Dashboard
 
 Hệ thống kiểm tra trắc nghiệm trực tuyến và phân tích hiệu suất học tập cho trường THPT.
+Ba môn cốt lõi: **Toán**, **Vật lý**, **Hóa học**.
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| **Frontend** | React 18, Vite, TypeScript, Tailwind CSS, Chart.js, D3.js |
+| **Frontend** | React 19, Vite 6, TypeScript, Tailwind CSS 4, Chart.js, D3.js |
 | **Backend** | Node.js 20, Express.js 4, TypeScript, Prisma ORM |
-| **Database** | PostgreSQL 16, Redis 7, MinIO (S3) |
+| **Database** | PostgreSQL 16, Redis 7, MinIO (S3-compatible) |
 | **Real-time** | Socket.IO |
-| **AI** | OpenAI GPT-4 |
+| **State** | Zustand, TanStack Query |
 | **DevOps** | Docker Compose, GitHub Actions |
 
 ## Prerequisites
@@ -59,7 +60,7 @@ npm run dev
 
 ```
 webquiz/
-├── client/              # React 18 + Vite + TypeScript
+├── client/              # React 19 + Vite 6 + TypeScript
 ├── server/              # Node.js 20 + Express 4 + TypeScript
 ├── prisma/              # Prisma schema + migrations + seed
 ├── docker/              # Dockerfiles for each service

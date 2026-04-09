@@ -51,11 +51,10 @@ describe('AuthService', () => {
         password: 'Password123!',
       });
 
-      expect(result.success).toBe(true);
-      expect(result.data.accessToken).toBeDefined();
-      expect(result.data.refreshToken).toBeDefined();
-      expect(result.data.user.email).toBe('student@test.com');
-      expect(result.data.user.role).toBe('student');
+      expect(result.accessToken).toBeDefined();
+      expect(result.refreshToken).toBeDefined();
+      expect(result.user.email).toBe('student@test.com');
+      expect(result.user.role).toBe('student');
       expect(redisMock.set).toHaveBeenCalled();
     });
 
@@ -96,7 +95,7 @@ describe('AuthService', () => {
       });
 
       const decoded = jwt.verify(
-        result.data.accessToken,
+        result.accessToken,
         process.env.JWT_SECRET!,
       ) as jwt.JwtPayload;
 
@@ -125,14 +124,14 @@ describe('AuthService', () => {
 
   describe('logout', () => {
     it('should delete refresh token from Redis', async () => {
-      const result = await authService.logout('some-refresh-token');
+      const result = await authService.logout('some-refresh-token', undefined);
 
       expect(result.success).toBe(true);
       expect(redisMock.del).toHaveBeenCalledWith('refresh_token:some-refresh-token');
     });
 
     it('should succeed even with empty token', async () => {
-      const result = await authService.logout('');
+      const result = await authService.logout('', undefined);
 
       expect(result.success).toBe(true);
     });
@@ -143,11 +142,10 @@ describe('AuthService', () => {
       redisMock.get.mockResolvedValueOnce('1');
       prismaMock.user.findUnique.mockResolvedValue(mockUser);
 
-      const result = await authService.refresh({ refreshToken: 'valid-refresh-token' });
+      const result = await authService.refresh('valid-refresh-token');
 
-      expect(result.success).toBe(true);
-      expect(result.data.accessToken).toBeDefined();
-      expect(result.data.refreshToken).toBeDefined();
+      expect(result.accessToken).toBeDefined();
+      expect(result.refreshToken).toBeDefined();
       expect(redisMock.del).toHaveBeenCalled();
     });
 
@@ -155,7 +153,7 @@ describe('AuthService', () => {
       redisMock.get.mockResolvedValueOnce(null);
 
       await expect(
-        authService.refresh({ refreshToken: 'invalid-token' }),
+        authService.refresh('invalid-token'),
       ).rejects.toThrow('Invalid or expired refresh token');
     });
 
@@ -167,7 +165,7 @@ describe('AuthService', () => {
       });
 
       await expect(
-        authService.refresh({ refreshToken: 'valid-token' }),
+        authService.refresh('valid-token'),
       ).rejects.toThrow('User not found or account disabled');
     });
   });

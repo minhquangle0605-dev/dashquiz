@@ -2,6 +2,7 @@ import { Router } from 'express';
 
 import { authenticate, authorize } from '../../middlewares/auth';
 import { validate } from '../../middlewares/validate';
+import { ROLES } from '../../utils/constants';
 import * as parentController from './parent.controller';
 import {
   linkStudentBodySchema,
@@ -15,7 +16,7 @@ const router = Router();
 router.post(
   '/link-student',
   authenticate,
-  authorize('Parent'),
+  authorize(ROLES.PARENT),
   validate(linkStudentBodySchema, 'body'),
   parentController.linkStudent,
 );
@@ -24,7 +25,7 @@ router.post(
 router.get(
   '/children',
   authenticate,
-  authorize('Parent'),
+  authorize(ROLES.PARENT),
   parentController.getChildren,
 );
 
@@ -32,7 +33,7 @@ router.get(
 router.get(
   '/children/:id/results',
   authenticate,
-  authorize('Parent'),
+  authorize(ROLES.PARENT),
   validate(childResultsQuerySchema, 'query'),
   parentController.getChildResults,
 );
@@ -41,7 +42,7 @@ router.get(
 router.get(
   '/children/:id/dashboard',
   authenticate,
-  authorize('Parent'),
+  authorize(ROLES.PARENT),
   validate(childAnalyticsQuerySchema, 'query'),
   parentController.getChildDashboard,
 );
@@ -50,7 +51,7 @@ router.get(
 router.get(
   '/children/:id/analytics/strengths',
   authenticate,
-  authorize('Parent'),
+  authorize(ROLES.PARENT),
   validate(childAnalyticsQuerySchema, 'query'),
   parentController.getChildStrengths,
 );
@@ -59,7 +60,7 @@ router.get(
 router.post(
   '/generate-link-code/:studentId',
   authenticate,
-  authorize('Admin'),
+  authorize(ROLES.ADMIN),
   parentController.generateLinkCode,
 );
 

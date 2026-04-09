@@ -18,6 +18,10 @@ export const redisMock = {
     const matched = [...store.keys()].filter((k) => k.startsWith(prefix));
     return Promise.resolve(matched);
   }),
+  scan: jest.fn((_cursor: string, ..._args: unknown[]) => {
+    return Promise.resolve(['0', [] as string[]]);
+  }),
+  ping: jest.fn(() => Promise.resolve('PONG')),
   incr: jest.fn((key: string) => {
     const val = parseInt(store.get(key) ?? '0', 10) + 1;
     store.set(key, val.toString());

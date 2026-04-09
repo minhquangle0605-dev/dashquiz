@@ -6,14 +6,13 @@ import type { AuthTokens, User } from '@/types/user';
 export interface AuthState {
   user: User | null;
   accessToken: string | null;
-  refreshToken: string | null;
 }
 
 interface AuthActions {
   login: (userData: User, tokens: AuthTokens) => void;
   logout: () => void;
   setUser: (user: User | null) => void;
-  setTokens: (tokens: AuthTokens) => void;
+  setAccessToken: (token: string) => void;
 }
 
 export type AuthStore = AuthState & AuthActions;
@@ -28,31 +27,21 @@ export const useAuthStore = create<AuthStore>()(
     (set) => ({
       user: null,
       accessToken: null,
-      refreshToken: null,
 
       login: (userData, tokens) => {
         set({
           user: userData,
           accessToken: tokens.accessToken,
-          refreshToken: tokens.refreshToken,
         });
       },
 
       logout: () => {
-        set({
-          user: null,
-          accessToken: null,
-          refreshToken: null,
-        });
+        set({ user: null, accessToken: null });
       },
 
       setUser: (user) => set({ user }),
 
-      setTokens: (tokens) =>
-        set({
-          accessToken: tokens.accessToken,
-          refreshToken: tokens.refreshToken,
-        }),
+      setAccessToken: (token) => set({ accessToken: token }),
     }),
     {
       name: 'webquiz-auth',
@@ -60,12 +49,11 @@ export const useAuthStore = create<AuthStore>()(
       partialize: (state) => ({
         user: state.user,
         accessToken: state.accessToken,
-        refreshToken: state.refreshToken,
       }),
     }
   )
 );
 
 export function syncTokensFromRefresh(tokens: AuthTokens): void {
-  useAuthStore.getState().setTokens(tokens);
+  useAuthStore.getState().setAccessToken(tokens.accessToken);
 }

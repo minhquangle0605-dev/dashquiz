@@ -42,3 +42,6 @@ export const FILE_UPLOAD = {
   ALLOWED_IMAGE_TYPES: ['image/jpeg', 'image/png', 'image/webp'],
   MAX_EXCEL_SIZE: 10 * 1024 * 1024, // 10MB
 } as const;
+
+export const TOKEN_BLACKLIST_PREFIX = 'bl:' as const;
+export const REFRESH_COOKIE_NAME = 'webquiz_rt' as const;

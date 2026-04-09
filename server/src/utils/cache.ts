@@ -23,14 +23,21 @@ export async function cacheSet(key: string, data: unknown, ttl: number = DEFAULT
   }
 }
 
-/** Uses KEYS — suitable for dev/small datasets; prefer SCAN in high-traffic production. */
+/**
+ * Invalidate cache keys matching a glob pattern using SCAN (non-blocking).
+ * Reference: https://redis.io/docs/latest/commands/scan/
+ */
 export async function cacheInvalidate(pattern: string): Promise<void> {
   try {
     const redis = getRedisClient();
-    const keys = await redis.keys(pattern);
-    if (keys.length > 0) {
-      await redis.del(...keys);
-    }
+    let cursor = '0';
+    do {
+      const [nextCursor, keys] = await redis.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
+      cursor = nextCursor;
+      if (keys.length > 0) {
+        await redis.del(...keys);
+      }
+    } while (cursor !== '0');
   } catch (err) {
     logger.warn('Redis cache invalidation failed:', err);
   }

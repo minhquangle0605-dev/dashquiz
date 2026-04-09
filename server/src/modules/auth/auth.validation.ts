@@ -10,9 +10,7 @@ export const loginSchema = z.object({
 });
 
 export const refreshTokenSchema = z.object({
-  refreshToken: z
-    .string({ error: 'Refresh token is required' })
-    .min(1, 'Refresh token cannot be empty'),
+  refreshToken: z.string().optional(),
 });
 
 export const forgotPasswordSchema = z.object({

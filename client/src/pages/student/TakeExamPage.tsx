@@ -21,6 +21,7 @@ import type { ExamQuestion, StartExamData } from '@/types/exam';
 const AUTO_SAVE_INTERVAL = 30_000;
 const WARNING_THRESHOLD = 300;
 const CRITICAL_THRESHOLD = 60;
+const TAB_SWITCH_WARN_LIMIT = 3;
 
 export default function TakeExamPage() {
   const { id } = useParams<{ id: string }>();
@@ -38,6 +39,8 @@ export default function TakeExamPage() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [tabSwitchCount, setTabSwitchCount] = useState(0);
+  const [showTabWarning, setShowTabWarning] = useState(false);
 
   const pendingSave = useRef<Record<string, number | null>>({});
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -135,6 +138,66 @@ export default function TakeExamPage() {
     };
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
+  }, [examData]);
+
+  // Anti-cheat: Tab switch / visibility change detection
+  useEffect(() => {
+    if (!examData || hasSubmitted.current) return;
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        setTabSwitchCount((prev) => {
+          const next = prev + 1;
+          if (next >= TAB_SWITCH_WARN_LIMIT) {
+            toast.error(
+              `Warning: You have switched tabs ${next} times. This activity is being recorded.`,
+              { duration: 5000 },
+            );
+          }
+          return next;
+        });
+        setShowTabWarning(true);
+        setTimeout(() => setShowTabWarning(false), 5000);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [examData]);
+
+  // Anti-cheat: Prevent copy, paste, right-click, and keyboard shortcuts
+  useEffect(() => {
+    if (!examData || hasSubmitted.current) return;
+
+    const preventCopy = (e: ClipboardEvent) => {
+      e.preventDefault();
+      toast.error('Copying is not allowed during the exam.');
+    };
+    const preventContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+    };
+    const preventShortcuts = (e: KeyboardEvent) => {
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        ['c', 'v', 'a', 'u', 'p'].includes(e.key.toLowerCase())
+      ) {
+        e.preventDefault();
+      }
+      if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && e.key === 'I')) {
+        e.preventDefault();
+      }
+    };
+
+    document.addEventListener('copy', preventCopy);
+    document.addEventListener('paste', preventCopy);
+    document.addEventListener('contextmenu', preventContextMenu);
+    document.addEventListener('keydown', preventShortcuts);
+    return () => {
+      document.removeEventListener('copy', preventCopy);
+      document.removeEventListener('paste', preventCopy);
+      document.removeEventListener('contextmenu', preventContextMenu);
+      document.removeEventListener('keydown', preventShortcuts);
+    };
   }, [examData]);
 
   const performSave = useCallback(() => {
@@ -276,6 +339,16 @@ export default function TakeExamPage() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-3.5rem)] -m-4 sm:-m-6">
+      {/* Tab-switch warning banner */}
+      {showTabWarning && (
+        <div className="bg-red-600 px-4 py-2 text-center text-sm font-medium text-white">
+          <svg className="mr-2 inline h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+          </svg>
+          Tab switch detected ({tabSwitchCount}/{TAB_SWITCH_WARN_LIMIT}). This activity is being recorded by the system.
+        </div>
+      )}
+
       {/* Offline warning banner */}
       {!isOnline && (
         <div className="bg-amber-500 px-4 py-2 text-center text-sm font-medium text-white">
@@ -303,6 +376,16 @@ export default function TakeExamPage() {
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Tab switch indicator */}
+          {tabSwitchCount > 0 && (
+            <div className="hidden sm:flex items-center gap-1.5 rounded-lg bg-red-50 px-2.5 py-2 text-xs font-medium text-red-700">
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.64 0 8.577 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.64 0-8.577-3.007-9.963-7.178z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              {tabSwitchCount} tab switch{tabSwitchCount > 1 ? 'es' : ''}
+            </div>
+          )}
           {/* Timer */}
           <div
             className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-bold tabular-nums min-h-[44px] ${

@@ -2,9 +2,10 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
 import { AppError } from './errorHandler';
+import { authService } from '../modules/auth/auth.service';
 import type { JwtPayload } from '../types/common';
 
-export const authenticate = (req: Request, _res: Response, next: NextFunction): void => {
+export const authenticate = async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -17,6 +18,14 @@ export const authenticate = (req: Request, _res: Response, next: NextFunction): 
     }
 
     const decoded = jwt.verify(token, env.jwt.secret) as JwtPayload;
+
+    if (decoded.jti) {
+      const blacklisted = await authService.isTokenBlacklisted(decoded.jti);
+      if (blacklisted) {
+        throw new AppError('Token has been revoked', 401);
+      }
+    }
+
     req.user = {
       id: decoded.id,
       email: decoded.email,

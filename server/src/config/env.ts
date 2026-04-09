@@ -1,12 +1,27 @@
 import dotenv from 'dotenv';
 import path from 'path';
 
-// Load root .env first (project root), then server/.env as override
 dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
+const nodeEnv = process.env.NODE_ENV || 'development';
+const isProduction = nodeEnv === 'production';
+
+const jwtSecret = process.env.JWT_SECRET || 'dev-secret';
+if (isProduction && jwtSecret === 'dev-secret') {
+  throw new Error(
+    'FATAL: JWT_SECRET must be set to a strong random value in production. ' +
+    'Generate one with: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))"',
+  );
+}
+
+if (isProduction && !process.env.DATABASE_URL) {
+  throw new Error('FATAL: DATABASE_URL must be set in production.');
+}
+
 export const env = {
-  nodeEnv: process.env.NODE_ENV || 'development',
+  nodeEnv,
+  isProduction,
   port: parseInt(process.env.PORT || '3000', 10),
   clientUrl: process.env.CLIENT_URL || 'http://localhost:5173',
 
@@ -35,9 +50,16 @@ export const env = {
   },
 
   jwt: {
-    secret: process.env.JWT_SECRET || 'dev-secret',
+    secret: jwtSecret,
     accessExpiry: process.env.JWT_ACCESS_EXPIRY || '15m',
     refreshExpiry: process.env.JWT_REFRESH_EXPIRY || '7d',
+  },
+
+  cookie: {
+    secure: isProduction,
+    sameSite: 'strict' as const,
+    refreshMaxAge: 7 * 24 * 60 * 60 * 1000,
+    path: '/api/auth',
   },
 
   smtp: {

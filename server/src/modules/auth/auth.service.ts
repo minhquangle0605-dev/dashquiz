@@ -8,10 +8,10 @@ import { getRedisClient } from '../../config/redis';
 import { env } from '../../config/env';
 import { AppError } from '../../middlewares/errorHandler';
 import { logger } from '../../utils/logger';
+import { TOKEN_BLACKLIST_PREFIX } from '../../utils/constants';
 import type { JwtPayload } from '../../types/common';
 import type {
   LoginInput,
-  RefreshTokenInput,
   ForgotPasswordInput,
   ResetPasswordInput,
 } from './auth.validation';
@@ -21,8 +21,9 @@ const REFRESH_TTL = 7 * 24 * 60 * 60; // 7 days in seconds
 
 export class AuthService {
   private generateAccessToken(payload: JwtPayload): string {
+    const jti = crypto.randomBytes(16).toString('hex');
     return jwt.sign(
-      { id: payload.id, email: payload.email, role: payload.role },
+      { id: payload.id, email: payload.email, role: payload.role, jti },
       env.jwt.secret,
       { expiresIn: env.jwt.accessExpiry as StringValue },
     );
@@ -46,6 +47,64 @@ export class AuthService {
     const redis = getRedisClient();
     const userId = await redis.get(`${REFRESH_PREFIX}${token}`);
     return userId ? parseInt(userId, 10) : null;
+  }
+
+  /**
+   * Revoke all refresh tokens for a user via SCAN (non-blocking, production-safe).
+   * Reference: https://redis.io/docs/latest/commands/scan/
+   */
+  private async deleteAllRefreshTokensForUser(userId: number): Promise<void> {
+    const redis = getRedisClient();
+    const userIdStr = userId.toString();
+    let cursor = '0';
+
+    do {
+      const [nextCursor, keys] = await redis.scan(
+        cursor,
+        'MATCH',
+        `${REFRESH_PREFIX}*`,
+        'COUNT',
+        100,
+      );
+      cursor = nextCursor;
+
+      for (const key of keys) {
+        const val = await redis.get(key);
+        if (val === userIdStr) {
+          await redis.del(key);
+        }
+      }
+    } while (cursor !== '0');
+  }
+
+  /**
+   * Blacklist an access token so it cannot be reused after logout.
+   * TTL = remaining lifetime of the token.
+   * Reference: https://redis.io/tutorials/authentication-token-storage-with-redis/
+   */
+  async blacklistAccessToken(accessToken: string): Promise<void> {
+    try {
+      const decoded = jwt.decode(accessToken) as JwtPayload | null;
+      if (!decoded?.jti || !decoded.exp) return;
+
+      const remainingSec = decoded.exp - Math.floor(Date.now() / 1000);
+      if (remainingSec <= 0) return;
+
+      const redis = getRedisClient();
+      await redis.set(`${TOKEN_BLACKLIST_PREFIX}${decoded.jti}`, '1', 'EX', remainingSec);
+    } catch (err) {
+      logger.warn('Failed to blacklist access token:', err);
+    }
+  }
+
+  async isTokenBlacklisted(jti: string): Promise<boolean> {
+    try {
+      const redis = getRedisClient();
+      const result = await redis.get(`${TOKEN_BLACKLIST_PREFIX}${jti}`);
+      return result !== null;
+    } catch {
+      return false;
+    }
   }
 
   private getTransporter() {
@@ -98,37 +157,32 @@ export class AuthService {
     });
 
     return {
-      success: true,
-      message: 'Login successful',
-      data: {
-        accessToken,
-        refreshToken,
-        user: {
-          id: user.id,
-          username: user.username,
-          email: user.email,
-          fullName: user.fullName,
-          avatar: user.avatar,
-          role: user.role.name,
-        },
+      accessToken,
+      refreshToken,
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        fullName: user.fullName,
+        avatar: user.avatar,
+        role: user.role.name,
       },
     };
   }
 
-  async logout(refreshToken: string) {
+  async logout(refreshToken: string | undefined, accessToken: string | undefined) {
     if (refreshToken) {
       await this.deleteRefreshToken(refreshToken);
     }
+    if (accessToken) {
+      await this.blacklistAccessToken(accessToken);
+    }
 
-    return {
-      success: true,
-      message: 'Logout successful',
-      data: null,
-    };
+    return { success: true, message: 'Logout successful', data: null };
   }
 
-  async refresh(data: RefreshTokenInput) {
-    const userId = await this.getRefreshTokenUserId(data.refreshToken);
+  async refresh(refreshToken: string) {
+    const userId = await this.getRefreshTokenUserId(refreshToken);
     if (!userId) {
       throw new AppError('Invalid or expired refresh token', 401);
     }
@@ -139,11 +193,11 @@ export class AuthService {
     });
 
     if (!user || user.status !== 'ACTIVE') {
-      await this.deleteRefreshToken(data.refreshToken);
+      await this.deleteRefreshToken(refreshToken);
       throw new AppError('User not found or account disabled', 401);
     }
 
-    await this.deleteRefreshToken(data.refreshToken);
+    await this.deleteRefreshToken(refreshToken);
 
     const jwtPayload: JwtPayload = {
       id: user.id,
@@ -157,12 +211,8 @@ export class AuthService {
     await this.storeRefreshToken(user.id, newRefreshToken);
 
     return {
-      success: true,
-      message: 'Token refreshed successfully',
-      data: {
-        accessToken: newAccessToken,
-        refreshToken: newRefreshToken,
-      },
+      accessToken: newAccessToken,
+      refreshToken: newRefreshToken,
     };
   }
 
@@ -254,14 +304,7 @@ export class AuthService {
       }),
     ]);
 
-    const redis = getRedisClient();
-    const keys = await redis.keys(`${REFRESH_PREFIX}*`);
-    for (const key of keys) {
-      const val = await redis.get(key);
-      if (val === resetRecord.userId.toString()) {
-        await redis.del(key);
-      }
-    }
+    await this.deleteAllRefreshTokensForUser(resetRecord.userId);
 
     return {
       success: true,

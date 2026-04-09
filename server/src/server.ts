@@ -11,13 +11,22 @@ import { initSocketServer } from './socket';
 const PORT = env.port;
 
 async function bootstrap() {
+  // Database is a hard requirement — crash if it fails
+  await connectDatabase();
+
+  // Redis and MinIO can gracefully degrade
   try {
-    await connectDatabase();
     await connectRedis();
+  } catch (error) {
+    logger.error('Redis initialization failed (non-fatal):', error);
+    logger.warn('Server will start but caching/realtime may be degraded');
+  }
+
+  try {
     await connectMinio();
   } catch (error) {
-    logger.error('Service initialization failed:', error);
-    logger.warn('Server will start but some services may be unavailable');
+    logger.error('MinIO initialization failed (non-fatal):', error);
+    logger.warn('Server will start but file uploads may be unavailable');
   }
 
   startExamScheduleCron();

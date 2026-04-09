@@ -1,30 +1,32 @@
 import api from './api';
-import type { LoginResponse } from '@/types/user';
+import type { LoginResponse, User } from '@/types/user';
 import { API_ENDPOINTS } from '@/utils/constants';
+
+interface ServerLoginResponse {
+  success: boolean;
+  message: string;
+  data: {
+    accessToken: string;
+    user: User;
+  };
+}
 
 export async function login(
   email: string,
   password: string
 ): Promise<LoginResponse> {
-  const { data } = await api.post<LoginResponse>(API_ENDPOINTS.AUTH.LOGIN, {
-    email,
-    password,
-  });
-  return data;
+  const { data } = await api.post<ServerLoginResponse>(
+    API_ENDPOINTS.AUTH.LOGIN,
+    { email, password },
+  );
+  return {
+    user: data.data.user,
+    tokens: { accessToken: data.data.accessToken },
+  };
 }
 
 export async function logout(): Promise<void> {
   await api.post(API_ENDPOINTS.AUTH.LOGOUT);
-}
-
-export async function refreshToken(
-  token: string
-): Promise<{ accessToken: string }> {
-  const { data } = await api.post<{ accessToken: string }>(
-    API_ENDPOINTS.AUTH.REFRESH,
-    { refreshToken: token }
-  );
-  return data;
 }
 
 export async function forgotPassword(email: string): Promise<void> {

@@ -41,13 +41,11 @@ async function main() {
   });
   console.log(`✓ Admin account seeded: ${admin.email}`);
 
-  // ── 3. Seed Subjects ─────────────────────────────
+  // ── 3. Seed Subjects (Toán, Lý, Hóa — theo proposal) ──
   const subjectsData = [
     { name: 'Toán', code: 'MATH', description: 'Toán học phổ thông — Đại số, Hình học, Giải tích' },
     { name: 'Vật lý', code: 'PHY', description: 'Vật lý phổ thông — Cơ học, Điện, Quang, Nhiệt' },
     { name: 'Hóa học', code: 'CHEM', description: 'Hóa học phổ thông — Vô cơ, Hữu cơ' },
-    { name: 'Sinh học', code: 'BIO', description: 'Sinh học phổ thông — Tế bào, Di truyền, Sinh thái' },
-    { name: 'Tiếng Anh', code: 'ENG', description: 'Tiếng Anh — Ngữ pháp, Từ vựng, Đọc hiểu' },
   ];
 
   const subjects = await Promise.all(
@@ -140,26 +138,6 @@ async function main() {
         topics: ['Phản ứng oxi hóa khử', 'Tốc độ phản ứng', 'Cân bằng hóa học'],
       },
     ],
-    BIO: [
-      {
-        name: 'Sinh học tế bào',
-        topics: ['Thành phần hóa học của tế bào', 'Cấu trúc tế bào', 'Vận chuyển qua màng'],
-      },
-      {
-        name: 'Di truyền học',
-        topics: ['Cơ sở vật chất của di truyền', 'Quy luật di truyền Mendel', 'Di truyền liên kết'],
-      },
-    ],
-    ENG: [
-      {
-        name: 'Grammar',
-        topics: ['Tenses', 'Conditionals', 'Passive voice', 'Relative clauses', 'Reported speech'],
-      },
-      {
-        name: 'Reading Comprehension',
-        topics: ['Main idea', 'Inference questions', 'Vocabulary in context'],
-      },
-    ],
   };
 
   let totalChapters = 0;
@@ -195,14 +173,24 @@ async function main() {
   console.log(`✓ ${totalTopics} topics seeded`);
 
   // ── 6. Seed Topic Relations (Knowledge Graph) ────
+  // MATH: 0-11, PHY: 12-19, CHEM: 20-29
   const relationsData = [
+    // Toán: Hàm số bậc nhất → Hàm số bậc hai → Đồ thị hàm số
     { fromIdx: 0, toIdx: 1, type: 'prerequisite' },
     { fromIdx: 1, toIdx: 2, type: 'prerequisite' },
     { fromIdx: 0, toIdx: 3, type: 'related' },
+    // Toán: Phương trình bậc hai → Hệ phương trình → Bất phương trình
     { fromIdx: 5, toIdx: 6, type: 'prerequisite' },
     { fromIdx: 6, toIdx: 7, type: 'prerequisite' },
+    // Vật lý: Chuyển động thẳng đều → CĐTBDĐ → Rơi tự do
     { fromIdx: 12, toIdx: 13, type: 'prerequisite' },
     { fromIdx: 13, toIdx: 14, type: 'related' },
+    // Hóa: Thành phần nguyên tử → Cấu hình electron → Bảng tuần hoàn
+    { fromIdx: 20, toIdx: 21, type: 'prerequisite' },
+    { fromIdx: 21, toIdx: 22, type: 'prerequisite' },
+    // Hóa: Phản ứng oxi hóa khử → Tốc độ phản ứng → Cân bằng hóa học
+    { fromIdx: 27, toIdx: 28, type: 'prerequisite' },
+    { fromIdx: 28, toIdx: 29, type: 'related' },
   ];
 
   let relCount = 0;

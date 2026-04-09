@@ -10,7 +10,6 @@ export const handlers = [
         message: 'Login successful',
         data: {
           accessToken: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwiZW1haWwiOiJzdHVkZW50QHRlc3QuY29tIiwicm9sZSI6InN0dWRlbnQiLCJpYXQiOjk5OTk5OTk5OTksImV4cCI6OTk5OTk5OTk5OX0.test',
-          refreshToken: 'test-refresh-token',
           user: {
             id: 1,
             username: 'teststudent',
@@ -45,7 +44,6 @@ export const handlers = [
       success: true,
       data: {
         accessToken: 'new-access-token',
-        refreshToken: 'new-refresh-token',
       },
     });
   }),
