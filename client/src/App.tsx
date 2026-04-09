@@ -17,11 +17,12 @@ const ResetPasswordPage = lazy(() => import('./pages/auth/ResetPasswordPage'));
 const StudentDashboard = lazy(() => import('./pages/student/DashboardPage'));
 const ExamListPage = lazy(() => import('./pages/student/ExamListPage'));
 const TakeExamPage = lazy(() => import('./pages/student/TakeExamPage'));
-const ResultPage = lazy(() => import('./pages/student/ResultPage'));
+const ExamResultPage = lazy(() => import('./pages/student/ExamResultPage'));
 const AIPracticePage = lazy(() => import('./pages/student/AIPracticePage'));
 
 const TeacherDashboard = lazy(() => import('./pages/teacher/DashboardPage'));
 const QuestionBankPage = lazy(() => import('./pages/teacher/QuestionBankPage'));
+const ExamsPage = lazy(() => import('./pages/teacher/ExamsPage'));
 const CreateExamPage = lazy(() => import('./pages/teacher/CreateExamPage'));
 const ClassesPage = lazy(() => import('./pages/teacher/ClassesPage'));
 
@@ -66,7 +67,7 @@ export default function App() {
             <Route path="dashboard" element={<StudentDashboard />} />
             <Route path="exams" element={<ExamListPage />} />
             <Route path="exams/:id/take" element={<TakeExamPage />} />
-            <Route path="exams/:id/result" element={<ResultPage />} />
+            <Route path="attempts/:attemptId/result" element={<ExamResultPage />} />
             <Route path="ai-practice" element={<AIPracticePage />} />
             <Route path="profile" element={<ProfilePage />} />
           </Route>
@@ -78,6 +79,7 @@ export default function App() {
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<TeacherDashboard />} />
             <Route path="questions" element={<QuestionBankPage />} />
+            <Route path="exams" element={<ExamsPage />} />
             <Route path="exams/create" element={<CreateExamPage />} />
             <Route path="classes" element={<ClassesPage />} />
             <Route path="profile" element={<ProfilePage />} />

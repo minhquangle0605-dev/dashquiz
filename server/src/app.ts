@@ -20,6 +20,7 @@ import classRoutes from './modules/class/class.routes';
 import academicRoutes from './modules/academic/academic.routes';
 import systemRoutes from './modules/system/system.routes';
 import curriculumRoutes from './modules/curriculum/curriculum.routes';
+import studentExamRoutes from './modules/student-exam/studentExam.routes';
 
 const app = express();
 
@@ -67,6 +68,7 @@ app.use('/api/classes', classRoutes);
 app.use('/api/admin/users', adminUserRoutes);
 app.use('/api/admin/academic', academicRoutes);
 app.use('/api/admin/system', systemRoutes);
+app.use('/api/student', studentExamRoutes);
 app.use('/api', curriculumRoutes);
 
 // ── API Index ───────────────────────────────────
@@ -89,6 +91,8 @@ app.get('/api', (_req, res) => {
         notifications: '/api/notifications/*',
         classes: '/api/classes/*',
         adminUsers: '/api/admin/users/*',
+        studentExams: '/api/student/exams/*',
+        studentAttempts: '/api/student/attempts/*',
         academic: '/api/admin/academic/*',
         system: '/api/admin/system/*',
       },

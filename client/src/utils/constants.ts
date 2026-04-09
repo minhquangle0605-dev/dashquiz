@@ -15,12 +15,10 @@ export const ROLE_DASHBOARDS: Record<UserRole, string> = {
 };
 
 export const EXAM_STATUS = {
-  DRAFT: 'draft',
-  SCHEDULED: 'scheduled',
-  PUBLISHED: 'published',
-  IN_PROGRESS: 'in_progress',
-  COMPLETED: 'completed',
-  ARCHIVED: 'archived',
+  DRAFT: 'DRAFT',
+  PUBLISHED: 'PUBLISHED',
+  SCHEDULED: 'SCHEDULED',
+  CLOSED: 'CLOSED',
 } as const;
 
 export type ExamStatus = (typeof EXAM_STATUS)[keyof typeof EXAM_STATUS];
@@ -73,9 +71,17 @@ export const API_ENDPOINTS = {
       BACKUP_RESTORE: (id: number) => `/api/admin/system/backups/${id}/restore`,
     },
   },
+  STUDENT_EXAMS: {
+    LIST: '/api/student/exams',
+    START: (examId: number) => `/api/student/exams/${examId}/start`,
+    SAVE: (attemptId: number) => `/api/student/attempts/${attemptId}/save`,
+    SUBMIT: (attemptId: number) => `/api/student/attempts/${attemptId}/submit`,
+    RESULT: (attemptId: number) => `/api/student/attempts/${attemptId}/result`,
+    ATTEMPTS: '/api/student/attempts',
+  },
   EXAMS: {
     BASE: '/api/exams',
-    BY_ID: (id: string) => `/api/exams/${id}`,
+    BY_ID: (id: string | number) => `/api/exams/${id}`,
     ATTEMPTS: (examId: string) => `/api/exams/${examId}/attempts`,
     START: (examId: string) => `/api/exams/${examId}/start`,
     ATTEMPT_ANSWERS: (attemptId: string) =>
@@ -84,6 +90,20 @@ export const API_ENDPOINTS = {
       `/api/exams/attempts/${attemptId}/submit`,
     ATTEMPT_RESULT: (attemptId: string) =>
       `/api/exams/attempts/${attemptId}/result`,
+    QUESTIONS: (id: number) => `/api/exams/${id}/questions`,
+    PUBLISH: (id: number) => `/api/exams/${id}/publish`,
+    SCHEDULE: (id: number) => `/api/exams/${id}/schedule`,
+    ASSIGN: (id: number) => `/api/exams/${id}/assign`,
+    ASSIGNMENTS: (id: number) => `/api/exams/${id}/assignments`,
+  },
+  CLASSES: {
+    BASE: '/api/classes',
+    BY_ID: (id: number) => `/api/classes/${id}`,
+    STUDENTS: (id: number) => `/api/classes/${id}/students`,
+    REMOVE_STUDENT: (classId: number, studentId: number) =>
+      `/api/classes/${classId}/students/${studentId}`,
+    IMPORT_STUDENTS: (id: number) => `/api/classes/${id}/students/import`,
+    IMPORT_TEMPLATE: '/api/classes/import-template',
   },
   ANALYTICS: {
     OVERVIEW: '/api/analytics/overview',

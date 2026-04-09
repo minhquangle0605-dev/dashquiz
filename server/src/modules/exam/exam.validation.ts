@@ -1,11 +1,102 @@
-/**
- * Planned Zod schemas (exam module):
- * - createExamBodySchema — title, description, durationMinutes, questionIds[], settings
- * - updateExamBodySchema — partial settings
- * - examIdParamSchema
- * - scheduleExamBodySchema — openAt, closeAt, timezone
- * - assignExamBodySchema — classIds[], studentIds[]
- * - listExamsQuerySchema — status, classId, academicYearId, page, limit
- */
+import { z } from 'zod';
 
-export const examSchemas = {} as const;
+// ═══════════════════════════════════════════════
+// CREATE EXAM
+// ═══════════════════════════════════════════════
+
+export const createExamSchema = z.object({
+  title: z.string().min(1, 'Title is required').max(200),
+  subjectId: z.coerce.number().int().positive('Subject is required'),
+  durationMin: z.coerce.number().int().positive('Duration must be greater than 0'),
+  totalQuestions: z.coerce.number().int().positive('Total questions must be greater than 0'),
+  passingScore: z.coerce.number().min(0).max(10).optional().nullable(),
+  shuffle: z.boolean().default(false),
+  showResult: z.boolean().default(true),
+  maxAttempts: z.coerce.number().int().min(1).max(10).default(1),
+});
+
+// ═══════════════════════════════════════════════
+// UPDATE EXAM (only when status = DRAFT)
+// ═══════════════════════════════════════════════
+
+export const updateExamSchema = z.object({
+  title: z.string().min(1).max(200).optional(),
+  subjectId: z.coerce.number().int().positive().optional(),
+  durationMin: z.coerce.number().int().positive('Duration must be > 0').optional(),
+  totalQuestions: z.coerce.number().int().positive().optional(),
+  passingScore: z.coerce.number().min(0).max(10).optional().nullable(),
+  shuffle: z.boolean().optional(),
+  showResult: z.boolean().optional(),
+  maxAttempts: z.coerce.number().int().min(1).max(10).optional(),
+});
+
+// ═══════════════════════════════════════════════
+// ADD QUESTIONS TO EXAM
+// ═══════════════════════════════════════════════
+
+export const addQuestionsSchema = z.object({
+  mode: z.enum(['manual', 'random']),
+  questionIds: z.array(z.coerce.number().int().positive()).optional(),
+  randomConfig: z
+    .object({
+      subjectId: z.coerce.number().int().positive(),
+      chapterIds: z.array(z.coerce.number().int().positive()).optional(),
+      difficulty: z.coerce.number().int().min(1).max(5).optional(),
+      count: z.coerce.number().int().positive('Count must be > 0'),
+    })
+    .optional(),
+}).refine(
+  (data) => {
+    if (data.mode === 'manual') return data.questionIds && data.questionIds.length > 0;
+    if (data.mode === 'random') return data.randomConfig != null;
+    return false;
+  },
+  { message: 'manual mode requires questionIds; random mode requires randomConfig' },
+);
+
+// ═══════════════════════════════════════════════
+// SCHEDULE EXAM
+// ═══════════════════════════════════════════════
+
+export const scheduleExamSchema = z
+  .object({
+    startTime: z.coerce.date({ message: 'Start time is required' }),
+    endTime: z.coerce.date({ message: 'End time is required' }),
+  })
+  .refine((d) => d.endTime > d.startTime, {
+    message: 'End time must be after start time',
+    path: ['endTime'],
+  });
+
+// ═══════════════════════════════════════════════
+// ASSIGN EXAM TO CLASSES
+// ═══════════════════════════════════════════════
+
+export const assignExamSchema = z.object({
+  classIds: z
+    .array(z.coerce.number().int().positive())
+    .min(1, 'At least one class is required'),
+});
+
+// ═══════════════════════════════════════════════
+// LIST EXAMS QUERY
+// ═══════════════════════════════════════════════
+
+export const listExamsQuerySchema = z.object({
+  status: z.enum(['DRAFT', 'PUBLISHED', 'SCHEDULED', 'CLOSED']).optional(),
+  subjectId: z.coerce.number().int().positive().optional(),
+  search: z.string().max(200).optional(),
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().max(100).default(20),
+});
+
+// ═══════════════════════════════════════════════
+// TYPE EXPORTS
+// ═══════════════════════════════════════════════
+
+export type CreateExamInput = z.infer<typeof createExamSchema>;
+export type UpdateExamInput = z.infer<typeof updateExamSchema>;
+export type AddQuestionsInput = z.infer<typeof addQuestionsSchema>;
+export type ScheduleExamInput = z.infer<typeof scheduleExamSchema>;
+export type AssignExamInput = z.infer<typeof assignExamSchema>;
+export type ListExamsQuery = z.infer<typeof listExamsQuerySchema>;

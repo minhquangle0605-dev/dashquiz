@@ -1,49 +1,490 @@
-import type { PlaceholderJsonResponse } from '../../types/common';
+import * as XLSX from 'xlsx';
+import { Prisma } from '@prisma/client';
+import { prisma } from '../../config/database';
+import { AppError } from '../../middlewares/errorHandler';
+import { PAGINATION } from '../../utils/constants';
+import type {
+  CreateClassInput,
+  UpdateClassInput,
+  AddStudentsInput,
+  ListClassesQuery,
+  ListStudentsQuery,
+} from './class.validation';
 
-/**
- * Class domain: class management, student enrollment.
- */
+interface ImportError {
+  row: number;
+  field: string;
+  message: string;
+}
+
+interface ExcelStudentRow {
+  email?: string;
+  username?: string;
+  full_name?: string;
+}
+
 export class ClassService {
-  /**
-   * Lists classes the caller may see (teacher/admin/student enrollment).
-   */
-  async listClasses(): Promise<PlaceholderJsonResponse> {
-    return { success: true, message: 'Classes — Phase 5' };
+  // ═══════════════════════════════════════════════
+  // LIST CLASSES
+  // ═══════════════════════════════════════════════
+
+  async listClasses(query: ListClassesQuery, userId: number, role: string) {
+    const page = query.page ?? PAGINATION.DEFAULT_PAGE;
+    const limit = Math.min(query.limit ?? PAGINATION.DEFAULT_LIMIT, PAGINATION.MAX_LIMIT);
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.ClassWhereInput = {};
+
+    if (role === 'teacher') {
+      where.teacherId = userId;
+    }
+
+    if (query.semesterId) where.semesterId = query.semesterId;
+    if (query.subjectId) where.subjectId = query.subjectId;
+    if (query.gradeLevel) where.gradeLevel = query.gradeLevel;
+
+    if (query.search) {
+      where.name = { contains: query.search, mode: 'insensitive' };
+    }
+
+    const [classes, total] = await Promise.all([
+      prisma.class.findMany({
+        where,
+        include: {
+          teacher: { select: { id: true, fullName: true, email: true } },
+          subject: { select: { id: true, name: true, code: true } },
+          semester: {
+            select: {
+              id: true,
+              name: true,
+              academicYear: { select: { id: true, name: true } },
+            },
+          },
+          _count: { select: { classStudents: true, examAssignments: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      prisma.class.count({ where }),
+    ]);
+
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      success: true,
+      message: 'Classes retrieved successfully',
+      data: classes,
+      pagination: { page, limit, total, totalPages, hasNext: page < totalPages, hasPrev: page > 1 },
+    };
   }
 
-  /**
-   * Creates a class with optional join code and academic context.
-   */
-  async createClass(): Promise<PlaceholderJsonResponse> {
-    return { success: true, message: 'Create class — placeholder' };
+  // ═══════════════════════════════════════════════
+  // CREATE CLASS
+  // ═══════════════════════════════════════════════
+
+  async createClass(data: CreateClassInput, teacherId: number) {
+    const [semester, subject] = await Promise.all([
+      prisma.semester.findUnique({ where: { id: data.semesterId } }),
+      prisma.subject.findUnique({ where: { id: data.subjectId } }),
+    ]);
+
+    if (!semester) throw new AppError('Semester not found', 404);
+    if (!subject) throw new AppError('Subject not found', 404);
+
+    const classEntity = await prisma.class.create({
+      data: {
+        name: data.name,
+        gradeLevel: data.gradeLevel,
+        semesterId: data.semesterId,
+        teacherId,
+        subjectId: data.subjectId,
+      },
+      include: {
+        teacher: { select: { id: true, fullName: true, email: true } },
+        subject: { select: { id: true, name: true, code: true } },
+        semester: {
+          select: {
+            id: true,
+            name: true,
+            academicYear: { select: { id: true, name: true } },
+          },
+        },
+      },
+    });
+
+    return {
+      success: true,
+      message: 'Class created successfully',
+      data: classEntity,
+    };
   }
 
-  /**
-   * Updates class metadata (name, schedule ref, homeroom teacher).
-   */
-  async updateClass(_classId: string): Promise<PlaceholderJsonResponse> {
-    return { success: true, message: 'Update class — placeholder' };
+  // ═══════════════════════════════════════════════
+  // UPDATE CLASS
+  // ═══════════════════════════════════════════════
+
+  async updateClass(id: number, data: UpdateClassInput, userId: number, role: string) {
+    const classEntity = await prisma.class.findUnique({ where: { id } });
+    if (!classEntity) throw new AppError('Class not found', 404);
+
+    if (role === 'teacher' && classEntity.teacherId !== userId) {
+      throw new AppError('You can only edit your own classes', 403);
+    }
+
+    if (data.semesterId) {
+      const semester = await prisma.semester.findUnique({ where: { id: data.semesterId } });
+      if (!semester) throw new AppError('Semester not found', 404);
+    }
+
+    if (data.subjectId) {
+      const subject = await prisma.subject.findUnique({ where: { id: data.subjectId } });
+      if (!subject) throw new AppError('Subject not found', 404);
+    }
+
+    const updated = await prisma.class.update({
+      where: { id },
+      data: {
+        ...(data.name !== undefined && { name: data.name }),
+        ...(data.gradeLevel !== undefined && { gradeLevel: data.gradeLevel }),
+        ...(data.semesterId !== undefined && { semesterId: data.semesterId }),
+        ...(data.subjectId !== undefined && { subjectId: data.subjectId }),
+      },
+      include: {
+        teacher: { select: { id: true, fullName: true, email: true } },
+        subject: { select: { id: true, name: true, code: true } },
+        semester: {
+          select: {
+            id: true,
+            name: true,
+            academicYear: { select: { id: true, name: true } },
+          },
+        },
+      },
+    });
+
+    return {
+      success: true,
+      message: 'Class updated successfully',
+      data: updated,
+    };
   }
 
-  /**
-   * Enrolls a student in a class; validates capacity and duplicates.
-   */
-  async enrollStudent(_classId: string, _studentId: string): Promise<PlaceholderJsonResponse> {
-    return { success: true, message: 'Enroll student — placeholder' };
+  // ═══════════════════════════════════════════════
+  // LIST STUDENTS IN CLASS
+  // ═══════════════════════════════════════════════
+
+  async listStudents(classId: number, query: ListStudentsQuery) {
+    const classEntity = await prisma.class.findUnique({ where: { id: classId } });
+    if (!classEntity) throw new AppError('Class not found', 404);
+
+    const page = query.page ?? PAGINATION.DEFAULT_PAGE;
+    const limit = Math.min(query.limit ?? 50, PAGINATION.MAX_LIMIT);
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.ClassStudentWhereInput = { classId };
+
+    if (query.search) {
+      where.student = {
+        OR: [
+          { fullName: { contains: query.search, mode: 'insensitive' } },
+          { email: { contains: query.search, mode: 'insensitive' } },
+          { username: { contains: query.search, mode: 'insensitive' } },
+        ],
+      };
+    }
+
+    const [students, total] = await Promise.all([
+      prisma.classStudent.findMany({
+        where,
+        include: {
+          student: {
+            select: {
+              id: true,
+              username: true,
+              email: true,
+              fullName: true,
+              phone: true,
+              avatar: true,
+              status: true,
+            },
+          },
+        },
+        orderBy: { enrolledAt: 'asc' },
+        skip,
+        take: limit,
+      }),
+      prisma.classStudent.count({ where }),
+    ]);
+
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      success: true,
+      message: 'Students retrieved successfully',
+      data: students.map((cs) => ({
+        ...cs.student,
+        enrolledAt: cs.enrolledAt,
+      })),
+      pagination: { page, limit, total, totalPages, hasNext: page < totalPages, hasPrev: page > 1 },
+    };
   }
 
-  /**
-   * Removes a student from a class roster.
-   */
-  async unenrollStudent(_classId: string, _studentId: string): Promise<PlaceholderJsonResponse> {
-    return { success: true, message: 'Unenroll student — placeholder' };
+  // ═══════════════════════════════════════════════
+  // ADD STUDENTS TO CLASS
+  // ═══════════════════════════════════════════════
+
+  async addStudents(classId: number, data: AddStudentsInput, userId: number, role: string) {
+    const classEntity = await prisma.class.findUnique({ where: { id: classId } });
+    if (!classEntity) throw new AppError('Class not found', 404);
+
+    if (role === 'teacher' && classEntity.teacherId !== userId) {
+      throw new AppError('You can only manage your own classes', 403);
+    }
+
+    const studentRole = await prisma.role.findFirst({ where: { name: 'student' } });
+    if (!studentRole) throw new AppError('Student role not configured', 500);
+
+    const students = await prisma.user.findMany({
+      where: { id: { in: data.userIds }, roleId: studentRole.id },
+      select: { id: true },
+    });
+
+    const foundIds = new Set(students.map((s) => s.id));
+    const invalidIds = data.userIds.filter((uid) => !foundIds.has(uid));
+    if (invalidIds.length > 0) {
+      throw new AppError(`Students not found or not student role: ${invalidIds.join(', ')}`, 404);
+    }
+
+    const existing = await prisma.classStudent.findMany({
+      where: { classId, studentId: { in: data.userIds } },
+      select: { studentId: true },
+    });
+    const alreadyEnrolled = new Set(existing.map((cs) => cs.studentId));
+    const newIds = data.userIds.filter((uid) => !alreadyEnrolled.has(uid));
+
+    if (newIds.length === 0) {
+      return {
+        success: true,
+        message: 'All students already enrolled in this class',
+        data: { added: 0, skipped: data.userIds.length },
+      };
+    }
+
+    await prisma.classStudent.createMany({
+      data: newIds.map((studentId) => ({ classId, studentId })),
+    });
+
+    return {
+      success: true,
+      message: `Added ${newIds.length} student(s) to class`,
+      data: {
+        added: newIds.length,
+        skipped: data.userIds.length - newIds.length,
+      },
+    };
   }
 
-  /**
-   * Bulk enroll from CSV/Excel or selected ids.
-   */
-  async bulkEnroll(_classId: string, _studentIds: string[]): Promise<PlaceholderJsonResponse> {
-    return { success: true, message: `Bulk enroll ${_classId} — placeholder` };
+  // ═══════════════════════════════════════════════
+  // REMOVE STUDENT FROM CLASS
+  // ═══════════════════════════════════════════════
+
+  async removeStudent(classId: number, studentId: number, userId: number, role: string) {
+    const classEntity = await prisma.class.findUnique({ where: { id: classId } });
+    if (!classEntity) throw new AppError('Class not found', 404);
+
+    if (role === 'teacher' && classEntity.teacherId !== userId) {
+      throw new AppError('You can only manage your own classes', 403);
+    }
+
+    const enrollment = await prisma.classStudent.findUnique({
+      where: { classId_studentId: { classId, studentId } },
+    });
+
+    if (!enrollment) {
+      throw new AppError('Student is not enrolled in this class', 404);
+    }
+
+    await prisma.classStudent.delete({
+      where: { classId_studentId: { classId, studentId } },
+    });
+
+    return {
+      success: true,
+      message: 'Student removed from class successfully',
+      data: null,
+    };
+  }
+
+  // ═══════════════════════════════════════════════
+  // IMPORT STUDENTS FROM EXCEL
+  // ═══════════════════════════════════════════════
+
+  async importStudentsFromExcel(
+    classId: number,
+    fileBuffer: Buffer,
+    userId: number,
+    role: string,
+  ) {
+    const classEntity = await prisma.class.findUnique({ where: { id: classId } });
+    if (!classEntity) throw new AppError('Class not found', 404);
+
+    if (role === 'teacher' && classEntity.teacherId !== userId) {
+      throw new AppError('You can only manage your own classes', 403);
+    }
+
+    const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    if (!sheetName) throw new AppError('Excel file has no sheets', 400);
+
+    const rows = XLSX.utils.sheet_to_json<ExcelStudentRow>(workbook.Sheets[sheetName], {
+      defval: '',
+    });
+
+    if (rows.length === 0) throw new AppError('Excel file is empty', 400);
+
+    const headers = Object.keys(rows[0] || {}).map((h) => h.toLowerCase().trim());
+    const hasEmail = headers.includes('email');
+    const hasUsername = headers.includes('username');
+
+    if (!hasEmail && !hasUsername) {
+      throw new AppError(
+        'Excel must contain at least an "email" or "username" column to identify students',
+        400,
+      );
+    }
+
+    const errors: ImportError[] = [];
+    const lookupEmails: string[] = [];
+    const lookupUsernames: string[] = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const rowNum = i + 2;
+      const email = String(row.email || '').trim().toLowerCase();
+      const username = String(row.username || '').trim();
+
+      if (!email && !username) {
+        errors.push({ row: rowNum, field: 'email/username', message: 'Both email and username are empty' });
+        continue;
+      }
+
+      if (email) lookupEmails.push(email);
+      if (username) lookupUsernames.push(username);
+    }
+
+    if (lookupEmails.length === 0 && lookupUsernames.length === 0) {
+      return {
+        success: false,
+        message: 'No valid student identifiers found in file',
+        data: { enrolled: 0, failed: rows.length, errors },
+      };
+    }
+
+    const studentRole = await prisma.role.findFirst({ where: { name: 'student' } });
+    if (!studentRole) throw new AppError('Student role not configured', 500);
+
+    const foundStudents = await prisma.user.findMany({
+      where: {
+        roleId: studentRole.id,
+        OR: [
+          ...(lookupEmails.length > 0 ? [{ email: { in: lookupEmails } }] : []),
+          ...(lookupUsernames.length > 0 ? [{ username: { in: lookupUsernames } }] : []),
+        ],
+      },
+      select: { id: true, email: true, username: true },
+    });
+
+    const emailMap = new Map(foundStudents.map((s) => [s.email.toLowerCase(), s.id]));
+    const usernameMap = new Map(foundStudents.map((s) => [s.username.toLowerCase(), s.id]));
+
+    const studentIds: number[] = [];
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const rowNum = i + 2;
+      const email = String(row.email || '').trim().toLowerCase();
+      const username = String(row.username || '').trim().toLowerCase();
+
+      let studentId = emailMap.get(email) ?? usernameMap.get(username);
+
+      if (!studentId) {
+        errors.push({
+          row: rowNum,
+          field: 'email/username',
+          message: `Student not found: ${email || username}`,
+        });
+        continue;
+      }
+
+      studentIds.push(studentId);
+    }
+
+    if (studentIds.length === 0) {
+      return {
+        success: false,
+        message: 'No matching students found in system',
+        data: { enrolled: 0, failed: rows.length, errors },
+      };
+    }
+
+    const existing = await prisma.classStudent.findMany({
+      where: { classId, studentId: { in: studentIds } },
+      select: { studentId: true },
+    });
+    const alreadyEnrolled = new Set(existing.map((cs) => cs.studentId));
+    const uniqueIds = [...new Set(studentIds)];
+    const newIds = uniqueIds.filter((id) => !alreadyEnrolled.has(id));
+
+    if (newIds.length > 0) {
+      await prisma.classStudent.createMany({
+        data: newIds.map((studentId) => ({ classId, studentId })),
+      });
+    }
+
+    return {
+      success: true,
+      message: `Imported ${newIds.length} student(s) into class`,
+      data: {
+        enrolled: newIds.length,
+        skipped: uniqueIds.length - newIds.length,
+        failed: rows.length - studentIds.length,
+        total: rows.length,
+        errors: errors.length > 0 ? errors : null,
+      },
+    };
+  }
+
+  // ═══════════════════════════════════════════════
+  // GENERATE STUDENT IMPORT TEMPLATE
+  // ═══════════════════════════════════════════════
+
+  generateImportTemplate(): Buffer {
+    const sampleData = [
+      { email: 'student1@school.edu.vn', username: 'student001', full_name: 'Nguyễn Văn A' },
+      { email: 'student2@school.edu.vn', username: 'student002', full_name: 'Trần Thị B' },
+    ];
+
+    const worksheet = XLSX.utils.json_to_sheet(sampleData);
+    worksheet['!cols'] = [{ wch: 30 }, { wch: 20 }, { wch: 25 }];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Students');
+
+    const instructionData = [
+      ['Hướng dẫn Import Học sinh vào Lớp'],
+      [''],
+      ['Cột', 'Mô tả', 'Bắt buộc'],
+      ['email', 'Email học sinh (đã có trong hệ thống)', 'Có (hoặc username)'],
+      ['username', 'Tên đăng nhập của học sinh', 'Có (hoặc email)'],
+      ['full_name', 'Họ tên (chỉ để tham khảo, không dùng để lookup)', 'Không'],
+      [''],
+      ['Lưu ý:', 'Học sinh phải đã có tài khoản trong hệ thống với vai trò Student'],
+    ];
+    const instructionSheet = XLSX.utils.aoa_to_sheet(instructionData);
+    instructionSheet['!cols'] = [{ wch: 15 }, { wch: 55 }, { wch: 20 }];
+    XLSX.utils.book_append_sheet(workbook, instructionSheet, 'Huong dan');
+
+    return Buffer.from(XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }));
   }
 }
 

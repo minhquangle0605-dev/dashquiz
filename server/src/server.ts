@@ -4,6 +4,7 @@ import { logger } from './utils/logger';
 import { connectDatabase, disconnectDatabase } from './config/database';
 import { connectRedis, disconnectRedis } from './config/redis';
 import { connectMinio } from './config/minio';
+import { startExamScheduleCron, stopExamScheduleCron } from './utils/cron';
 
 const PORT = env.port;
 
@@ -16,6 +17,8 @@ async function bootstrap() {
     logger.error('Service initialization failed:', error);
     logger.warn('Server will start but some services may be unavailable');
   }
+
+  startExamScheduleCron();
 
   const server = app.listen(PORT, () => {
     logger.info(`
@@ -31,6 +34,7 @@ async function bootstrap() {
   const shutdown = async (signal: string) => {
     logger.info(`${signal} received. Starting graceful shutdown...`);
     server.close(async () => {
+      stopExamScheduleCron();
       await disconnectDatabase();
       await disconnectRedis();
       logger.info('Server closed. Process exiting.');
