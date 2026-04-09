@@ -1,0 +1,44 @@
+name: CI Pipeline
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Lint Server
+        run: echo "ESLint check — will be configured"
+      - name: Lint Client
+        run: echo "ESLint check — will be configured"
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Backend Tests
+        run: echo "Jest tests — will be configured in Phase 11"
+      - name: Frontend Tests
+        run: echo "Vitest tests — will be configured in Phase 11"
+
+  build:
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Build Server
+        run: echo "TypeScript build — will be configured"
+      - name: Build Client
+        run: echo "Vite build — will be configured"

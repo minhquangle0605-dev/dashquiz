@@ -113,7 +113,7 @@ const phases = [
             'Tạo `.env.example` với tất cả biến môi trường cần thiết',
             'Tạo `README.md` mô tả cách setup project',
          ],
-         files:'webquiz/\n├── client/          # React 18 + Vite + TypeScript\n├── server/          # Node.js 20 + Express 4 + TypeScript\n├── prisma/          # Prisma schema + migrations + seed\n├── docker/          # Dockerfiles cho từng service\n├── docs/            # 5 file HTML thiết kế\n├── docker-compose.yml\n├── .env.example\n├── .gitignore\n└── README.md'},
+         files:'webquiz/\n├── client/          # React 18 + Vite + TypeScript\n├── server/          # Node.js 20 + Express 4 + TypeScript\n├── prisma/          # Prisma schema + migrations + seed\n├── docker/          # Dockerfiles cho từng service\n├── guideline/       # 6 file HTML tài liệu thiết kế\n├── docker-compose.yml\n├── .env.example\n├── .gitignore\n└── README.md'},
         {title:'Khởi tạo Backend (server/)', type:'backend',
          subtasks:[
             '`npm init -y` trong thư mục server/',
@@ -202,7 +202,7 @@ const phases = [
             'Tạo `prisma/seed.ts`',
             'Seed 4 roles: student, parent, teacher, admin',
             'Seed 1 admin account: admin@school.edu.vn / Admin@123 (bcrypt hash)',
-            'Seed 5 môn học: Toán, Vật lý, Hóa học, Sinh học, Tiếng Anh (với code: MATH, PHY, CHEM, BIO, ENG)',
+            'Seed 3 môn học: Toán, Vật lý, Hóa học (với code: MATH, PHY, CHEM)',
             'Seed 1 năm học 2025-2026 (is_current: true) + 2 học kỳ',
             'Seed 2–3 chương cho mỗi môn + 3–5 chủ đề mỗi chương',
             'Seed vài topic_relations mẫu cho Knowledge Graph',

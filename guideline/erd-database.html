@@ -111,7 +111,7 @@ const tables=[
 
 {id:'users',name:'users',g:'user',x:60,y:210,
  desc:'Thông tin tất cả người dùng. ENUM user_status: active | inactive | suspended',
- cols:[['id','INT','pk'],['role_id','INT','fk'],['username','VARCHAR(50)','uq'],['email','VARCHAR(100)','uq'],['password_hash','VARCHAR(255)',''],['full_name','VARCHAR(100)',''],['phone','VARCHAR(20)',''],['status','user_status',''],['last_login_at','TIMESTAMPTZ',''],['created_at','TIMESTAMPTZ','']]},
+ cols:[['id','INT','pk'],['role_id','INT','fk'],['username','VARCHAR(50)','uq'],['email','VARCHAR(100)','uq'],['password_hash','VARCHAR(255)',''],['full_name','VARCHAR(100)',''],['phone','VARCHAR(20)',''],['avatar','VARCHAR(255)',''],['status','user_status',''],['last_login_at','TIMESTAMPTZ',''],['created_at','TIMESTAMPTZ','']]},
 
 {id:'parent_student',name:'parent_student',g:'user',x:60,y:480,
  desc:'Liên kết tài khoản phụ huynh với học sinh (con)',
@@ -140,7 +140,7 @@ const tables=[
 
 // ─── Curriculum ──────────────────────────────
 {id:'subjects',name:'subjects',g:'curriculum',x:680,y:80,
- desc:'Danh mục môn học: Toán, Lý, Hóa, Sinh, Anh...',
+ desc:'Danh mục môn học: Toán, Vật lý, Hóa học',
  cols:[['id','INT','pk'],['name','VARCHAR(50)',''],['code','VARCHAR(10)','uq'],['description','TEXT',''],['status','SMALLINT','']]},
 
 {id:'chapters',name:'chapters',g:'curriculum',x:680,y:248,
@@ -171,7 +171,7 @@ const tables=[
 // ─── Exam & Testing ─────────────────────────
 {id:'exams',name:'exams',g:'exam',x:1300,y:80,
  desc:'Cấu hình bài kiểm tra: thời gian, số câu, trộn đề. ENUM exam_status: draft | published | scheduled | closed',
- cols:[['id','INT','pk'],['title','VARCHAR(200)',''],['subject_id','INT','fk'],['created_by','INT','fk'],['duration_min','INT',''],['total_questions','INT',''],['passing_score','DECIMAL',''],['shuffle','BOOLEAN',''],['show_result','BOOLEAN',''],['status','exam_status',''],['created_at','TIMESTAMPTZ','']]},
+ cols:[['id','INT','pk'],['title','VARCHAR(200)',''],['subject_id','INT','fk'],['created_by','INT','fk'],['duration_min','INT',''],['total_questions','INT',''],['passing_score','DECIMAL',''],['shuffle','BOOLEAN',''],['show_result','BOOLEAN',''],['max_attempts','SMALLINT',''],['status','exam_status',''],['created_at','TIMESTAMPTZ','']]},
 
 {id:'exam_questions',name:'exam_questions',g:'exam',x:1300,y:370,
  desc:'Danh sách câu hỏi trong mỗi bài kiểm tra',

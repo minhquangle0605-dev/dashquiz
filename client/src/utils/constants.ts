@@ -32,22 +32,31 @@ export const ROUTES = {
 
 export const API_ENDPOINTS = {
   AUTH: {
-    LOGIN: '/auth/login',
-    LOGOUT: '/auth/logout',
-    REFRESH: '/auth/refresh',
-    ME: '/auth/me',
+    LOGIN: '/api/auth/login',
+    LOGOUT: '/api/auth/logout',
+    REFRESH: '/api/auth/refresh',
+    FORGOT_PASSWORD: '/api/auth/forgot-password',
+    RESET_PASSWORD: '/api/auth/reset-password',
+    ME: '/api/auth/me',
   },
   USERS: {
-    BASE: '/users',
-    BY_ID: (id: string) => `/users/${id}`,
+    BASE: '/api/users',
+    BY_ID: (id: string) => `/api/users/${id}`,
+    ME: '/api/users/me',
+    ME_PASSWORD: '/api/users/me/password',
+    ME_AVATAR: '/api/users/me/avatar',
   },
   EXAMS: {
-    BASE: '/exams',
-    BY_ID: (id: string) => `/exams/${id}`,
-    ATTEMPTS: (examId: string) => `/exams/${examId}/attempts`,
+    BASE: '/api/exams',
+    BY_ID: (id: string) => `/api/exams/${id}`,
+    ATTEMPTS: (examId: string) => `/api/exams/${examId}/attempts`,
+    START: (examId: string) => `/api/exams/${examId}/start`,
+    ATTEMPT_ANSWERS: (attemptId: string) => `/api/exams/attempts/${attemptId}/answers`,
+    ATTEMPT_SUBMIT: (attemptId: string) => `/api/exams/attempts/${attemptId}/submit`,
+    ATTEMPT_RESULT: (attemptId: string) => `/api/exams/attempts/${attemptId}/result`,
   },
   ANALYTICS: {
-    OVERVIEW: '/analytics/overview',
-    CLASS: (classId: string) => `/analytics/classes/${classId}`,
+    OVERVIEW: '/api/analytics/overview',
+    CLASS: (classId: string) => `/api/analytics/classes/${classId}`,
   },
 } as const;

@@ -1,9 +1,9 @@
 import { Router } from 'express';
 
+import * as notificationController from './notification.controller';
+
 const router = Router();
 
-router.get('/', (_req, res) => {
-  res.json({ success: true, message: 'Notifications — Phase 8' });
-});
+router.get('/', notificationController.listNotifications);
 
 export default router;

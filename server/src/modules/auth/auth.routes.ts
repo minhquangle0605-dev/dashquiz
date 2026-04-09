@@ -1,25 +1,13 @@
 import { Router } from 'express';
 
+import * as authController from './auth.controller';
+
 const router = Router();
 
-router.post('/login', (_req, res) => {
-  res.json({ success: true, message: 'Auth login — Phase 2' });
-});
-
-router.post('/logout', (_req, res) => {
-  res.json({ success: true, message: 'Auth logout — Phase 2' });
-});
-
-router.post('/refresh', (_req, res) => {
-  res.json({ success: true, message: 'Auth refresh — Phase 2' });
-});
-
-router.post('/forgot-password', (_req, res) => {
-  res.json({ success: true, message: 'Auth forgot password — Phase 2' });
-});
-
-router.post('/reset-password', (_req, res) => {
-  res.json({ success: true, message: 'Auth reset password — Phase 2' });
-});
+router.post('/login', authController.login);
+router.post('/logout', authController.logout);
+router.post('/refresh', authController.refresh);
+router.post('/forgot-password', authController.forgotPassword);
+router.post('/reset-password', authController.resetPassword);
 
 export default router;

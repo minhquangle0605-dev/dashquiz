@@ -1,9 +1,9 @@
 import { Router } from 'express';
 
+import * as classController from './class.controller';
+
 const router = Router();
 
-router.get('/', (_req, res) => {
-  res.json({ success: true, message: 'Classes — Phase 5' });
-});
+router.get('/', classController.listClasses);
 
 export default router;

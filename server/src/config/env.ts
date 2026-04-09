@@ -1,12 +1,9 @@
 import dotenv from 'dotenv';
 import path from 'path';
 
+// Load root .env first (project root), then server/.env as override
+dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
-
-// Fallback: also check root .env
-if (!process.env.DATABASE_URL) {
-  dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
-}
 
 export const env = {
   nodeEnv: process.env.NODE_ENV || 'development',

@@ -1,0 +1,27 @@
+# Build from repository root: docker build -f docker/Dockerfile.server .
+FROM node:20-alpine AS builder
+WORKDIR /workspace
+
+COPY prisma ./prisma
+COPY server/package*.json ./server/
+
+WORKDIR /workspace/server
+RUN npm ci
+
+COPY server/ ./
+
+RUN npx prisma generate
+RUN npm run build
+
+FROM node:20-alpine AS runner
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+COPY --from=builder /workspace/server/package*.json ./
+COPY --from=builder /workspace/server/node_modules ./node_modules
+COPY --from=builder /workspace/server/dist ./dist
+COPY --from=builder /workspace/prisma ./prisma
+
+EXPOSE 3000
+CMD ["node", "dist/server.js"]

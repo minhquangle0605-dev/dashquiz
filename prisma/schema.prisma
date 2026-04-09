@@ -1,0 +1,502 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ═══════════════════════════════════════════════
+// ENUM TYPES (6)
+// ═══════════════════════════════════════════════
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum QuestionKind {
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+}
+
+enum ExamStatus {
+  DRAFT
+  PUBLISHED
+  SCHEDULED
+  CLOSED
+}
+
+enum ScheduleStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum AttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  GRADED
+}
+
+enum BackupStatus {
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
+// ═══════════════════════════════════════════════
+// USER MANAGEMENT (4 models)
+// ═══════════════════════════════════════════════
+
+model Role {
+  id          Int     @id @default(autoincrement())
+  name        String  @unique @db.VarChar(20)
+  description String? @db.VarChar(255)
+
+  users User[]
+
+  @@map("roles")
+}
+
+model User {
+  id           Int        @id @default(autoincrement())
+  roleId       Int        @map("role_id")
+  username     String     @unique @db.VarChar(50)
+  email        String     @unique @db.VarChar(100)
+  passwordHash String     @map("password_hash") @db.VarChar(255)
+  fullName     String?    @map("full_name") @db.VarChar(100)
+  phone        String?    @db.VarChar(20)
+  avatar       String?    @db.VarChar(255)
+  status       UserStatus @default(ACTIVE)
+  lastLoginAt  DateTime?  @map("last_login_at") @db.Timestamptz()
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz()
+
+  role Role @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  parentLinks          ParentStudent[]       @relation("ParentUser")
+  childLinks           ParentStudent[]       @relation("StudentUser")
+  passwordResetTokens  PasswordResetToken[]
+  teachingClasses      Class[]               @relation("TeacherClasses")
+  enrolledClasses      ClassStudent[]
+  createdQuestions     Question[]
+  createdExams         Exam[]
+  examAssignments      ExamAssignment[]
+  examAttempts         ExamAttempt[]
+  aiPracticeSessions   AiPracticeSession[]
+  notifications        Notification[]
+  activityLogs         ActivityLog[]
+  backups              Backup[]
+  webPushSubscriptions WebPushSubscription[]
+
+  @@map("users")
+}
+
+model ParentStudent {
+  id           Int      @id @default(autoincrement())
+  parentId     Int      @map("parent_id")
+  studentId    Int      @map("student_id")
+  relationship String?  @db.VarChar(20)
+  linkedAt     DateTime @default(now()) @map("linked_at") @db.Timestamptz()
+
+  parent  User @relation("ParentUser", fields: [parentId], references: [id], onDelete: Cascade)
+  student User @relation("StudentUser", fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@map("parent_student")
+}
+
+model PasswordResetToken {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  token     String   @unique @db.VarChar(255)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz()
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_reset_tokens")
+}
+
+// ═══════════════════════════════════════════════
+// ACADEMIC STRUCTURE (4 models)
+// ═══════════════════════════════════════════════
+
+model AcademicYear {
+  id        Int      @id @default(autoincrement())
+  name      String   @db.VarChar(20)
+  startDate DateTime @map("start_date") @db.Date
+  endDate   DateTime @map("end_date") @db.Date
+  isCurrent Boolean  @default(false) @map("is_current")
+
+  semesters Semester[]
+
+  @@map("academic_years")
+}
+
+model Semester {
+  id             Int      @id @default(autoincrement())
+  academicYearId Int      @map("academic_year_id")
+  name           String   @db.VarChar(20)
+  startDate      DateTime @map("start_date") @db.Date
+  endDate        DateTime @map("end_date") @db.Date
+
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  classes      Class[]
+
+  @@map("semesters")
+}
+
+model Class {
+  id         Int      @id @default(autoincrement())
+  name       String   @db.VarChar(20)
+  gradeLevel Int      @map("grade_level") @db.SmallInt
+  semesterId Int      @map("semester_id")
+  teacherId  Int      @map("teacher_id")
+  subjectId  Int      @map("subject_id")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  semester        Semester         @relation(fields: [semesterId], references: [id], onDelete: Cascade)
+  teacher         User             @relation("TeacherClasses", fields: [teacherId], references: [id], onDelete: Restrict)
+  subject         Subject          @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  classStudents   ClassStudent[]
+  examAssignments ExamAssignment[]
+
+  @@map("classes")
+}
+
+model ClassStudent {
+  classId    Int      @map("class_id")
+  studentId  Int      @map("student_id")
+  enrolledAt DateTime @default(now()) @map("enrolled_at") @db.Timestamptz()
+
+  class   Class @relation(fields: [classId], references: [id], onDelete: Cascade)
+  student User  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@id([classId, studentId])
+  @@map("class_students")
+}
+
+// ═══════════════════════════════════════════════
+// CURRICULUM (4 models)
+// ═══════════════════════════════════════════════
+
+model Subject {
+  id          Int     @id @default(autoincrement())
+  name        String  @db.VarChar(50)
+  code        String  @unique @db.VarChar(10)
+  description String? @db.Text
+  status      Int     @default(1) @db.SmallInt
+
+  chapters  Chapter[]
+  questions Question[]
+  exams     Exam[]
+  classes   Class[]
+
+  @@map("subjects")
+}
+
+model Chapter {
+  id         Int    @id @default(autoincrement())
+  subjectId  Int    @map("subject_id")
+  name       String @db.VarChar(100)
+  orderIndex Int    @map("order_index")
+
+  subject   Subject    @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  topics    Topic[]
+  questions Question[]
+
+  @@map("chapters")
+}
+
+model Topic {
+  id          Int     @id @default(autoincrement())
+  chapterId   Int     @map("chapter_id")
+  name        String  @db.VarChar(100)
+  description String? @db.Text
+
+  chapter            Chapter             @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  questions          Question[]
+  fromRelations      TopicRelation[]     @relation("FromTopic")
+  toRelations        TopicRelation[]     @relation("ToTopic")
+  aiPracticeSessions AiPracticeSession[]
+
+  @@map("topics")
+}
+
+model TopicRelation {
+  id           Int    @id @default(autoincrement())
+  fromTopicId  Int    @map("from_topic_id")
+  toTopicId    Int    @map("to_topic_id")
+  relationType String @map("relation_type") @db.VarChar(30)
+
+  fromTopic Topic @relation("FromTopic", fields: [fromTopicId], references: [id], onDelete: Cascade)
+  toTopic   Topic @relation("ToTopic", fields: [toTopicId], references: [id], onDelete: Cascade)
+
+  @@map("topic_relations")
+}
+
+// ═══════════════════════════════════════════════
+// QUESTION BANK (3 models)
+// ═══════════════════════════════════════════════
+
+model Question {
+  id           Int          @id @default(autoincrement())
+  subjectId    Int          @map("subject_id")
+  chapterId    Int          @map("chapter_id")
+  topicId      Int          @map("topic_id")
+  content      String       @db.Text
+  questionType QuestionKind @map("question_type")
+  difficulty   Int          @db.SmallInt
+  explanation  String?      @db.Text
+  createdBy    Int          @map("created_by")
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz()
+
+  subject        Subject          @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  chapter        Chapter          @relation(fields: [chapterId], references: [id], onDelete: Restrict)
+  topic          Topic            @relation(fields: [topicId], references: [id], onDelete: Restrict)
+  creator        User             @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+  options        QuestionOption[]
+  tags           QuestionTag[]
+  examQuestions  ExamQuestion[]
+  attemptAnswers AttemptAnswer[]
+
+  @@map("questions")
+}
+
+model QuestionOption {
+  id         Int     @id @default(autoincrement())
+  questionId Int     @map("question_id")
+  label      String  @db.Char(1)
+  content    String  @db.Text
+  isCorrect  Boolean @default(false) @map("is_correct")
+
+  question       Question        @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  attemptAnswers AttemptAnswer[]
+
+  @@map("question_options")
+}
+
+model QuestionTag {
+  id         Int    @id @default(autoincrement())
+  questionId Int    @map("question_id")
+  tagName    String @map("tag_name") @db.VarChar(50)
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@map("question_tags")
+}
+
+// ═══════════════════════════════════════════════
+// EXAM & TESTING (4 models)
+// ═══════════════════════════════════════════════
+
+model Exam {
+  id             Int        @id @default(autoincrement())
+  title          String     @db.VarChar(200)
+  subjectId      Int        @map("subject_id")
+  createdBy      Int        @map("created_by")
+  durationMin    Int        @map("duration_min")
+  totalQuestions Int        @map("total_questions")
+  passingScore   Decimal?   @map("passing_score") @db.Decimal
+  shuffle        Boolean    @default(false)
+  showResult     Boolean    @default(true) @map("show_result")
+  maxAttempts    Int        @default(1) @map("max_attempts") @db.SmallInt
+  status         ExamStatus @default(DRAFT)
+  createdAt      DateTime   @default(now()) @map("created_at") @db.Timestamptz()
+
+  subject         Subject          @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  creator         User             @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+  examQuestions   ExamQuestion[]
+  examSchedules   ExamSchedule[]
+  examAssignments ExamAssignment[]
+  examAttempts    ExamAttempt[]
+
+  @@map("exams")
+}
+
+model ExamQuestion {
+  examId     Int     @map("exam_id")
+  questionId Int     @map("question_id")
+  orderIndex Int     @map("order_index")
+  points     Decimal @db.Decimal
+
+  exam     Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@id([examId, questionId])
+  @@map("exam_questions")
+}
+
+model ExamSchedule {
+  id        Int            @id @default(autoincrement())
+  examId    Int            @map("exam_id")
+  startTime DateTime       @map("start_time") @db.Timestamptz()
+  endTime   DateTime       @map("end_time") @db.Timestamptz()
+  status    ScheduleStatus @default(PENDING)
+
+  exam Exam @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  @@map("exam_schedules")
+}
+
+model ExamAssignment {
+  id         Int      @id @default(autoincrement())
+  examId     Int      @map("exam_id")
+  classId    Int      @map("class_id")
+  assignedBy Int      @map("assigned_by")
+  assignedAt DateTime @default(now()) @map("assigned_at") @db.Timestamptz()
+
+  exam       Exam  @relation(fields: [examId], references: [id], onDelete: Cascade)
+  class      Class @relation(fields: [classId], references: [id], onDelete: Cascade)
+  assignedTo User  @relation(fields: [assignedBy], references: [id], onDelete: Restrict)
+
+  @@map("exam_assignments")
+}
+
+// ═══════════════════════════════════════════════
+// RESULTS & ANALYTICS (2 models)
+// ═══════════════════════════════════════════════
+
+model ExamAttempt {
+  id              Int           @id @default(autoincrement())
+  examId          Int           @map("exam_id")
+  studentId       Int           @map("student_id")
+  startedAt       DateTime      @default(now()) @map("started_at") @db.Timestamptz()
+  submittedAt     DateTime?     @map("submitted_at") @db.Timestamptz()
+  isAutoSubmitted Boolean       @default(false) @map("is_auto_submitted")
+  totalScore      Decimal?      @map("total_score") @db.Decimal
+  timeSpentSec    Int?          @map("time_spent_sec")
+  status          AttemptStatus @default(IN_PROGRESS)
+
+  exam               Exam                @relation(fields: [examId], references: [id], onDelete: Cascade)
+  student            User                @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  attemptAnswers     AttemptAnswer[]
+  aiPracticeSessions AiPracticeSession[]
+
+  @@index([studentId, examId])
+  @@map("exam_attempts")
+}
+
+model AttemptAnswer {
+  id               Int     @id @default(autoincrement())
+  attemptId        Int     @map("attempt_id")
+  questionId       Int     @map("question_id")
+  selectedOptionId Int?    @map("selected_option_id")
+  isCorrect        Boolean @default(false) @map("is_correct")
+  timeSpentSec     Int?    @map("time_spent_sec")
+  answerChanges    Int     @default(0) @map("answer_changes")
+
+  attempt        ExamAttempt     @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question       Question        @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  selectedOption QuestionOption? @relation(fields: [selectedOptionId], references: [id], onDelete: SetNull)
+
+  @@map("attempt_answers")
+}
+
+// ═══════════════════════════════════════════════
+// AI ADAPTIVE (2 models)
+// ═══════════════════════════════════════════════
+
+model AiPracticeSession {
+  id              Int      @id @default(autoincrement())
+  studentId       Int      @map("student_id")
+  topicId         Int      @map("topic_id")
+  sourceAttemptId Int      @map("source_attempt_id")
+  totalQuestions  Int      @map("total_questions")
+  correctAnswers  Int      @default(0) @map("correct_answers")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  student       User                @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  topic         Topic               @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  sourceAttempt ExamAttempt         @relation(fields: [sourceAttemptId], references: [id], onDelete: Cascade)
+  questions     AiGeneratedQuestion[]
+
+  @@map("ai_practice_sessions")
+}
+
+model AiGeneratedQuestion {
+  id            Int     @id @default(autoincrement())
+  sessionId     Int     @map("session_id")
+  content       String  @db.Text
+  optionsJson   Json    @map("options_json")
+  correctOption String  @map("correct_option") @db.Char(1)
+  explanation   String? @db.Text
+  studentAnswer String? @map("student_answer") @db.Char(1)
+  isCorrect     Boolean? @map("is_correct")
+
+  session AiPracticeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@map("ai_generated_questions")
+}
+
+// ═══════════════════════════════════════════════
+// SYSTEM ADMIN (5 models)
+// ═══════════════════════════════════════════════
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  title     String   @db.VarChar(200)
+  message   String   @db.Text
+  type      String   @db.VarChar(30)
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+model ActivityLog {
+  id         Int      @id @default(autoincrement())
+  userId     Int?     @map("user_id")
+  action     String   @db.VarChar(50)
+  entityType String?  @map("entity_type") @db.VarChar(50)
+  entityId   Int?     @map("entity_id")
+  ipAddress  String?  @map("ip_address") @db.VarChar(45)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("activity_logs")
+}
+
+model SystemConfig {
+  id          Int      @id @default(autoincrement())
+  configKey   String   @unique @map("config_key") @db.VarChar(50)
+  configValue String   @map("config_value") @db.Text
+  description String?  @db.VarChar(255)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  @@map("system_configs")
+}
+
+model Backup {
+  id         Int          @id @default(autoincrement())
+  filename   String       @db.VarChar(255)
+  fileSizeMb Decimal?     @map("file_size_mb") @db.Decimal
+  createdBy  Int          @map("created_by")
+  status     BackupStatus @default(IN_PROGRESS)
+  createdAt  DateTime     @default(now()) @map("created_at") @db.Timestamptz()
+
+  creator User @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+
+  @@map("backups")
+}
+
+model WebPushSubscription {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  endpoint  String   @db.Text
+  p256dhKey String   @map("p256dh_key") @db.VarChar(255)
+  authKey   String   @map("auth_key") @db.VarChar(255)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("web_push_subscriptions")
+}

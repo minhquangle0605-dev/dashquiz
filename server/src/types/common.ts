@@ -1,3 +1,6 @@
+/** JSON shape returned by route handlers while business logic is still stubbed */
+export type PlaceholderJsonResponse = Readonly<{ success: true; message: string }>;
+
 export interface PaginationQuery {
   page?: number;
   limit?: number;

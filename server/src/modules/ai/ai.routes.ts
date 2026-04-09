@@ -1,9 +1,9 @@
 import { Router } from 'express';
 
+import * as aiController from './ai.controller';
+
 const router = Router();
 
-router.post('/practice/start', (_req, res) => {
-  res.json({ success: true, message: 'AI practice — Phase 9' });
-});
+router.post('/practice/start', aiController.startPractice);
 
 export default router;

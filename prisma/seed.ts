@@ -1,0 +1,251 @@
+import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcryptjs';
+
+const prisma = new PrismaClient();
+
+async function main() {
+  console.log('Seeding database...\n');
+
+  // ── 1. Seed Roles ────────────────────────────────
+  const roles = await Promise.all(
+    [
+      { name: 'student', description: 'Học sinh — làm bài kiểm tra, xem kết quả' },
+      { name: 'parent', description: 'Phụ huynh — theo dõi kết quả học tập con em' },
+      { name: 'teacher', description: 'Giáo viên — tạo câu hỏi, bài kiểm tra, phân tích' },
+      { name: 'admin', description: 'Quản trị viên — quản lý toàn bộ hệ thống' },
+    ].map((r) =>
+      prisma.role.upsert({
+        where: { name: r.name },
+        update: {},
+        create: r,
+      }),
+    ),
+  );
+  console.log(`✓ ${roles.length} roles seeded`);
+
+  const adminRole = roles.find((r) => r.name === 'admin')!;
+
+  // ── 2. Seed Admin Account ────────────────────────
+  const passwordHash = await bcrypt.hash('Admin@123', 12);
+  const admin = await prisma.user.upsert({
+    where: { email: 'admin@school.edu.vn' },
+    update: {},
+    create: {
+      roleId: adminRole.id,
+      username: 'admin',
+      email: 'admin@school.edu.vn',
+      passwordHash,
+      fullName: 'System Administrator',
+      status: 'ACTIVE',
+    },
+  });
+  console.log(`✓ Admin account seeded: ${admin.email}`);
+
+  // ── 3. Seed Subjects ─────────────────────────────
+  const subjectsData = [
+    { name: 'Toán', code: 'MATH', description: 'Toán học phổ thông — Đại số, Hình học, Giải tích' },
+    { name: 'Vật lý', code: 'PHY', description: 'Vật lý phổ thông — Cơ học, Điện, Quang, Nhiệt' },
+    { name: 'Hóa học', code: 'CHEM', description: 'Hóa học phổ thông — Vô cơ, Hữu cơ' },
+    { name: 'Sinh học', code: 'BIO', description: 'Sinh học phổ thông — Tế bào, Di truyền, Sinh thái' },
+    { name: 'Tiếng Anh', code: 'ENG', description: 'Tiếng Anh — Ngữ pháp, Từ vựng, Đọc hiểu' },
+  ];
+
+  const subjects = await Promise.all(
+    subjectsData.map((s) =>
+      prisma.subject.upsert({
+        where: { code: s.code },
+        update: {},
+        create: { ...s, status: 1 },
+      }),
+    ),
+  );
+  console.log(`✓ ${subjects.length} subjects seeded`);
+
+  // ── 4. Seed Academic Year & Semesters ────────────
+  const academicYear = await prisma.academicYear.upsert({
+    where: { id: 1 },
+    update: {},
+    create: {
+      name: '2025-2026',
+      startDate: new Date('2025-09-01'),
+      endDate: new Date('2026-06-30'),
+      isCurrent: true,
+    },
+  });
+  console.log(`✓ Academic year seeded: ${academicYear.name}`);
+
+  const semestersData = [
+    {
+      name: 'Học kỳ 1',
+      startDate: new Date('2025-09-01'),
+      endDate: new Date('2026-01-15'),
+      academicYearId: academicYear.id,
+    },
+    {
+      name: 'Học kỳ 2',
+      startDate: new Date('2026-01-16'),
+      endDate: new Date('2026-06-30'),
+      academicYearId: academicYear.id,
+    },
+  ];
+
+  const semesters = await Promise.all(
+    semestersData.map((s, i) =>
+      prisma.semester.upsert({
+        where: { id: i + 1 },
+        update: {},
+        create: s,
+      }),
+    ),
+  );
+  console.log(`✓ ${semesters.length} semesters seeded`);
+
+  // ── 5. Seed Chapters & Topics ────────────────────
+  const chaptersConfig: Record<string, { name: string; topics: string[] }[]> = {
+    MATH: [
+      {
+        name: 'Hàm số và đồ thị',
+        topics: ['Hàm số bậc nhất', 'Hàm số bậc hai', 'Đồ thị hàm số', 'Biến thiên hàm số', 'Giá trị lớn nhất - nhỏ nhất'],
+      },
+      {
+        name: 'Phương trình và bất phương trình',
+        topics: ['Phương trình bậc hai', 'Hệ phương trình', 'Bất phương trình', 'Phương trình chứa ẩn ở mẫu'],
+      },
+      {
+        name: 'Lượng giác',
+        topics: ['Góc lượng giác', 'Hàm số lượng giác', 'Phương trình lượng giác'],
+      },
+    ],
+    PHY: [
+      {
+        name: 'Động học',
+        topics: ['Chuyển động thẳng đều', 'Chuyển động thẳng biến đổi đều', 'Rơi tự do', 'Chuyển động tròn đều'],
+      },
+      {
+        name: 'Động lực học',
+        topics: ['Ba định luật Newton', 'Lực ma sát', 'Lực hướng tâm', 'Bài toán hệ vật'],
+      },
+    ],
+    CHEM: [
+      {
+        name: 'Cấu tạo nguyên tử',
+        topics: ['Thành phần nguyên tử', 'Cấu hình electron', 'Bảng tuần hoàn'],
+      },
+      {
+        name: 'Liên kết hóa học',
+        topics: ['Liên kết ion', 'Liên kết cộng hóa trị', 'Tinh thể', 'Hóa trị và số oxi hóa'],
+      },
+      {
+        name: 'Phản ứng hóa học',
+        topics: ['Phản ứng oxi hóa khử', 'Tốc độ phản ứng', 'Cân bằng hóa học'],
+      },
+    ],
+    BIO: [
+      {
+        name: 'Sinh học tế bào',
+        topics: ['Thành phần hóa học của tế bào', 'Cấu trúc tế bào', 'Vận chuyển qua màng'],
+      },
+      {
+        name: 'Di truyền học',
+        topics: ['Cơ sở vật chất của di truyền', 'Quy luật di truyền Mendel', 'Di truyền liên kết'],
+      },
+    ],
+    ENG: [
+      {
+        name: 'Grammar',
+        topics: ['Tenses', 'Conditionals', 'Passive voice', 'Relative clauses', 'Reported speech'],
+      },
+      {
+        name: 'Reading Comprehension',
+        topics: ['Main idea', 'Inference questions', 'Vocabulary in context'],
+      },
+    ],
+  };
+
+  let totalChapters = 0;
+  let totalTopics = 0;
+  const topicIds: number[] = [];
+
+  for (const subject of subjects) {
+    const chapters = chaptersConfig[subject.code] || [];
+    for (let ci = 0; ci < chapters.length; ci++) {
+      const chap = chapters[ci];
+      const chapter = await prisma.chapter.create({
+        data: {
+          subjectId: subject.id,
+          name: chap.name,
+          orderIndex: ci + 1,
+        },
+      });
+      totalChapters++;
+
+      for (const topicName of chap.topics) {
+        const topic = await prisma.topic.create({
+          data: {
+            chapterId: chapter.id,
+            name: topicName,
+          },
+        });
+        topicIds.push(topic.id);
+        totalTopics++;
+      }
+    }
+  }
+  console.log(`✓ ${totalChapters} chapters seeded`);
+  console.log(`✓ ${totalTopics} topics seeded`);
+
+  // ── 6. Seed Topic Relations (Knowledge Graph) ────
+  const relationsData = [
+    { fromIdx: 0, toIdx: 1, type: 'prerequisite' },
+    { fromIdx: 1, toIdx: 2, type: 'prerequisite' },
+    { fromIdx: 0, toIdx: 3, type: 'related' },
+    { fromIdx: 5, toIdx: 6, type: 'prerequisite' },
+    { fromIdx: 6, toIdx: 7, type: 'prerequisite' },
+    { fromIdx: 12, toIdx: 13, type: 'prerequisite' },
+    { fromIdx: 13, toIdx: 14, type: 'related' },
+  ];
+
+  let relCount = 0;
+  for (const rel of relationsData) {
+    if (topicIds[rel.fromIdx] && topicIds[rel.toIdx]) {
+      await prisma.topicRelation.create({
+        data: {
+          fromTopicId: topicIds[rel.fromIdx],
+          toTopicId: topicIds[rel.toIdx],
+          relationType: rel.type,
+        },
+      });
+      relCount++;
+    }
+  }
+  console.log(`✓ ${relCount} topic relations seeded (Knowledge Graph)`);
+
+  // ── 7. Seed System Configs ───────────────────────
+  const configs = [
+    { configKey: 'school_name', configValue: 'Trường THPT WebQuiz Demo', description: 'Tên trường hiển thị trên hệ thống' },
+    { configKey: 'school_logo', configValue: '/images/logo.png', description: 'Đường dẫn logo trường' },
+    { configKey: 'admin_email', configValue: 'admin@school.edu.vn', description: 'Email quản trị viên' },
+    { configKey: 'max_upload_size_mb', configValue: '10', description: 'Kích thước tải lên tối đa (MB)' },
+    { configKey: 'session_timeout_min', configValue: '30', description: 'Thời gian hết phiên (phút)' },
+  ];
+
+  for (const cfg of configs) {
+    await prisma.systemConfig.upsert({
+      where: { configKey: cfg.configKey },
+      update: {},
+      create: cfg,
+    });
+  }
+  console.log(`✓ ${configs.length} system configs seeded`);
+
+  console.log('\n✅ Database seeding completed!');
+}
+
+main()
+  .catch((e) => {
+    console.error('Seed failed:', e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

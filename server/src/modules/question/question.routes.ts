@@ -1,9 +1,9 @@
 import { Router } from 'express';
 
+import * as questionController from './question.controller';
+
 const router = Router();
 
-router.get('/', (_req, res) => {
-  res.json({ success: true, message: 'Question bank — Phase 4' });
-});
+router.get('/', questionController.listQuestions);
 
 export default router;

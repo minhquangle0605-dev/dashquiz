@@ -1,9 +1,9 @@
 import { Router } from 'express';
 
+import * as examController from './exam.controller';
+
 const router = Router();
 
-router.get('/', (_req, res) => {
-  res.json({ success: true, message: 'Exam list — Phase 5' });
-});
+router.get('/', examController.listExams);
 
 export default router;
