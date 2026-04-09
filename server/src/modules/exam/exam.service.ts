@@ -1,7 +1,12 @@
 import { Prisma, ExamStatus } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError } from '../../middlewares/errorHandler';
+import { logger } from '../../utils/logger';
 import { PAGINATION } from '../../utils/constants';
+import { cacheGet, cacheSet, cacheInvalidateExact } from '../../utils/cache';
+import { buildPaginationResponse } from '../../utils/pagination';
+import { notificationService } from '../notification/notification.service';
+import { emitExamStarted, emitExamClosed, emitDashboardUpdateBulk } from '../../socket';
 import type {
   CreateExamInput,
   UpdateExamInput,
@@ -11,7 +16,17 @@ import type {
   ListExamsQuery,
 } from './exam.validation';
 
+const EXAM_DETAIL_CACHE_TTL = 300;
+
 export class ExamService {
+  private examDetailCacheKey(id: number): string {
+    return `exam:detail:${id}`;
+  }
+
+  private async invalidateExamDetail(id: number): Promise<void> {
+    await cacheInvalidateExact(this.examDetailCacheKey(id));
+  }
+
   // ═══════════════════════════════════════════════
   // LIST EXAMS
   // ═══════════════════════════════════════════════
@@ -42,7 +57,19 @@ export class ExamService {
     const [exams, total] = await Promise.all([
       prisma.exam.findMany({
         where,
-        include: {
+        select: {
+          id: true,
+          title: true,
+          subjectId: true,
+          createdBy: true,
+          durationMin: true,
+          totalQuestions: true,
+          passingScore: true,
+          shuffle: true,
+          showResult: true,
+          maxAttempts: true,
+          status: true,
+          createdAt: true,
           subject: { select: { id: true, name: true, code: true } },
           creator: { select: { id: true, fullName: true } },
           _count: {
@@ -60,13 +87,11 @@ export class ExamService {
       prisma.exam.count({ where }),
     ]);
 
-    const totalPages = Math.ceil(total / limit);
-
     return {
       success: true,
       message: 'Exams retrieved successfully',
       data: exams,
-      pagination: { page, limit, total, totalPages, hasNext: page < totalPages, hasPrev: page > 1 },
+      pagination: buildPaginationResponse(total, page, limit),
     };
   }
 
@@ -75,26 +100,86 @@ export class ExamService {
   // ═══════════════════════════════════════════════
 
   async getExamById(id: number) {
+    const cacheKey = this.examDetailCacheKey(id);
+    const cached = await cacheGet<{
+      success: true;
+      message: string;
+      data: Record<string, unknown>;
+    }>(cacheKey);
+    if (cached) {
+      return cached as never;
+    }
+
     const exam = await prisma.exam.findUnique({
       where: { id },
-      include: {
+      select: {
+        id: true,
+        title: true,
+        subjectId: true,
+        createdBy: true,
+        durationMin: true,
+        totalQuestions: true,
+        passingScore: true,
+        shuffle: true,
+        showResult: true,
+        maxAttempts: true,
+        status: true,
+        createdAt: true,
         subject: { select: { id: true, name: true, code: true } },
         creator: { select: { id: true, fullName: true } },
         examQuestions: {
           orderBy: { orderIndex: 'asc' },
-          include: {
+          select: {
+            examId: true,
+            questionId: true,
+            orderIndex: true,
+            points: true,
             question: {
-              include: {
-                options: { orderBy: { label: 'asc' } },
+              select: {
+                id: true,
+                subjectId: true,
+                chapterId: true,
+                topicId: true,
+                content: true,
+                questionType: true,
+                difficulty: true,
+                explanation: true,
+                createdBy: true,
+                createdAt: true,
+                options: {
+                  orderBy: { label: 'asc' },
+                  select: {
+                    id: true,
+                    questionId: true,
+                    label: true,
+                    content: true,
+                    isCorrect: true,
+                  },
+                },
                 chapter: { select: { id: true, name: true } },
                 topic: { select: { id: true, name: true } },
               },
             },
           },
         },
-        examSchedules: { orderBy: { startTime: 'desc' }, take: 5 },
+        examSchedules: {
+          orderBy: { startTime: 'desc' },
+          take: 5,
+          select: {
+            id: true,
+            examId: true,
+            startTime: true,
+            endTime: true,
+            status: true,
+          },
+        },
         examAssignments: {
-          include: {
+          select: {
+            id: true,
+            examId: true,
+            classId: true,
+            assignedBy: true,
+            assignedAt: true,
             class: { select: { id: true, name: true, gradeLevel: true } },
             assignedTo: { select: { id: true, fullName: true } },
           },
@@ -107,11 +192,13 @@ export class ExamService {
       throw new AppError('Exam not found', 404);
     }
 
-    return {
-      success: true,
+    const result = {
+      success: true as const,
       message: 'Exam retrieved successfully',
       data: exam,
     };
+    await cacheSet(cacheKey, result, EXAM_DETAIL_CACHE_TTL);
+    return result;
   }
 
   // ═══════════════════════════════════════════════
@@ -140,6 +227,8 @@ export class ExamService {
         creator: { select: { id: true, fullName: true } },
       },
     });
+
+    await this.invalidateExamDetail(exam.id);
 
     return {
       success: true,
@@ -186,6 +275,8 @@ export class ExamService {
         creator: { select: { id: true, fullName: true } },
       },
     });
+
+    await this.invalidateExamDetail(id);
 
     return {
       success: true,
@@ -293,6 +384,8 @@ export class ExamService {
       data: { totalQuestions: totalInExam },
     });
 
+    await this.invalidateExamDetail(examId);
+
     return {
       success: true,
       message: `Added ${newIds.length} question(s) to exam`,
@@ -327,6 +420,27 @@ export class ExamService {
         creator: { select: { id: true, fullName: true } },
       },
     });
+
+    // Emit exam:started to all assigned classes via Socket.IO
+    const assignments = await prisma.examAssignment.findMany({
+      where: { examId },
+      select: { classId: true },
+    });
+    if (assignments.length > 0) {
+      const classIds = assignments.map((a) => a.classId);
+      emitExamStarted(classIds, {
+        examId,
+        title: updated.title,
+        subjectName: updated.subject.name,
+        durationMin: updated.durationMin,
+      });
+    }
+
+    notificationService
+      .onResultsPublished(examId, updated.title)
+      .catch((err) => logger.warn('Notification trigger onResultsPublished failed:', err));
+
+    await this.invalidateExamDetail(examId);
 
     return {
       success: true,
@@ -363,6 +477,8 @@ export class ExamService {
         data: { status: 'SCHEDULED' },
       });
     }
+
+    await this.invalidateExamDetail(examId);
 
     return {
       success: true,
@@ -417,6 +533,28 @@ export class ExamService {
       })),
     });
 
+    // Broadcast exam:started to newly assigned classes if exam is published
+    if (exam.status === 'PUBLISHED' || exam.status === 'SCHEDULED') {
+      const examWithSubject = await prisma.exam.findUnique({
+        where: { id: examId },
+        include: { subject: { select: { name: true } } },
+      });
+      if (examWithSubject) {
+        emitExamStarted(newClassIds, {
+          examId,
+          title: examWithSubject.title,
+          subjectName: examWithSubject.subject.name,
+          durationMin: examWithSubject.durationMin,
+        });
+      }
+    }
+
+    notificationService
+      .onExamAssigned(examId, newClassIds)
+      .catch((err) => logger.warn('Notification trigger onExamAssigned failed:', err));
+
+    await this.invalidateExamDetail(examId);
+
     return {
       success: true,
       message: `Exam assigned to ${newClassIds.length} class(es)`,
@@ -467,7 +605,14 @@ export class ExamService {
 
     const toActivate = await prisma.examSchedule.findMany({
       where: { status: 'PENDING', startTime: { lte: now } },
-      include: { exam: true },
+      include: {
+        exam: {
+          include: {
+            subject: { select: { name: true } },
+            examAssignments: { select: { classId: true } },
+          },
+        },
+      },
     });
 
     for (const schedule of toActivate) {
@@ -481,6 +626,16 @@ export class ExamService {
           data: { status: 'PUBLISHED' },
         }),
       ]);
+
+      const classIds = schedule.exam.examAssignments.map((a) => a.classId);
+      if (classIds.length > 0) {
+        emitExamStarted(classIds, {
+          examId: schedule.examId,
+          title: schedule.exam.title,
+          subjectName: schedule.exam.subject.name,
+          durationMin: schedule.exam.durationMin,
+        });
+      }
     }
 
     const toClose = await prisma.examSchedule.findMany({
@@ -499,7 +654,17 @@ export class ExamService {
           data: { status: 'CLOSED' },
         }),
       ]);
+
+      emitExamClosed(schedule.examId, {
+        examId: schedule.examId,
+        title: schedule.exam.title,
+      });
     }
+
+    const affectedExamIds = new Set<number>();
+    for (const s of toActivate) affectedExamIds.add(s.examId);
+    for (const s of toClose) affectedExamIds.add(s.examId);
+    await Promise.all([...affectedExamIds].map((eid) => this.invalidateExamDetail(eid)));
 
     return { activated: toActivate.length, closed: toClose.length };
   }

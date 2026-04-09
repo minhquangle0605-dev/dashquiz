@@ -4,6 +4,9 @@ import { BrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
 import App from './App';
+import { ThemeRoot } from '@/components/ThemeRoot';
+import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
+import { SocketProvider } from '@/providers/SocketProvider';
 import './index.css';
 
 const queryClient = new QueryClient({
@@ -20,18 +23,25 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <App />
-        <Toaster
-          position="top-right"
-          toastOptions={{
-            duration: 3000,
-            style: {
-              background: '#1e293b',
-              color: '#e2e8f0',
-              borderRadius: '8px',
-            },
-          }}
-        />
+        <SocketProvider>
+          <ThemeRoot>
+            <ErrorBoundary>
+              <App />
+            </ErrorBoundary>
+            <Toaster
+              position="top-right"
+              toastOptions={{
+                duration: 3000,
+                style: {
+                  background: 'var(--color-bg-card)',
+                  color: 'var(--color-text-primary)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: '8px',
+                },
+              }}
+            />
+          </ThemeRoot>
+        </SocketProvider>
       </BrowserRouter>
     </QueryClientProvider>
   </StrictMode>,

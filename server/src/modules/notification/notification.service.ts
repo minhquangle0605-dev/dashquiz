@@ -1,49 +1,476 @@
-import type { PlaceholderJsonResponse } from '../../types/common';
+import nodemailer from 'nodemailer';
+import webpush from 'web-push';
 
-/**
- * Notification domain: Nodemailer, web-push — in-app, email, browser push notifications.
- */
+import { prisma } from '../../config/database';
+import { env } from '../../config/env';
+import { logger } from '../../utils/logger';
+import { cacheGet, cacheSet, cacheInvalidateExact } from '../../utils/cache';
+import { AppError } from '../../middlewares/errorHandler';
+import { emitNotification, emitDashboardUpdate } from '../../socket';
+import * as emailTemplates from './email-templates';
+import type { ListNotificationsQuery, PushSubscribeInput } from './notification.validation';
+
+// ═══════════════════════════════════════════════════
+// VAPID SETUP
+// ═══════════════════════════════════════════════════
+
+if (env.vapid.publicKey && env.vapid.privateKey) {
+  try {
+    webpush.setVapidDetails(
+      env.vapid.email ? `mailto:${env.vapid.email}` : 'mailto:admin@webquiz.local',
+      env.vapid.publicKey,
+      env.vapid.privateKey,
+    );
+    logger.info('VAPID keys configured for web push');
+  } catch (err) {
+    logger.warn('Failed to set VAPID details — web push disabled:', err);
+  }
+}
+
+// ═══════════════════════════════════════════════════
+// EMAIL TRANSPORTER
+// ═══════════════════════════════════════════════════
+
+function getTransporter() {
+  return nodemailer.createTransport({
+    host: env.smtp.host,
+    port: env.smtp.port,
+    secure: env.smtp.port === 465,
+    auth: {
+      user: env.smtp.user,
+      pass: env.smtp.password,
+    },
+  });
+}
+
+// ═══════════════════════════════════════════════════
+// NOTIFICATION SERVICE
+// ═══════════════════════════════════════════════════
+
+const UNREAD_COUNT_CACHE_TTL = 60;
+
 export class NotificationService {
-  /**
-   * Lists notifications for the current user (pagination, unread filter).
-   */
-  async listNotifications(): Promise<PlaceholderJsonResponse> {
-    return { success: true, message: 'Notifications — Phase 8' };
+  private unreadCountCacheKey(userId: number): string {
+    return `notification:unread:${userId}`;
+  }
+
+  private async invalidateUnreadCount(userId: number): Promise<void> {
+    await cacheInvalidateExact(this.unreadCountCacheKey(userId));
   }
 
   /**
-   * Persists and optionally fans out an in-app notification.
+   * GET /api/notifications — paginated, filterable by is_read.
    */
-  async createInAppNotification(_userId: string): Promise<PlaceholderJsonResponse> {
-    return { success: true, message: 'Create in-app notification — placeholder' };
+  async listNotifications(userId: number, query: ListNotificationsQuery) {
+    const page = query.page;
+    const limit = query.limit;
+    const skip = (page - 1) * limit;
+
+    const where: { userId: number; isRead?: boolean } = { userId };
+
+    if (query.isRead === 'true') where.isRead = true;
+    else if (query.isRead === 'false') where.isRead = false;
+
+    const uKey = this.unreadCountCacheKey(userId);
+    const cachedUnread = await cacheGet<number>(uKey);
+    const unreadPromise =
+      cachedUnread !== null
+        ? Promise.resolve(cachedUnread)
+        : prisma.notification.count({ where: { userId, isRead: false } }).then(async (count) => {
+            await cacheSet(uKey, count, UNREAD_COUNT_CACHE_TTL);
+            return count;
+          });
+
+    const [notifications, total, unreadCount] = await Promise.all([
+      prisma.notification.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      prisma.notification.count({ where }),
+      unreadPromise,
+    ]);
+
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      data: notifications,
+      unreadCount,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNext: page < totalPages,
+        hasPrev: page > 1,
+      },
+    };
   }
 
   /**
-   * Marks one or all notifications as read.
+   * PUT /api/notifications/:id/read — mark single as read.
    */
-  async markAsRead(_ids: string[]): Promise<PlaceholderJsonResponse> {
-    return { success: true, message: `Mark read (${_ids.length}) — placeholder` };
+  async markAsRead(userId: number, notificationId: number) {
+    const notification = await prisma.notification.findFirst({
+      where: { id: notificationId, userId },
+    });
+
+    if (!notification) {
+      throw new AppError('Notification not found', 404);
+    }
+
+    await prisma.notification.update({
+      where: { id: notificationId },
+      data: { isRead: true },
+    });
+
+    await this.invalidateUnreadCount(userId);
+
+    return { id: notificationId, isRead: true };
   }
 
   /**
-   * Sends transactional email via Nodemailer (templates + queue optional).
+   * PUT /api/notifications/read-all — mark all as read for user.
    */
-  async sendEmail(_to: string, _templateKey: string): Promise<PlaceholderJsonResponse> {
-    return { success: true, message: 'Send email — placeholder' };
+  async markAllAsRead(userId: number) {
+    const result = await prisma.notification.updateMany({
+      where: { userId, isRead: false },
+      data: { isRead: true },
+    });
+
+    await this.invalidateUnreadCount(userId);
+
+    return { updatedCount: result.count };
   }
 
   /**
-   * Dispatches web push to subscribed browsers (VAPID keys, payload).
+   * Create an in-app notification record and push it via Socket.IO.
    */
-  async sendWebPush(_userId: string, _payload: Record<string, string>): Promise<PlaceholderJsonResponse> {
-    return { success: true, message: 'Web push — placeholder' };
+  async createNotification(userId: number, title: string, message: string, type: string) {
+    const notification = await prisma.notification.create({
+      data: { userId, title, message, type, isRead: false },
+    });
+
+    await this.invalidateUnreadCount(userId);
+
+    emitNotification(userId, {
+      id: notification.id,
+      title: notification.title,
+      message: notification.message,
+      type: notification.type,
+      createdAt: notification.createdAt,
+    });
+
+    return notification;
   }
 
   /**
-   * Registers or updates push subscription document for a user device.
+   * Send email via SMTP (nodemailer).
    */
-  async savePushSubscription(_userId: string, _subscription: unknown): Promise<PlaceholderJsonResponse> {
-    return { success: true, message: 'Save push subscription — placeholder' };
+  async sendEmail(to: string, subject: string, html: string): Promise<boolean> {
+    if (!env.smtp.user || !env.smtp.password) {
+      logger.warn('SMTP not configured — skipping email send');
+      return false;
+    }
+
+    try {
+      const transporter = getTransporter();
+      await transporter.sendMail({
+        from: `"WebQuiz" <${env.smtp.user}>`,
+        to,
+        subject,
+        html,
+      });
+      logger.info(`Email sent to ${to}: ${subject}`);
+      return true;
+    } catch (error) {
+      logger.error(`Failed to send email to ${to}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Send web push to all subscribed devices of a user.
+   */
+  async sendWebPush(userId: number, payload: { title: string; body: string; url?: string }): Promise<number> {
+    if (!env.vapid.publicKey || !env.vapid.privateKey) {
+      logger.warn('VAPID not configured — skipping web push');
+      return 0;
+    }
+
+    const subscriptions = await prisma.webPushSubscription.findMany({
+      where: { userId },
+    });
+
+    if (subscriptions.length === 0) return 0;
+
+    let sentCount = 0;
+    const staleIds: number[] = [];
+
+    for (const sub of subscriptions) {
+      const pushSubscription = {
+        endpoint: sub.endpoint,
+        keys: {
+          p256dh: sub.p256dhKey,
+          auth: sub.authKey,
+        },
+      };
+
+      try {
+        await webpush.sendNotification(
+          pushSubscription,
+          JSON.stringify({
+            title: payload.title,
+            body: payload.body,
+            icon: '/icon-192.png',
+            badge: '/badge-72.png',
+            url: payload.url || '/',
+            timestamp: Date.now(),
+          }),
+        );
+        sentCount++;
+      } catch (error: unknown) {
+        const statusCode = (error as { statusCode?: number }).statusCode;
+        if (statusCode === 410 || statusCode === 404) {
+          staleIds.push(sub.id);
+        } else {
+          logger.warn(`Web push failed for subscription ${sub.id}:`, error);
+        }
+      }
+    }
+
+    if (staleIds.length > 0) {
+      await prisma.webPushSubscription.deleteMany({
+        where: { id: { in: staleIds } },
+      });
+      logger.info(`Cleaned up ${staleIds.length} stale push subscriptions`);
+    }
+
+    return sentCount;
+  }
+
+  /**
+   * POST /api/push/subscribe — save browser push subscription.
+   */
+  async subscribePush(userId: number, data: PushSubscribeInput) {
+    const existing = await prisma.webPushSubscription.findFirst({
+      where: { userId, endpoint: data.endpoint },
+    });
+
+    if (existing) {
+      await prisma.webPushSubscription.update({
+        where: { id: existing.id },
+        data: {
+          p256dhKey: data.keys.p256dh,
+          authKey: data.keys.auth,
+        },
+      });
+      return { id: existing.id, updated: true };
+    }
+
+    const sub = await prisma.webPushSubscription.create({
+      data: {
+        userId,
+        endpoint: data.endpoint,
+        p256dhKey: data.keys.p256dh,
+        authKey: data.keys.auth,
+      },
+    });
+
+    return { id: sub.id, updated: false };
+  }
+
+  /**
+   * DELETE /api/push/unsubscribe — remove push subscription.
+   */
+  async unsubscribePush(userId: number, endpoint: string) {
+    const result = await prisma.webPushSubscription.deleteMany({
+      where: { userId, endpoint },
+    });
+
+    return { removed: result.count > 0 };
+  }
+
+  // ═══════════════════════════════════════════════════
+  // NOTIFICATION TRIGGERS
+  // Called from other services when events happen.
+  // ═══════════════════════════════════════════════════
+
+  /**
+   * Trigger: Student submitted exam → notify parent(s).
+   */
+  async onExamSubmitted(studentId: number, examTitle: string, score: number, totalQuestions: number, correctCount: number) {
+    try {
+      const student = await prisma.user.findUnique({
+        where: { id: studentId },
+        select: { fullName: true, username: true },
+      });
+      const studentName = student?.fullName || student?.username || 'Học sinh';
+
+      const parentLinks = await prisma.parentStudent.findMany({
+        where: { studentId },
+        include: {
+          parent: {
+            select: { id: true, fullName: true, username: true, email: true },
+          },
+        },
+      });
+
+      for (const link of parentLinks) {
+        const parentName = link.parent.fullName || link.parent.username || 'Phụ huynh';
+        const title = `Kết quả bài KT: ${examTitle}`;
+        const message = `Con bạn ${studentName} đã hoàn thành bài kiểm tra "${examTitle}", điểm: ${score}/10 (${correctCount}/${totalQuestions} câu đúng).`;
+
+        await this.createNotification(link.parent.id, title, message, 'exam_result');
+
+        emitDashboardUpdate(link.parent.id, {
+          reason: 'child_exam_submitted',
+          entityType: 'exam_attempt',
+        });
+
+        const emailData = emailTemplates.examResultEmail({
+          parentName,
+          studentName,
+          examTitle,
+          score,
+          totalQuestions,
+          correctCount,
+          submittedAt: new Date().toLocaleString('vi-VN'),
+          dashboardUrl: `${env.clientUrl}/parent/children/${studentId}/dashboard`,
+        });
+        this.sendEmail(link.parent.email, emailData.subject, emailData.html).catch(() => {});
+
+        this.sendWebPush(link.parent.id, {
+          title,
+          body: message,
+          url: `/parent/children/${studentId}/results`,
+        }).catch(() => {});
+      }
+    } catch (error) {
+      logger.error('onExamSubmitted notification trigger failed:', error);
+    }
+  }
+
+  /**
+   * Trigger: Teacher publishes exam results → notify students + parents.
+   */
+  async onResultsPublished(examId: number, examTitle: string) {
+    try {
+      const assignments = await prisma.examAssignment.findMany({
+        where: { examId },
+        select: { classId: true },
+      });
+      const classIds = assignments.map((a) => a.classId);
+
+      const classStudents = await prisma.classStudent.findMany({
+        where: { classId: { in: classIds } },
+        include: {
+          student: {
+            select: { id: true, fullName: true, username: true, email: true },
+          },
+        },
+      });
+
+      const studentIds = new Set<number>();
+
+      for (const cs of classStudents) {
+        if (studentIds.has(cs.student.id)) continue;
+        studentIds.add(cs.student.id);
+
+        const studentName = cs.student.fullName || cs.student.username || 'Học sinh';
+        const title = `Kết quả đã được công bố: ${examTitle}`;
+        const message = `Giáo viên đã công bố kết quả bài kiểm tra "${examTitle}". Vào xem kết quả của bạn ngay!`;
+
+        await this.createNotification(cs.student.id, title, message, 'results_published');
+
+        this.sendWebPush(cs.student.id, {
+          title,
+          body: message,
+          url: `/student/exams`,
+        }).catch(() => {});
+      }
+
+      for (const studentId of studentIds) {
+        const parentLinks = await prisma.parentStudent.findMany({
+          where: { studentId },
+          select: { parent: { select: { id: true } } },
+        });
+
+        for (const link of parentLinks) {
+          const title = `Kết quả bài KT đã công bố: ${examTitle}`;
+          const message = `Giáo viên đã công bố kết quả bài kiểm tra "${examTitle}" cho con bạn.`;
+
+          await this.createNotification(link.parent.id, title, message, 'results_published');
+
+          this.sendWebPush(link.parent.id, {
+            title,
+            body: message,
+            url: `/parent/children/${studentId}/results`,
+          }).catch(() => {});
+        }
+      }
+    } catch (error) {
+      logger.error('onResultsPublished notification trigger failed:', error);
+    }
+  }
+
+  /**
+   * Trigger: Teacher assigns new exam to class → notify students.
+   */
+  async onExamAssigned(examId: number, classIds: number[]) {
+    try {
+      const exam = await prisma.exam.findUnique({
+        where: { id: examId },
+        include: {
+          subject: { select: { name: true } },
+          creator: { select: { fullName: true, username: true } },
+        },
+      });
+
+      if (!exam) return;
+
+      const classStudents = await prisma.classStudent.findMany({
+        where: { classId: { in: classIds } },
+        include: {
+          student: {
+            select: { id: true, fullName: true, username: true, email: true },
+          },
+        },
+      });
+
+      const teacherName = exam.creator.fullName || exam.creator.username || 'Giáo viên';
+      const notified = new Set<number>();
+
+      for (const cs of classStudents) {
+        if (notified.has(cs.student.id)) continue;
+        notified.add(cs.student.id);
+
+        const studentName = cs.student.fullName || cs.student.username || 'Học sinh';
+        const title = `Bài kiểm tra mới: ${exam.title}`;
+        const message = `Giáo viên ${teacherName} đã giao bài kiểm tra "${exam.title}" (${exam.subject.name}, ${exam.durationMin} phút).`;
+
+        await this.createNotification(cs.student.id, title, message, 'new_exam');
+
+        const emailData = emailTemplates.newExamAssignedEmail({
+          studentName,
+          examTitle: exam.title,
+          subjectName: exam.subject.name,
+          durationMin: exam.durationMin,
+          teacherName,
+          examListUrl: `${env.clientUrl}/student/exams`,
+        });
+        this.sendEmail(cs.student.email, emailData.subject, emailData.html).catch(() => {});
+
+        this.sendWebPush(cs.student.id, {
+          title,
+          body: message,
+          url: '/student/exams',
+        }).catch(() => {});
+      }
+    } catch (error) {
+      logger.error('onExamAssigned notification trigger failed:', error);
+    }
   }
 }
 

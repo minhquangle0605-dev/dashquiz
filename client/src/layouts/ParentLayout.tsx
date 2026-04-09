@@ -18,6 +18,15 @@ const iconResults = (
     />
   </svg>
 );
+const iconLink = (
+  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
+    />
+  </svg>
+);
 const iconProfile = (
   <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
     <path
@@ -37,6 +46,7 @@ export default function ParentLayout() {
       navItems={[
         { to: '/parent/dashboard', label: 'Dashboard', end: true, icon: iconDashboard },
         { to: '/parent/results', label: "Child's Results", icon: iconResults },
+        { to: '/parent/link-student', label: 'Link Student', icon: iconLink },
         { to: '/parent/profile', label: 'Profile', icon: iconProfile },
       ]}
     />

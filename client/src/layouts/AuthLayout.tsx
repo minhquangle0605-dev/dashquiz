@@ -1,9 +1,11 @@
-import { Outlet, Navigate } from 'react-router-dom';
+import { Outlet, Navigate, useLocation } from 'react-router-dom';
 
+import { PageTransition } from '@/components/shared/PageTransition';
 import { useAuthStore, selectIsAuthenticated } from '@/stores/authStore';
 import { ROLE_DASHBOARDS } from '@/utils/constants';
 
 export default function AuthLayout() {
+  const location = useLocation();
   const isAuthenticated = useAuthStore(selectIsAuthenticated);
   const user = useAuthStore((s) => s.user);
 
@@ -69,7 +71,9 @@ export default function AuthLayout() {
       {/* Right form panel */}
       <div className="flex flex-1 items-center justify-center px-4 py-10 sm:px-8">
         <div className="w-full max-w-md">
-          <Outlet />
+          <PageTransition transitionKey={location.pathname}>
+            <Outlet />
+          </PageTransition>
         </div>
       </div>
     </div>

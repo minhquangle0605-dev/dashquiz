@@ -4,6 +4,9 @@ import { getRedisClient } from '../../config/redis';
 import { AppError } from '../../middlewares/errorHandler';
 import { logger } from '../../utils/logger';
 import { PAGINATION } from '../../utils/constants';
+import { invalidateStudentCache } from '../analytics/analytics.service';
+import { notificationService } from '../notification/notification.service';
+import { emitStudentSubmitted, emitDashboardUpdate } from '../../socket';
 import type {
   ListStudentExamsQuery,
   SaveAnswersInput,
@@ -669,7 +672,44 @@ export class StudentExamService {
       logger.warn(`Failed to delete Redis key ${key}:`, err);
     }
 
+    invalidateStudentCache(attempt.studentId).catch((err) =>
+      logger.warn('Failed to invalidate analytics cache:', err),
+    );
+
     const correctCount = attemptAnswerData.filter((a) => a.isCorrect).length;
+
+    // Real-time: emit exam:student-submitted so teacher sees it live
+    const student = await prisma.user.findUnique({
+      where: { id: attempt.studentId },
+      select: { fullName: true, username: true },
+    });
+    emitStudentSubmitted(attempt.examId, {
+      attemptId: attempt.id,
+      studentId: attempt.studentId,
+      studentName: student?.fullName || student?.username || 'Học sinh',
+      totalScore: Number(totalScore),
+      totalQuestions: examQuestions.length,
+      correctCount,
+      isAutoSubmitted: isAuto,
+      submittedAt: now,
+    });
+
+    // Invalidate student's dashboard cache via socket
+    emitDashboardUpdate(attempt.studentId, {
+      reason: 'exam_submitted',
+      entityType: 'exam_attempt',
+      entityId: attempt.id,
+    });
+
+    notificationService
+      .onExamSubmitted(
+        attempt.studentId,
+        attempt.exam.title,
+        Number(totalScore),
+        examQuestions.length,
+        correctCount,
+      )
+      .catch((err) => logger.warn('Notification trigger onExamSubmitted failed:', err));
 
     return {
       success: true,

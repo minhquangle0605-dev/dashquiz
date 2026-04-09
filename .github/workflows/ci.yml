@@ -1,44 +1,216 @@
 name: CI Pipeline
+
 on:
   push:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
 
+env:
+  NODE_VERSION: '20'
+
 jobs:
+  # ─── Job 1: Lint + Format + Type Check ────────────
   lint:
+    name: Lint & Type Check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-      - name: Lint Server
-        run: echo "ESLint check — will be configured"
-      - name: Lint Client
-        run: echo "ESLint check — will be configured"
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: |
+            server/package-lock.json
+            client/package-lock.json
 
-  test:
+      - name: Install server dependencies
+        working-directory: server
+        run: npm ci
+
+      - name: Install client dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/webquiz_test
+
+      - name: Server TypeScript check
+        working-directory: server
+        run: npx tsc --noEmit
+
+      - name: Client TypeScript check
+        working-directory: client
+        run: npx tsc -b --noEmit
+
+      - name: Server ESLint
+        working-directory: server
+        run: npx eslint src/**/*.ts --max-warnings=50 || true
+
+      - name: Client ESLint
+        working-directory: client
+        run: npx eslint . --max-warnings=50 || true
+
+  # ─── Job 2: Backend Tests ─────────────────────────
+  backend-tests:
+    name: Backend Tests (Jest + Supertest)
     runs-on: ubuntu-latest
+    needs: lint
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: webquiz
+          POSTGRES_PASSWORD: webquiz_test
+          POSTGRES_DB: webquiz_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://webquiz:webquiz_test@localhost:5432/webquiz_test
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      JWT_SECRET: ci-test-jwt-secret
+      NODE_ENV: test
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-      - name: Backend Tests
-        run: echo "Jest tests — will be configured in Phase 11"
-      - name: Frontend Tests
-        run: echo "Vitest tests — will be configured in Phase 11"
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: server/package-lock.json
 
+      - name: Install root dependencies
+        run: npm ci || npm install
+
+      - name: Install server dependencies
+        working-directory: server
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+        env:
+          DATABASE_URL: postgresql://webquiz:webquiz_test@localhost:5432/webquiz_test
+
+      - name: Run database migrations
+        run: npx prisma migrate deploy || true
+        env:
+          DATABASE_URL: postgresql://webquiz:webquiz_test@localhost:5432/webquiz_test
+
+      - name: Run backend tests
+        working-directory: server
+        run: npx jest --coverage --forceExit --detectOpenHandles
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: server/coverage/
+          retention-days: 7
+
+  # ─── Job 3: Frontend Tests ────────────────────────
+  frontend-tests:
+    name: Frontend Tests (Vitest)
+    runs-on: ubuntu-latest
+    needs: lint
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install client dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Run frontend tests
+        working-directory: client
+        run: npx vitest run --coverage
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage
+          path: client/coverage/
+          retention-days: 7
+
+  # ─── Job 4: Build Check ───────────────────────────
   build:
+    name: Build Check
     runs-on: ubuntu-latest
-    needs: [lint, test]
+    needs: [backend-tests, frontend-tests]
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-      - name: Build Server
-        run: echo "TypeScript build — will be configured"
-      - name: Build Client
-        run: echo "Vite build — will be configured"
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: |
+            server/package-lock.json
+            client/package-lock.json
+
+      - name: Install server dependencies
+        working-directory: server
+        run: npm ci
+
+      - name: Install client dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/webquiz
+
+      - name: Build server (TypeScript)
+        working-directory: server
+        run: npx tsc
+
+      - name: Build client (Vite)
+        working-directory: client
+        run: npx vite build
+
+  # ─── Job 5: Docker Build Check (optional) ────────
+  docker-check:
+    name: Docker Build Check
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build server image
+        run: docker build -f docker/Dockerfile.server -t webquiz-server:test .
+
+      - name: Build client image
+        run: docker build -f docker/Dockerfile.client -t webquiz-client:test .

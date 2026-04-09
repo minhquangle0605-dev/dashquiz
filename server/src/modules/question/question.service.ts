@@ -3,6 +3,8 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError } from '../../middlewares/errorHandler';
 import { PAGINATION } from '../../utils/constants';
+import { cacheGet, cacheSet, cacheInvalidate } from '../../utils/cache';
+import { buildPaginationResponse } from '../../utils/pagination';
 import type {
   CreateQuestionInput,
   UpdateQuestionInput,
@@ -34,7 +36,29 @@ interface ImportError {
   message: string;
 }
 
+const LIST_QUESTIONS_CACHE_TTL = 180; // 3 minutes
+
 export class QuestionService {
+  private listQuestionsCacheKey(query: ListQuestionsQuery, page: number, limit: number): string {
+    const diff =
+      query.difficulty && Array.isArray(query.difficulty) && query.difficulty.length > 0
+        ? [...query.difficulty].sort((a, b) => a - b)
+        : null;
+    return `question:list:${JSON.stringify({
+      p: page,
+      l: limit,
+      s: query.subjectId ?? null,
+      c: query.chapterId ?? null,
+      t: query.topicId ?? null,
+      d: diff,
+      k: query.keyword ?? null,
+    })}`;
+  }
+
+  private async invalidateQuestionListCaches(): Promise<void> {
+    await cacheInvalidate('question:list:*');
+  }
+
   // ═══════════════════════════════════════════════
   // LIST QUESTIONS (with cascading filters + keyword search + pagination)
   // ═══════════════════════════════════════════════
@@ -43,6 +67,17 @@ export class QuestionService {
     const page = query.page ?? PAGINATION.DEFAULT_PAGE;
     const limit = Math.min(query.limit ?? PAGINATION.DEFAULT_LIMIT, PAGINATION.MAX_LIMIT);
     const skip = (page - 1) * limit;
+
+    const cacheKey = this.listQuestionsCacheKey(query, page, limit);
+    const cached = await cacheGet<{
+      success: true;
+      message: string;
+      data: unknown;
+      pagination: ReturnType<typeof buildPaginationResponse>;
+    }>(cacheKey);
+    if (cached) {
+      return cached as never;
+    }
 
     const where: Prisma.QuestionWhereInput = {};
 
@@ -66,11 +101,29 @@ export class QuestionService {
     const [questions, total] = await Promise.all([
       prisma.question.findMany({
         where,
-        include: {
+        select: {
+          id: true,
+          subjectId: true,
+          chapterId: true,
+          topicId: true,
+          content: true,
+          questionType: true,
+          difficulty: true,
+          createdBy: true,
+          createdAt: true,
           subject: { select: { id: true, name: true, code: true } },
           chapter: { select: { id: true, name: true } },
           topic: { select: { id: true, name: true } },
-          options: { orderBy: { label: 'asc' } },
+          options: {
+            orderBy: { label: 'asc' },
+            select: {
+              id: true,
+              questionId: true,
+              label: true,
+              content: true,
+              isCorrect: true,
+            },
+          },
           tags: { select: { id: true, tagName: true } },
           creator: { select: { id: true, fullName: true } },
           _count: { select: { examQuestions: true } },
@@ -82,21 +135,14 @@ export class QuestionService {
       prisma.question.count({ where }),
     ]);
 
-    const totalPages = Math.ceil(total / limit);
-
-    return {
-      success: true,
+    const result = {
+      success: true as const,
       message: 'Questions retrieved successfully',
       data: questions,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages,
-        hasNext: page < totalPages,
-        hasPrev: page > 1,
-      },
+      pagination: buildPaginationResponse(total, page, limit),
     };
+    await cacheSet(cacheKey, result, LIST_QUESTIONS_CACHE_TTL);
+    return result;
   }
 
   // ═══════════════════════════════════════════════
@@ -162,6 +208,8 @@ export class QuestionService {
       },
     });
 
+    await this.invalidateQuestionListCaches();
+
     return {
       success: true,
       message: 'Question created successfully',
@@ -221,6 +269,8 @@ export class QuestionService {
       });
     });
 
+    await this.invalidateQuestionListCaches();
+
     return {
       success: true,
       message: 'Question updated successfully',
@@ -261,6 +311,8 @@ export class QuestionService {
     }
 
     await prisma.question.delete({ where: { id } });
+
+    await this.invalidateQuestionListCaches();
 
     return {
       success: true,
@@ -396,6 +448,8 @@ export class QuestionService {
       ),
     );
 
+    await this.invalidateQuestionListCaches();
+
     return {
       success: true,
       message: `Imported ${created.length} question(s) successfully`,
@@ -502,6 +556,8 @@ export class QuestionService {
       select: { id: true, tagName: true },
     });
 
+    await this.invalidateQuestionListCaches();
+
     return {
       success: true,
       message: `Added ${newTags.length} new tag(s), ${data.tags.length - newTags.length} already existed`,
@@ -523,6 +579,8 @@ export class QuestionService {
     }
 
     await prisma.questionTag.delete({ where: { id: tagId } });
+
+    await this.invalidateQuestionListCaches();
 
     return {
       success: true,

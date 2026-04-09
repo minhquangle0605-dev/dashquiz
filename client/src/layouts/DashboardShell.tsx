@@ -1,6 +1,10 @@
 import { useState, type ReactNode, useEffect } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 
+import { CommandPalette } from '@/components/shared/CommandPalette';
+import { NotificationBell } from '@/components/shared/NotificationBell';
+import { PageTransition } from '@/components/shared/PageTransition';
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { useAuthStore } from '@/stores/authStore';
 import { ROUTES } from '@/utils/constants';
 
@@ -41,9 +45,11 @@ export function DashboardShell({
 }: DashboardShellProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const user = useAuthStore((s) => s.user);
   const logoutAction = useAuthStore((s) => s.logout);
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     const handleResize = () => {
@@ -52,6 +58,11 @@ export function DashboardShell({
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  useKeyboardShortcuts({
+    'ctrl+k': () => setCommandPaletteOpen((open) => !open),
+    escape: () => setCommandPaletteOpen(false),
+  });
 
   const handleLogout = () => {
     logoutAction();
@@ -141,7 +152,9 @@ export function DashboardShell({
   );
 
   return (
-    <div className="flex min-h-screen bg-slate-100">
+    <div className="flex min-h-screen" style={{ backgroundColor: 'var(--color-bg-page)' }}>
+      <CommandPalette open={commandPaletteOpen} onOpenChange={setCommandPaletteOpen} />
+
       {/* Mobile overlay */}
       {mobileOpen && (
         <div
@@ -171,12 +184,19 @@ export function DashboardShell({
 
       {/* Main content */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-slate-200 bg-white/90 px-4 backdrop-blur-md sm:px-6">
+        <header
+          className="sticky top-0 z-10 flex h-14 items-center justify-between border-b px-4 backdrop-blur-md sm:px-6"
+          style={{
+            borderColor: 'var(--color-border-subtle)',
+            backgroundColor: 'color-mix(in srgb, var(--color-bg-card) 90%, transparent)',
+          }}
+        >
           {/* Mobile menu button */}
           <button
             type="button"
             onClick={() => setMobileOpen(true)}
-            className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700 lg:hidden"
+            className="rounded-lg p-2 hover:bg-black/5 dark:hover:bg-white/10 lg:hidden"
+            style={{ color: 'var(--color-text-muted)' }}
             aria-label="Open menu"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -184,17 +204,18 @@ export function DashboardShell({
             </svg>
           </button>
 
-          <p className="hidden text-sm font-medium text-slate-500 lg:block">
+          <p className="hidden text-sm font-medium lg:block" style={{ color: 'var(--color-text-muted)' }}>
             High School Learning Analytics
           </p>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <NotificationBell />
             {user && (
-              <span className="hidden text-sm text-slate-600 sm:inline">
+              <span className="hidden text-sm sm:inline" style={{ color: 'var(--color-text-secondary)' }}>
                 {user.fullName}
               </span>
             )}
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-indigo-400 to-violet-500 text-xs font-bold text-white ring-2 ring-white">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-indigo-400 to-violet-500 text-xs font-bold text-white ring-2 ring-white dark:ring-slate-800">
               {user?.fullName
                 ? user.fullName
                     .split(' ')
@@ -207,7 +228,9 @@ export function DashboardShell({
           </div>
         </header>
         <main className="flex-1 overflow-auto p-4 sm:p-6">
-          <Outlet />
+          <PageTransition transitionKey={location.pathname}>
+            <Outlet />
+          </PageTransition>
         </main>
       </div>
     </div>

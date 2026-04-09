@@ -109,6 +109,23 @@ export const API_ENDPOINTS = {
     OVERVIEW: '/api/analytics/overview',
     CLASS: (classId: string) => `/api/analytics/classes/${classId}`,
   },
+  STUDENT_ANALYTICS: {
+    DASHBOARD: '/api/student/dashboard',
+    STRENGTHS: '/api/student/analytics/strengths',
+    TIME: '/api/student/analytics/time',
+    PATTERNS: '/api/student/analytics/patterns',
+    KNOWLEDGE_GRAPH: '/api/student/analytics/knowledge-graph',
+    ATTEMPTS: '/api/student/analytics/attempts',
+  },
+  TEACHER_ANALYTICS: {
+    CLASS_DASHBOARD: (classId: number) => `/api/teacher/classes/${classId}/dashboard`,
+    CLASS_PERFORMANCE: (classId: number) => `/api/teacher/classes/${classId}/analytics/performance`,
+    EXAM_DISTRIBUTION: (examId: number) => `/api/teacher/exams/${examId}/analytics/distribution`,
+    WEAK_STUDENTS: (classId: number) => `/api/teacher/classes/${classId}/analytics/weak-students`,
+    COMPARE_CLASSES: '/api/teacher/analytics/compare-classes',
+    EXAM_RESULTS: (examId: number) => `/api/teacher/exams/${examId}/results`,
+    EXPORT_REPORT: '/api/teacher/reports/export',
+  },
   QUESTIONS: {
     BASE: '/api/questions',
     BY_ID: (id: number) => `/api/questions/${id}`,
@@ -124,5 +141,19 @@ export const API_ENDPOINTS = {
       `/api/subjects/${subjectId}/chapters`,
     TOPICS_BY_CHAPTER: (chapterId: number) =>
       `/api/chapters/${chapterId}/topics`,
+  },
+  PARENT: {
+    LINK_STUDENT: '/api/parent/link-student',
+    CHILDREN: '/api/parent/children',
+    CHILD_RESULTS: (childId: number) => `/api/parent/children/${childId}/results`,
+    CHILD_DASHBOARD: (childId: number) => `/api/parent/children/${childId}/dashboard`,
+    CHILD_STRENGTHS: (childId: number) => `/api/parent/children/${childId}/analytics/strengths`,
+  },
+  NOTIFICATIONS: {
+    LIST: '/api/notifications',
+    MARK_READ: (id: number) => `/api/notifications/${id}/read`,
+    MARK_ALL_READ: '/api/notifications/read-all',
+    PUSH_SUBSCRIBE: '/api/notifications/push/subscribe',
+    PUSH_UNSUBSCRIBE: '/api/notifications/push/unsubscribe',
   },
 } as const;

@@ -14,12 +14,14 @@ import adminUserRoutes from './modules/user/user.admin.routes';
 import examRoutes from './modules/exam/exam.routes';
 import questionRoutes from './modules/question/question.routes';
 import analyticsRoutes from './modules/analytics/analytics.routes';
+import { studentAnalyticsRouter, teacherAnalyticsRouter } from './modules/analytics/analytics.routes';
 import aiRoutes from './modules/ai/ai.routes';
 import notificationRoutes from './modules/notification/notification.routes';
 import classRoutes from './modules/class/class.routes';
 import academicRoutes from './modules/academic/academic.routes';
 import systemRoutes from './modules/system/system.routes';
 import curriculumRoutes from './modules/curriculum/curriculum.routes';
+import parentRoutes from './modules/parent/parent.routes';
 import studentExamRoutes from './modules/student-exam/studentExam.routes';
 
 const app = express();
@@ -68,7 +70,10 @@ app.use('/api/classes', classRoutes);
 app.use('/api/admin/users', adminUserRoutes);
 app.use('/api/admin/academic', academicRoutes);
 app.use('/api/admin/system', systemRoutes);
+app.use('/api/parent', parentRoutes);
 app.use('/api/student', studentExamRoutes);
+app.use('/api/student', studentAnalyticsRouter);
+app.use('/api/teacher', teacherAnalyticsRouter);
 app.use('/api', curriculumRoutes);
 
 // ── API Index ───────────────────────────────────
@@ -77,25 +82,37 @@ app.get('/api', (_req, res) => {
     success: true,
     message: 'WebQuiz API v1.0',
     data: {
-      endpoints: {
-        health: 'GET /health',
-        auth: '/api/auth/*',
-        users: '/api/users/*',
-        exams: '/api/exams/*',
-        questions: '/api/questions/*',
-        subjects: '/api/subjects/*',
-        chapters: '/api/chapters/*',
-        topics: '/api/topics/*',
-        analytics: '/api/analytics/*',
-        ai: '/api/ai/*',
-        notifications: '/api/notifications/*',
-        classes: '/api/classes/*',
-        adminUsers: '/api/admin/users/*',
-        studentExams: '/api/student/exams/*',
-        studentAttempts: '/api/student/attempts/*',
-        academic: '/api/admin/academic/*',
-        system: '/api/admin/system/*',
-      },
+        endpoints: {
+          health: 'GET /health',
+          auth: '/api/auth/*',
+          users: '/api/users/*',
+          exams: '/api/exams/*',
+          questions: '/api/questions/*',
+          subjects: '/api/subjects/*',
+          chapters: '/api/chapters/*',
+          topics: '/api/topics/*',
+          analytics: '/api/analytics/*',
+          ai: '/api/ai/*',
+          notifications: '/api/notifications/*',
+          pushSubscribe: 'POST /api/notifications/push/subscribe',
+          pushUnsubscribe: 'DELETE /api/notifications/push/unsubscribe',
+          parentLinkStudent: 'POST /api/parent/link-student',
+          parentChildren: 'GET /api/parent/children',
+          parentChildResults: 'GET /api/parent/children/:id/results',
+          parentChildDashboard: 'GET /api/parent/children/:id/dashboard',
+          parentChildStrengths: 'GET /api/parent/children/:id/analytics/strengths',
+          classes: '/api/classes/*',
+          adminUsers: '/api/admin/users/*',
+          studentExams: '/api/student/exams/*',
+          studentAttempts: '/api/student/attempts/*',
+          studentDashboard: '/api/student/dashboard',
+          studentAnalytics: '/api/student/analytics/*',
+          teacherClasses: '/api/teacher/classes/*',
+          teacherExams: '/api/teacher/exams/*',
+          teacherReports: '/api/teacher/reports/*',
+          academic: '/api/admin/academic/*',
+          system: '/api/admin/system/*',
+        },
     },
   });
 });

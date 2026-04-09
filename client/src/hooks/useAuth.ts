@@ -33,6 +33,11 @@ export function useAuth() {
   const login = useCallback(
     (userData: User, tokens: AuthTokens) => {
       loginAction(userData, tokens);
+
+      if (userData.role === 'parent') {
+        import('@/utils/pushNotifications').then((m) => m.initPushOnFirstLogin());
+      }
+
       const dashboard = ROLE_DASHBOARDS[userData.role] ?? '/';
       navigate(dashboard, { replace: true });
     },

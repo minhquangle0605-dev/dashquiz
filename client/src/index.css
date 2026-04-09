@@ -1,11 +1,96 @@
 @import "tailwindcss";
 
+/* Class-based dark mode for `dark:*` utilities (matches `.dark` on <html>) */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+  Semantic tokens — light (:root) and dark (.dark on documentElement).
+  Contrast: body text vs page bg ≥ 4.5:1; secondary/muted vs page ≥ 4.5:1 where used as body copy.
+*/
 :root {
+  color-scheme: light;
+
+  /* Surfaces */
+  --color-bg-page: #f1f5f9;
+  --color-bg-card: #ffffff;
+  --color-bg-sidebar: #f8fafc;
+  --color-bg-input: #ffffff;
+  --color-bg-muted: #e2e8f0;
+
+  /* Text */
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #334155;
+  --color-text-muted: #475569;
+
+  /* Borders */
+  --color-border: #cbd5e1;
+  --color-border-subtle: #e2e8f0;
+
+  /* Brand & semantic (UI accents; on-white or on-dark pairs chosen for ≥ 4.5:1 when used as text) */
   --color-primary: #2563eb;
   --color-primary-dark: #1d4ed8;
-  --color-success: #10b981;
-  --color-warning: #f59e0b;
-  --color-danger: #ef4444;
+  --color-on-primary: #ffffff;
+  --color-success: #059669;
+  --color-on-success: #ffffff;
+  --color-warning: #b45309;
+  --color-on-warning: #ffffff;
+  --color-danger: #dc2626;
+  --color-on-danger: #ffffff;
+}
+
+.dark {
+  color-scheme: dark;
+
+  --color-bg-page: #0b1120;
+  --color-bg-card: #151f32;
+  --color-bg-sidebar: #0f172a;
+  --color-bg-input: #1e293b;
+  --color-bg-muted: #1e293b;
+
+  --color-text-primary: #f1f5f9;
+  --color-text-secondary: #cbd5e1;
+  --color-text-muted: #94a3b8;
+
+  --color-border: #334155;
+  --color-border-subtle: #1e293b;
+
+  /* Saturated blues dark enough for white labels at 4.5:1+ */
+  --color-primary: #2563eb;
+  --color-primary-dark: #1d4ed8;
+  --color-on-primary: #ffffff;
+  --color-success: #34d399;
+  --color-on-success: #022c22;
+  --color-warning: #fbbf24;
+  --color-on-warning: #422006;
+  --color-danger: #f87171;
+  --color-on-danger: #450a0a;
+}
+
+/* Expose tokens to Tailwind utilities: bg-app-page, text-app-primary, border-app, etc. */
+@theme inline {
+  --color-app-page: var(--color-bg-page);
+  --color-app-card: var(--color-bg-card);
+  --color-app-sidebar: var(--color-bg-sidebar);
+  --color-app-input: var(--color-bg-input);
+  --color-app-muted: var(--color-bg-muted);
+
+  --color-app-primary: var(--color-text-primary);
+  --color-app-secondary: var(--color-text-secondary);
+  --color-app-foreground-muted: var(--color-text-muted);
+
+  --color-app-border: var(--color-border);
+  --color-app-border-subtle: var(--color-border-subtle);
+
+  --color-app-brand: var(--color-primary);
+  --color-app-brand-hover: var(--color-primary-dark);
+  --color-app-on-brand: var(--color-on-primary);
+
+  --color-app-success: var(--color-success);
+  --color-app-on-success: var(--color-on-success);
+  --color-app-warning: var(--color-warning);
+  --color-app-on-warning: var(--color-on-warning);
+  --color-app-danger: var(--color-danger);
+  --color-app-on-danger: var(--color-on-danger);
 }
 
 body {
@@ -13,8 +98,12 @@ body {
   font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background-color: var(--color-bg-page);
+  color: var(--color-text-primary);
 }
 
 #root {
   min-height: 100vh;
+  background-color: var(--color-bg-page);
+  color: var(--color-text-primary);
 }

@@ -15,6 +15,7 @@ const ForgotPasswordPage = lazy(() => import('./pages/auth/ForgotPasswordPage'))
 const ResetPasswordPage = lazy(() => import('./pages/auth/ResetPasswordPage'));
 
 const StudentDashboard = lazy(() => import('./pages/student/DashboardPage'));
+const KnowledgeGraphPage = lazy(() => import('./pages/student/KnowledgeGraphPage'));
 const ExamListPage = lazy(() => import('./pages/student/ExamListPage'));
 const TakeExamPage = lazy(() => import('./pages/student/TakeExamPage'));
 const ExamResultPage = lazy(() => import('./pages/student/ExamResultPage'));
@@ -28,6 +29,7 @@ const ClassesPage = lazy(() => import('./pages/teacher/ClassesPage'));
 
 const ParentDashboard = lazy(() => import('./pages/parent/DashboardPage'));
 const ChildResultsPage = lazy(() => import('./pages/parent/ChildResultsPage'));
+const LinkStudentPage = lazy(() => import('./pages/parent/LinkStudentPage'));
 
 const AdminDashboard = lazy(() => import('./pages/admin/DashboardPage'));
 const UsersPage = lazy(() => import('./pages/admin/UsersPage'));
@@ -36,7 +38,9 @@ const SystemPage = lazy(() => import('./pages/admin/SystemPage'));
 
 const NotFoundPage = lazy(() => import('./pages/common/NotFoundPage'));
 const ForbiddenPage = lazy(() => import('./pages/common/ForbiddenPage'));
+const ServerErrorPage = lazy(() => import('./pages/common/ServerErrorPage'));
 const ProfilePage = lazy(() => import('./pages/common/ProfilePage'));
+const NotificationsPage = lazy(() => import('./pages/common/NotificationsPage'));
 
 function LoadingSpinner() {
   return (
@@ -65,10 +69,12 @@ export default function App() {
           <Route path="/student" element={<StudentLayout />}>
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<StudentDashboard />} />
+            <Route path="knowledge-graph" element={<KnowledgeGraphPage />} />
             <Route path="exams" element={<ExamListPage />} />
             <Route path="exams/:id/take" element={<TakeExamPage />} />
             <Route path="attempts/:attemptId/result" element={<ExamResultPage />} />
             <Route path="ai-practice" element={<AIPracticePage />} />
+            <Route path="notifications" element={<NotificationsPage />} />
             <Route path="profile" element={<ProfilePage />} />
           </Route>
         </Route>
@@ -82,6 +88,7 @@ export default function App() {
             <Route path="exams" element={<ExamsPage />} />
             <Route path="exams/create" element={<CreateExamPage />} />
             <Route path="classes" element={<ClassesPage />} />
+            <Route path="notifications" element={<NotificationsPage />} />
             <Route path="profile" element={<ProfilePage />} />
           </Route>
         </Route>
@@ -92,6 +99,8 @@ export default function App() {
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<ParentDashboard />} />
             <Route path="results" element={<ChildResultsPage />} />
+            <Route path="link-student" element={<LinkStudentPage />} />
+            <Route path="notifications" element={<NotificationsPage />} />
             <Route path="profile" element={<ProfilePage />} />
           </Route>
         </Route>
@@ -104,12 +113,14 @@ export default function App() {
             <Route path="users" element={<UsersPage />} />
             <Route path="academic" element={<AcademicPage />} />
             <Route path="system" element={<SystemPage />} />
+            <Route path="notifications" element={<NotificationsPage />} />
             <Route path="profile" element={<ProfilePage />} />
           </Route>
         </Route>
 
         {/* Common routes */}
         <Route path="/403" element={<ForbiddenPage />} />
+        <Route path="/500" element={<ServerErrorPage />} />
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>

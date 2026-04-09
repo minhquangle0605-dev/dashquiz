@@ -1,3 +1,4 @@
+import http from 'http';
 import app from './app';
 import { env } from './config/env';
 import { logger } from './utils/logger';
@@ -5,6 +6,7 @@ import { connectDatabase, disconnectDatabase } from './config/database';
 import { connectRedis, disconnectRedis } from './config/redis';
 import { connectMinio } from './config/minio';
 import { startExamScheduleCron, stopExamScheduleCron } from './utils/cron';
+import { initSocketServer } from './socket';
 
 const PORT = env.port;
 
@@ -20,12 +22,17 @@ async function bootstrap() {
 
   startExamScheduleCron();
 
-  const server = app.listen(PORT, () => {
+  const httpServer = http.createServer(app);
+
+  const io = initSocketServer(httpServer);
+
+  httpServer.listen(PORT, () => {
     logger.info(`
   ╔══════════════════════════════════════════╗
   ║  WebQuiz API Server                     ║
   ║  Environment: ${env.nodeEnv.padEnd(25)}║
   ║  Port: ${String(PORT).padEnd(33)}║
+  ║  Socket.IO: enabled (Redis adapter)     ║
   ║  Health: http://localhost:${String(PORT).padEnd(13)}║
   ╚══════════════════════════════════════════╝
     `);
@@ -33,7 +40,10 @@ async function bootstrap() {
 
   const shutdown = async (signal: string) => {
     logger.info(`${signal} received. Starting graceful shutdown...`);
-    server.close(async () => {
+
+    io.close();
+
+    httpServer.close(async () => {
       stopExamScheduleCron();
       await disconnectDatabase();
       await disconnectRedis();
