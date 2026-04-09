@@ -9,6 +9,8 @@ import {
   createAcademicYearSchema,
   updateAcademicYearSchema,
   listSemestersQuerySchema,
+  createSemesterSchema,
+  updateSemesterSchema,
 } from './academic.validation';
 import { ROLES } from '../../utils/constants';
 
@@ -51,6 +53,18 @@ router.get(
   '/semesters',
   validate(listSemestersQuerySchema, 'query'),
   academicController.listSemesters,
+);
+router.post(
+  '/semesters',
+  validate(createSemesterSchema),
+  activityLogger('CREATE_SEMESTER', 'semester'),
+  academicController.createSemester,
+);
+router.put(
+  '/semesters/:id',
+  validate(updateSemesterSchema),
+  activityLogger('UPDATE_SEMESTER', 'semester'),
+  academicController.updateSemester,
 );
 
 export default router;

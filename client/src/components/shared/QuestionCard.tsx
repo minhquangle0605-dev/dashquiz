@@ -5,8 +5,7 @@ import { DifficultyBadge } from './DifficultyBadge';
 export interface QuestionCardProps {
   question: Question;
   showAnswer?: boolean;
-  /** Selected option id (multiple choice). */
-  selectedOption?: string;
+  selectedOption?: number;
   className?: string;
 }
 
@@ -23,13 +22,12 @@ export function QuestionCard({
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <DifficultyBadge level={question.difficulty} />
         <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
-          {question.type.replace('_', ' ')}
+          {question.questionType.replace('_', ' ')}
         </span>
-        <span className="text-xs text-slate-500">{question.points} pts</span>
       </div>
-      <p className="text-base font-medium text-slate-900">{question.prompt}</p>
+      <p className="text-base font-medium text-slate-900">{question.content}</p>
 
-      {question.options !== undefined && question.options.length > 0 && (
+      {question.options.length > 0 && (
         <ul className="mt-4 space-y-2">
           {question.options.map((opt) => {
             const isSelected = opt.id === selectedOption;
@@ -51,26 +49,21 @@ export function QuestionCard({
             }
 
             return (
-              <li
-                key={opt.id}
-                className={row}
-              >
+              <li key={opt.id} className={row}>
                 <span className="font-medium text-slate-600">{opt.label}.</span>{' '}
-                {opt.text}
+                {opt.content}
               </li>
             );
           })}
         </ul>
       )}
 
-      {showAnswer &&
-        question.explanation !== undefined &&
-        question.explanation !== '' && (
-          <p className="mt-4 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
-            <span className="font-semibold text-slate-800">Explanation: </span>
-            {question.explanation}
-          </p>
-        )}
+      {showAnswer && question.explanation && (
+        <p className="mt-4 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
+          <span className="font-semibold text-slate-800">Explanation: </span>
+          {question.explanation}
+        </p>
+      )}
     </article>
   );
 }

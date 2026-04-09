@@ -1,52 +1,94 @@
 export interface QuestionOption {
-  id: string;
+  id: number;
+  questionId?: number;
   label: string;
-  text: string;
-  isCorrect?: boolean;
+  content: string;
+  isCorrect: boolean;
 }
 
 export interface QuestionTag {
-  id: string;
-  name: string;
-  slug?: string;
+  id: number;
+  questionId?: number;
+  tagName: string;
 }
 
-export type QuestionType = 'multiple_choice' | 'true_false' | 'short_answer';
+export type QuestionKind = 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE';
 
 export interface Question {
-  id: string;
-  subjectId: string;
-  chapterId?: string;
-  topicId?: string;
-  type: QuestionType;
-  prompt: string;
-  /** Difficulty scale 1 (easiest) — 5 (hardest). */
+  id: number;
+  subjectId: number;
+  chapterId: number | null;
+  topicId: number | null;
+  content: string;
+  questionType: QuestionKind;
   difficulty: 1 | 2 | 3 | 4 | 5;
-  points: number;
-  options?: QuestionOption[];
-  tags: QuestionTag[];
-  explanation?: string;
+  explanation: string | null;
+  createdBy: number;
   createdAt: string;
-  updatedAt: string;
+  options: QuestionOption[];
+  tags: QuestionTag[];
+  subject?: { id: number; name: string; code: string };
+  chapter?: { id: number; name: string } | null;
+  topic?: { id: number; name: string } | null;
+  creator?: { id: number; fullName: string };
 }
 
 export interface QuestionFilter {
-  subjectId?: string;
-  chapterId?: string;
-  topicId?: string;
-  difficulty?: 1 | 2 | 3 | 4 | 5;
-  tagIds?: string[];
+  subjectId?: number | string;
+  chapterId?: number | string;
+  topicId?: number | string;
+  difficulty?: number | string;
   search?: string;
-  type?: QuestionType;
+  questionType?: QuestionKind;
   page?: number;
   pageSize?: number;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
 }
 
+export interface CreateQuestionPayload {
+  subjectId: number;
+  chapterId?: number;
+  topicId?: number;
+  content: string;
+  questionType: QuestionKind;
+  difficulty: number;
+  explanation?: string;
+  options: Array<{
+    label: string;
+    content: string;
+    isCorrect: boolean;
+  }>;
+  tags?: string[];
+}
+
+export interface UpdateQuestionPayload extends Partial<CreateQuestionPayload> {}
+
 export interface ImportQuestionResult {
   totalRows: number;
   imported: number;
   failed: number;
   errors: Array<{ row: number; message: string }>;
+}
+
+export interface CurriculumSubject {
+  id: number;
+  name: string;
+  code: string;
+  description?: string;
+  status?: number;
+}
+
+export interface CurriculumChapter {
+  id: number;
+  subjectId: number;
+  name: string;
+  orderIndex: number;
+}
+
+export interface CurriculumTopic {
+  id: number;
+  chapterId: number;
+  name: string;
+  description?: string;
 }

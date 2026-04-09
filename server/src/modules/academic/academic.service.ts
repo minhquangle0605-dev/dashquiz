@@ -6,6 +6,8 @@ import type {
   CreateAcademicYearInput,
   UpdateAcademicYearInput,
   ListSemestersQuery,
+  CreateSemesterInput,
+  UpdateSemesterInput,
 } from './academic.validation';
 
 export class AcademicService {
@@ -190,6 +192,70 @@ export class AcademicService {
       success: true,
       message: 'Semesters retrieved successfully',
       data: semesters,
+    };
+  }
+
+  async createSemester(data: CreateSemesterInput) {
+    const yearExists = await prisma.academicYear.findUnique({
+      where: { id: data.academicYearId },
+    });
+    if (!yearExists) {
+      throw new AppError('Academic year not found', 404);
+    }
+
+    const semester = await prisma.semester.create({
+      data: {
+        academicYearId: data.academicYearId,
+        name: data.name,
+        startDate: data.startDate,
+        endDate: data.endDate,
+      },
+      include: {
+        academicYear: { select: { id: true, name: true, isCurrent: true } },
+        _count: { select: { classes: true } },
+      },
+    });
+
+    return {
+      success: true,
+      message: 'Semester created successfully',
+      data: semester,
+    };
+  }
+
+  async updateSemester(id: number, data: UpdateSemesterInput) {
+    const semester = await prisma.semester.findUnique({ where: { id } });
+    if (!semester) {
+      throw new AppError('Semester not found', 404);
+    }
+
+    if (data.academicYearId) {
+      const yearExists = await prisma.academicYear.findUnique({
+        where: { id: data.academicYearId },
+      });
+      if (!yearExists) {
+        throw new AppError('Academic year not found', 404);
+      }
+    }
+
+    const updated = await prisma.semester.update({
+      where: { id },
+      data: {
+        ...(data.academicYearId !== undefined && { academicYearId: data.academicYearId }),
+        ...(data.name !== undefined && { name: data.name }),
+        ...(data.startDate !== undefined && { startDate: data.startDate }),
+        ...(data.endDate !== undefined && { endDate: data.endDate }),
+      },
+      include: {
+        academicYear: { select: { id: true, name: true, isCurrent: true } },
+        _count: { select: { classes: true } },
+      },
+    });
+
+    return {
+      success: true,
+      message: 'Semester updated successfully',
+      data: updated,
     };
   }
 }

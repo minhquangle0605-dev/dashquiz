@@ -49,6 +49,30 @@ export const API_ENDPOINTS = {
     ME_PASSWORD: '/api/users/me/password',
     ME_AVATAR: '/api/users/me/avatar',
   },
+  ADMIN: {
+    USERS: {
+      BASE: '/api/admin/users',
+      BY_ID: (id: number) => `/api/admin/users/${id}`,
+      ROLE: (id: number) => `/api/admin/users/${id}/role`,
+      IMPORT: '/api/admin/users/import',
+      IMPORT_TEMPLATE: '/api/admin/users/import-template',
+    },
+    ACADEMIC: {
+      SUBJECTS: '/api/admin/academic/subjects',
+      SUBJECT_BY_ID: (id: number) => `/api/admin/academic/subjects/${id}`,
+      ACADEMIC_YEARS: '/api/admin/academic/academic-years',
+      ACADEMIC_YEAR_BY_ID: (id: number) => `/api/admin/academic/academic-years/${id}`,
+      SEMESTERS: '/api/admin/academic/semesters',
+      SEMESTER_BY_ID: (id: number) => `/api/admin/academic/semesters/${id}`,
+    },
+    SYSTEM: {
+      CONFIGS: '/api/admin/system/configs',
+      MONITORING: '/api/admin/system/monitoring',
+      ACTIVITY_LOGS: '/api/admin/system/activity-logs',
+      BACKUPS: '/api/admin/system/backups',
+      BACKUP_RESTORE: (id: number) => `/api/admin/system/backups/${id}/restore`,
+    },
+  },
   EXAMS: {
     BASE: '/api/exams',
     BY_ID: (id: string) => `/api/exams/${id}`,
@@ -64,5 +88,21 @@ export const API_ENDPOINTS = {
   ANALYTICS: {
     OVERVIEW: '/api/analytics/overview',
     CLASS: (classId: string) => `/api/analytics/classes/${classId}`,
+  },
+  QUESTIONS: {
+    BASE: '/api/questions',
+    BY_ID: (id: number) => `/api/questions/${id}`,
+    IMPORT: '/api/questions/import',
+    IMPORT_TEMPLATE: '/api/questions/import-template',
+    TAGS: (id: number) => `/api/questions/${id}/tags`,
+    TAG_BY_ID: (questionId: number, tagId: number) =>
+      `/api/questions/${questionId}/tags/${tagId}`,
+  },
+  CURRICULUM: {
+    SUBJECTS: '/api/subjects',
+    CHAPTERS_BY_SUBJECT: (subjectId: number) =>
+      `/api/subjects/${subjectId}/chapters`,
+    TOPICS_BY_CHAPTER: (chapterId: number) =>
+      `/api/chapters/${chapterId}/topics`,
   },
 } as const;
