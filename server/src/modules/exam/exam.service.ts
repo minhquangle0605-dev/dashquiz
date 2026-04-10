@@ -1,6 +1,7 @@
 import { Prisma, ExamStatus } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError } from '../../middlewares/errorHandler';
+import { isCoreSubjectCode } from '../../constants/subjects';
 import { logger } from '../../utils/logger';
 import { PAGINATION } from '../../utils/constants';
 import { cacheGet, cacheSet, cacheInvalidateExact } from '../../utils/cache';
@@ -99,17 +100,7 @@ export class ExamService {
   // GET EXAM BY ID (detail + questions)
   // ═══════════════════════════════════════════════
 
-  async getExamById(id: number) {
-    const cacheKey = this.examDetailCacheKey(id);
-    const cached = await cacheGet<{
-      success: true;
-      message: string;
-      data: Record<string, unknown>;
-    }>(cacheKey);
-    if (cached) {
-      return cached as never;
-    }
-
+  async getExamById(id: number, userId: number, role: string) {
     const exam = await prisma.exam.findUnique({
       where: { id },
       select: {
@@ -192,13 +183,33 @@ export class ExamService {
       throw new AppError('Exam not found', 404);
     }
 
-    const result = {
+    const isOwnerOrAdmin = role === 'admin' || exam.createdBy === userId;
+    if (!isOwnerOrAdmin) {
+      throw new AppError('You do not have permission to view this exam detail', 403);
+    }
+
+    const safeExam = {
+      ...exam,
+      examQuestions: exam.examQuestions.map((eq) => ({
+        ...eq,
+        question: {
+          ...eq.question,
+          options: eq.question.options.map((o) => ({
+            id: o.id,
+            questionId: o.questionId,
+            label: o.label,
+            content: o.content,
+            isCorrect: o.isCorrect,
+          })),
+        },
+      })),
+    };
+
+    return {
       success: true as const,
       message: 'Exam retrieved successfully',
-      data: exam,
+      data: safeExam,
     };
-    await cacheSet(cacheKey, result, EXAM_DETAIL_CACHE_TTL);
-    return result;
   }
 
   // ═══════════════════════════════════════════════
@@ -207,7 +218,7 @@ export class ExamService {
 
   async createExam(data: CreateExamInput, userId: number) {
     const subject = await prisma.subject.findUnique({ where: { id: data.subjectId } });
-    if (!subject) throw new AppError('Subject not found', 404);
+    if (!subject || !isCoreSubjectCode(subject.code)) throw new AppError('Subject not found', 404);
 
     const exam = await prisma.exam.create({
       data: {
@@ -241,11 +252,11 @@ export class ExamService {
   // UPDATE EXAM (only DRAFT)
   // ═══════════════════════════════════════════════
 
-  async updateExam(id: number, data: UpdateExamInput, userId: number) {
+  async updateExam(id: number, data: UpdateExamInput, userId: number, role: string = 'teacher') {
     const exam = await prisma.exam.findUnique({ where: { id } });
     if (!exam) throw new AppError('Exam not found', 404);
 
-    if (exam.createdBy !== userId) {
+    if (exam.createdBy !== userId && role !== 'admin') {
       throw new AppError('You can only edit your own exams', 403);
     }
 
@@ -255,7 +266,7 @@ export class ExamService {
 
     if (data.subjectId) {
       const subject = await prisma.subject.findUnique({ where: { id: data.subjectId } });
-      if (!subject) throw new AppError('Subject not found', 404);
+      if (!subject || !isCoreSubjectCode(subject.code)) throw new AppError('Subject not found', 404);
     }
 
     const updated = await prisma.exam.update({
@@ -289,16 +300,16 @@ export class ExamService {
   // ADD QUESTIONS (manual pick or random)
   // ═══════════════════════════════════════════════
 
-  async addQuestions(examId: number, data: AddQuestionsInput, userId: number) {
+  async addQuestions(examId: number, data: AddQuestionsInput, userId: number, role: string = 'teacher') {
     const exam = await prisma.exam.findUnique({ where: { id: examId } });
     if (!exam) throw new AppError('Exam not found', 404);
-    if (exam.createdBy !== userId) throw new AppError('You can only edit your own exams', 403);
+    if (exam.createdBy !== userId && role !== 'admin') throw new AppError('You can only edit your own exams', 403);
     if (exam.status !== 'DRAFT') throw new AppError('Only DRAFT exams can be modified', 400);
 
     let questionIds: number[] = [];
 
     if (data.mode === 'manual') {
-      questionIds = data.questionIds!;
+      questionIds = [...new Set(data.questionIds!)];
 
       const existingQuestions = await prisma.question.findMany({
         where: { id: { in: questionIds } },
@@ -341,8 +352,12 @@ export class ExamService {
         );
       }
 
-      const shuffled = available.sort(() => Math.random() - 0.5);
-      questionIds = shuffled.slice(0, cfg.count).map((q) => q.id);
+      const pool = [...available];
+      for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [pool[i], pool[j]] = [pool[j], pool[i]];
+      }
+      questionIds = pool.slice(0, cfg.count).map((q) => q.id);
     }
 
     const existingEQ = await prisma.examQuestion.findMany({
@@ -365,24 +380,31 @@ export class ExamService {
       ? (await prisma.examQuestion.aggregate({ where: { examId }, _max: { orderIndex: true } }))._max.orderIndex! + 1
       : 1;
 
-    const pointsPerQuestion = exam.totalQuestions > 0
-      ? parseFloat((10 / exam.totalQuestions).toFixed(2))
-      : 1;
-
     await prisma.examQuestion.createMany({
       data: newIds.map((questionId, i) => ({
         examId,
         questionId,
         orderIndex: startIndex + i,
-        points: new Prisma.Decimal(pointsPerQuestion),
+        points: new Prisma.Decimal(1),
       })),
     });
 
     const totalInExam = await prisma.examQuestion.count({ where: { examId } });
-    await prisma.exam.update({
-      where: { id: examId },
-      data: { totalQuestions: totalInExam },
-    });
+
+    const pointsPerQuestion = totalInExam > 0
+      ? parseFloat((10 / totalInExam).toFixed(2))
+      : 1;
+
+    await prisma.$transaction([
+      prisma.exam.update({
+        where: { id: examId },
+        data: { totalQuestions: totalInExam },
+      }),
+      prisma.examQuestion.updateMany({
+        where: { examId },
+        data: { points: new Prisma.Decimal(pointsPerQuestion) },
+      }),
+    ]);
 
     await this.invalidateExamDetail(examId);
 
@@ -401,16 +423,25 @@ export class ExamService {
   // PUBLISH EXAM (DRAFT → PUBLISHED)
   // ═══════════════════════════════════════════════
 
-  async publishExam(examId: number, userId: number) {
+  async publishExam(examId: number, userId: number, role: string = 'teacher') {
     const exam = await prisma.exam.findUnique({
       where: { id: examId },
       include: { _count: { select: { examQuestions: true } } },
     });
 
     if (!exam) throw new AppError('Exam not found', 404);
-    if (exam.createdBy !== userId) throw new AppError('You can only publish your own exams', 403);
+    if (exam.createdBy !== userId && role !== 'admin') {
+      throw new AppError('You can only publish your own exams', 403);
+    }
     if (exam.status !== 'DRAFT') throw new AppError('Only DRAFT exams can be published', 400);
     if (exam._count.examQuestions === 0) throw new AppError('Exam must have at least one question', 400);
+
+    if (exam.totalQuestions !== exam._count.examQuestions) {
+      await prisma.exam.update({
+        where: { id: examId },
+        data: { totalQuestions: exam._count.examQuestions },
+      });
+    }
 
     const updated = await prisma.exam.update({
       where: { id: examId },
@@ -437,8 +468,8 @@ export class ExamService {
     }
 
     notificationService
-      .onResultsPublished(examId, updated.title)
-      .catch((err) => logger.warn('Notification trigger onResultsPublished failed:', err));
+      .onExamPublished(examId, updated.title)
+      .catch((err) => logger.warn('Notification trigger onExamPublished failed:', err));
 
     await this.invalidateExamDetail(examId);
 
@@ -453,10 +484,10 @@ export class ExamService {
   // SCHEDULE EXAM
   // ═══════════════════════════════════════════════
 
-  async scheduleExam(examId: number, data: ScheduleExamInput, userId: number) {
+  async scheduleExam(examId: number, data: ScheduleExamInput, userId: number, role: string = 'teacher') {
     const exam = await prisma.exam.findUnique({ where: { id: examId } });
     if (!exam) throw new AppError('Exam not found', 404);
-    if (exam.createdBy !== userId) throw new AppError('You can only schedule your own exams', 403);
+    if (exam.createdBy !== userId && role !== 'admin') throw new AppError('You can only schedule your own exams', 403);
 
     if (exam.status !== 'DRAFT' && exam.status !== 'PUBLISHED') {
       throw new AppError('Only DRAFT or PUBLISHED exams can be scheduled', 400);

@@ -27,6 +27,8 @@ router.get(
   userController.adminListUsers,
 );
 
+router.get('/roles', userController.adminListRoles);
+
 router.post(
   '/',
   validate(createUserSchema),

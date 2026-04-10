@@ -13,8 +13,8 @@ afterEach(() => server.resetHandlers());
 const getPasswordInput = () =>
   screen.getByPlaceholderText('Enter your password');
 
-const getEmailInput = () =>
-  screen.getByLabelText(/email address/i);
+const getUsernameInput = () =>
+  screen.getByLabelText(/^username$/i);
 
 function renderLogin() {
   const queryClient = new QueryClient({
@@ -35,32 +35,32 @@ describe('LoginPage', () => {
     renderLogin();
 
     expect(screen.getByText('Sign in to your account')).toBeInTheDocument();
-    expect(getEmailInput()).toBeInTheDocument();
+    expect(getUsernameInput()).toBeInTheDocument();
     expect(getPasswordInput()).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument();
   });
 
-  it('should show validation error for empty email', async () => {
+  it('should show validation error for empty username', async () => {
     const user = userEvent.setup();
     renderLogin();
 
     await user.click(screen.getByRole('button', { name: /sign in/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/email is required/i)).toBeInTheDocument();
+      expect(screen.getByText(/username is required/i)).toBeInTheDocument();
     });
   });
 
-  it('should show validation error for invalid email format', async () => {
+  it('should show validation error for username shorter than 3 characters', async () => {
     const user = userEvent.setup();
     renderLogin();
 
-    await user.type(getEmailInput(), 'notanemail');
+    await user.type(getUsernameInput(), 'ab');
     await user.type(getPasswordInput(), 'password123');
     await user.click(screen.getByRole('button', { name: /sign in/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/valid email/i)).toBeInTheDocument();
+      expect(screen.getByText(/at least 3 characters/i)).toBeInTheDocument();
     });
   });
 
@@ -68,21 +68,13 @@ describe('LoginPage', () => {
     const user = userEvent.setup();
     renderLogin();
 
-    await user.type(getEmailInput(), 'test@test.com');
+    await user.type(getUsernameInput(), 'teststudent');
     await user.type(getPasswordInput(), '123');
     await user.click(screen.getByRole('button', { name: /sign in/i }));
 
     await waitFor(() => {
       expect(screen.getByText(/at least 6 characters/i)).toBeInTheDocument();
     });
-  });
-
-  it('should have a forgot password link', () => {
-    renderLogin();
-
-    const link = screen.getByText(/forgot password/i);
-    expect(link).toBeInTheDocument();
-    expect(link.closest('a')).toHaveAttribute('href', '/forgot-password');
   });
 
   it('should toggle password visibility', async () => {
@@ -109,7 +101,7 @@ describe('LoginPage', () => {
     const user = userEvent.setup();
     renderLogin();
 
-    await user.type(getEmailInput(), 'student@test.com');
+    await user.type(getUsernameInput(), 'teststudent');
     await user.type(getPasswordInput(), 'Password123!');
 
     const button = screen.getByRole('button', { name: /sign in/i });

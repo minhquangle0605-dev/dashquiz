@@ -2,9 +2,9 @@ import { http, HttpResponse } from 'msw';
 
 export const handlers = [
   http.post('/api/auth/login', async ({ request }) => {
-    const body = (await request.json()) as { email?: string; password?: string };
+    const body = (await request.json()) as { username?: string; password?: string };
 
-    if (body.email === 'student@test.com' && body.password === 'Password123!') {
+    if (body.username === 'teststudent' && body.password === 'Password123!') {
       return HttpResponse.json({
         success: true,
         message: 'Login successful',
@@ -22,7 +22,7 @@ export const handlers = [
       });
     }
 
-    if (body.email === 'suspended@test.com') {
+    if (body.username === 'suspended') {
       return HttpResponse.json(
         { success: false, message: 'Account is disabled or suspended' },
         { status: 403 },
@@ -30,7 +30,7 @@ export const handlers = [
     }
 
     return HttpResponse.json(
-      { success: false, message: 'Invalid email or password' },
+      { success: false, message: 'Invalid username or password' },
       { status: 401 },
     );
   }),

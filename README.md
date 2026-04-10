@@ -38,18 +38,32 @@ docker compose up -d
 # PostgreSQL (5432), Redis (6379), MinIO (9000/9001) will start
 ```
 
-### 3. Start Backend
+### 3. Install app packages (server + client)
 
 ```bash
+npm run install:all
+# Or: cd server && npm install && cd ../client && npm install
+```
+
+### 4. Start Backend & Frontend
+
+**Option A — one command from repo root** (after `install:all`):
+
+```bash
+npm run dev
+# API: http://localhost:3000  |  UI: http://localhost:5173
+```
+
+**Option B — two terminals**
+
+```bash
+# Terminal 1
 cd server
 npm install
 npm run dev
 # Server runs at http://localhost:3000
-```
 
-### 4. Start Frontend
-
-```bash
+# Terminal 2
 cd client
 npm install
 npm run dev

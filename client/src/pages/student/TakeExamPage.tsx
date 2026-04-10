@@ -46,6 +46,7 @@ export default function TakeExamPage() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const autoSaveRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const hasSubmitted = useRef(false);
+  const handleAutoSubmitRef = useRef<() => void>(() => {});
 
   const startMutation = useStartStudentExam();
   const saveMutation = useSaveAnswers();
@@ -79,14 +80,14 @@ export default function TakeExamPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [examId]);
 
-  // Countdown timer
+  // Countdown timer — uses ref to avoid stale closure
   useEffect(() => {
     if (!examData || hasSubmitted.current) return;
 
     timerRef.current = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
-          handleAutoSubmit();
+          handleAutoSubmitRef.current();
           return 0;
         }
         return prev - 1;
@@ -96,7 +97,6 @@ export default function TakeExamPage() {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [examData]);
 
   // Auto-save interval
@@ -244,6 +244,10 @@ export default function TakeExamPage() {
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attemptId, answers, navigate]);
+
+  useEffect(() => {
+    handleAutoSubmitRef.current = handleAutoSubmit;
+  }, [handleAutoSubmit]);
 
   const handleManualSubmit = () => {
     if (!attemptId || hasSubmitted.current) return;

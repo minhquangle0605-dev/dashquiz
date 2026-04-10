@@ -51,12 +51,11 @@ export const createUserSchema = z.object({
   username: z
     .string()
     .min(3, 'Username must be at least 3 characters')
-    .max(50, 'Username must not exceed 50 characters')
-    .regex(/^[a-zA-Z0-9_]+$/, 'Username can only contain letters, numbers, and underscores'),
-  email: z
-    .string()
-    .email('Invalid email format')
-    .max(100, 'Email must not exceed 100 characters'),
+    .max(191, 'Username must not exceed 191 characters')
+    .regex(
+      /^[a-zA-Z0-9._-]+$/,
+      'Username can only contain letters, numbers, dots, underscores, and hyphens',
+    ),
   password: z
     .string()
     .min(8, 'Password must be at least 8 characters')
@@ -66,13 +65,7 @@ export const createUserSchema = z.object({
     .min(2, 'Full name must be at least 2 characters')
     .max(100, 'Full name must not exceed 100 characters')
     .optional(),
-  phone: z
-    .string()
-    .max(20, 'Phone must not exceed 20 characters')
-    .optional()
-    .nullable(),
   roleId: z.coerce.number().int().positive('Role ID must be a positive integer'),
-  status: z.enum(['ACTIVE', 'INACTIVE', 'SUSPENDED']).default('ACTIVE').optional(),
 });
 
 export const updateUserSchema = z.object({

@@ -11,6 +11,7 @@ jest.mock('../../../socket', () => ({
 
 jest.mock('../../../modules/notification/notification.service', () => ({
   notificationService: {
+    onExamPublished: jest.fn().mockResolvedValue(undefined),
     onResultsPublished: jest.fn().mockResolvedValue(undefined),
     onExamAssigned: jest.fn().mockResolvedValue(undefined),
   },
@@ -135,6 +136,7 @@ describe('ExamService', () => {
     it('should publish a DRAFT exam with questions', async () => {
       prismaMock.exam.findUnique.mockResolvedValue({
         ...mockExam,
+        totalQuestions: 5,
         _count: { examQuestions: 5 },
       });
       prismaMock.exam.update.mockResolvedValue({ ...mockExam, status: 'PUBLISHED' });
@@ -230,7 +232,12 @@ describe('ExamService', () => {
       prismaMock.examQuestion.aggregate.mockResolvedValue({ _max: { orderIndex: 0 } });
       prismaMock.examQuestion.createMany.mockResolvedValue({ count: 2 });
       prismaMock.examQuestion.count.mockResolvedValue(2);
+      prismaMock.examQuestion.updateMany.mockResolvedValue({ count: 2 });
       prismaMock.exam.update.mockResolvedValue({ ...mockExam, totalQuestions: 2 });
+      prismaMock.$transaction.mockResolvedValue([
+        { ...mockExam, totalQuestions: 2 },
+        { count: 2 },
+      ]);
 
       const result = await examService.addQuestions(
         1,

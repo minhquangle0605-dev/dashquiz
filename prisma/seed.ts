@@ -25,21 +25,30 @@ async function main() {
 
   const adminRole = roles.find((r) => r.name === 'admin')!;
 
-  // ── 2. Seed Admin Account ────────────────────────
-  const passwordHash = await bcrypt.hash('Admin@123', 12);
+  // ── 2. Seed Admin Account (login: admin.web / 123456) ──
+  const passwordHash = await bcrypt.hash('123456', 12);
+  const adminEmail = 'admin.web@webquiz.local';
+  // Upsert theo username — đảm bảo chạy seed lại luôn cập nhật đúng admin.web / 123456
+  // (upsert theo email cũ sẽ không khớp nếu DB chỉ có user admin@school.edu.vn).
   const admin = await prisma.user.upsert({
-    where: { email: 'admin@school.edu.vn' },
-    update: {},
+    where: { username: 'admin.web' },
+    update: {
+      email: adminEmail,
+      passwordHash,
+      roleId: adminRole.id,
+      fullName: 'System Administrator',
+      status: 'ACTIVE',
+    },
     create: {
       roleId: adminRole.id,
-      username: 'admin',
-      email: 'admin@school.edu.vn',
+      username: 'admin.web',
+      email: adminEmail,
       passwordHash,
       fullName: 'System Administrator',
       status: 'ACTIVE',
     },
   });
-  console.log(`✓ Admin account seeded: ${admin.email}`);
+  console.log(`✓ Admin account seeded: ${admin.username} (${admin.email})`);
 
   // ── 3. Seed Subjects (Toán, Lý, Hóa — theo proposal) ──
   const subjectsData = [
@@ -212,7 +221,7 @@ async function main() {
   const configs = [
     { configKey: 'school_name', configValue: 'Trường THPT WebQuiz Demo', description: 'Tên trường hiển thị trên hệ thống' },
     { configKey: 'school_logo', configValue: '/images/logo.png', description: 'Đường dẫn logo trường' },
-    { configKey: 'admin_email', configValue: 'admin@school.edu.vn', description: 'Email quản trị viên' },
+    { configKey: 'admin_email', configValue: adminEmail, description: 'Email hệ thống gắn với tài khoản admin' },
     { configKey: 'max_upload_size_mb', configValue: '10', description: 'Kích thước tải lên tối đa (MB)' },
     { configKey: 'session_timeout_min', configValue: '30', description: 'Thời gian hết phiên (phút)' },
   ];

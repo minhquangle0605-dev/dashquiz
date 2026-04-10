@@ -27,7 +27,7 @@ import {
   TableCell,
 } from '@/components/ui/Table';
 import { getChildren, getChildDashboard, getChildStrengths } from '@/services/parent.api';
-import type { LinkedChild, ChildDashboardData } from '@/types/parent';
+import type { ChildDashboardData } from '@/types/parent';
 import type { StrengthItem } from '@/services/analytics.api';
 
 ChartJS.register(

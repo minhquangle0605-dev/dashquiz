@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -11,10 +10,12 @@ import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 
 const loginSchema = z.object({
-  email: z
+  username: z
     .string()
-    .min(1, 'Email is required')
-    .email('Please enter a valid email address'),
+    .trim()
+    .min(1, 'Username is required')
+    .min(3, 'Username must be at least 3 characters')
+    .max(191, 'Username is too long'),
   password: z
     .string()
     .min(1, 'Password is required')
@@ -43,6 +44,16 @@ export default function LoginPage() {
   const { login } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+  const [lockoutSeconds, setLockoutSeconds] = useState<number | null>(null);
+  const lockoutActive = lockoutSeconds != null && lockoutSeconds > 0;
+
+  useEffect(() => {
+    if (!lockoutActive) return;
+    const id = window.setInterval(() => {
+      setLockoutSeconds((s) => (s != null && s > 1 ? s - 1 : null));
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [lockoutActive]);
 
   const {
     register,
@@ -50,27 +61,40 @@ export default function LoginPage() {
     formState: { errors, isSubmitting },
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
-    defaultValues: { email: '', password: '' },
+    defaultValues: { username: '', password: '' },
   });
 
   const onSubmit = async (data: LoginFormData) => {
     setServerError(null);
 
     try {
-      const response = await loginApi(data.email, data.password);
+      const response = await loginApi(data.username, data.password);
       toast.success(`Welcome back, ${response.user.fullName}!`);
       login(response.user, response.tokens);
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { status?: number; data?: { message?: string } } };
+      const axiosErr = err as {
+        response?: {
+          status?: number;
+          data?: { message?: string; data?: { retryAfterSeconds?: number } };
+        };
+      };
       const status = axiosErr.response?.status;
-      const message = axiosErr.response?.data?.message;
+      const payload = axiosErr.response?.data;
+      const message = payload?.message;
+      const retryAfter = payload?.data?.retryAfterSeconds;
+
+      if (status === 429 && typeof retryAfter === 'number' && retryAfter > 0) {
+        setLockoutSeconds(retryAfter);
+        setServerError(null);
+        return;
+      }
 
       if (status === 401) {
-        setServerError('Incorrect email or password. Please try again.');
+        setServerError('Incorrect username or password. Please try again.');
       } else if (status === 403) {
         setServerError('Your account has been suspended. Contact your administrator for assistance.');
       } else if (status === 429) {
-        setServerError('Too many login attempts. Please wait a moment before trying again.');
+        setServerError(message ?? 'Too many login attempts. Please wait before trying again.');
       } else {
         setServerError(message ?? 'Unable to connect to server. Please check your connection and try again.');
       }
@@ -88,7 +112,7 @@ export default function LoginPage() {
         </p>
       </div>
 
-      {serverError && (
+      {(lockoutActive || serverError) && (
         <div
           className="mb-6 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3"
           role="alert"
@@ -96,19 +120,23 @@ export default function LoginPage() {
           <svg className="mt-0.5 h-5 w-5 shrink-0 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
           </svg>
-          <p className="text-sm text-red-700">{serverError}</p>
+          <p className="text-sm text-red-700">
+            {lockoutActive
+              ? `Too many failed login attempts. Please wait ${lockoutSeconds} second(s) before trying again.`
+              : serverError}
+          </p>
         </div>
       )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
         <Input
-          {...register('email')}
-          label="Email address"
-          type="email"
-          autoComplete="email"
-          placeholder="you@school.edu"
-          error={errors.email?.message}
-          disabled={isSubmitting}
+          {...register('username')}
+          label="Username"
+          type="text"
+          autoComplete="username"
+          placeholder="e.g. name.code.school.teacher"
+          error={errors.username?.message}
+          disabled={isSubmitting || lockoutActive}
         />
 
         <div>
@@ -125,7 +153,7 @@ export default function LoginPage() {
               type={showPassword ? 'text' : 'password'}
               autoComplete="current-password"
               placeholder="Enter your password"
-              disabled={isSubmitting}
+              disabled={isSubmitting || lockoutActive}
               aria-invalid={errors.password ? true : undefined}
               aria-describedby={errors.password ? 'password-error' : undefined}
               className={`w-full rounded-lg border px-3 py-2.5 pr-11 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 ${
@@ -151,29 +179,26 @@ export default function LoginPage() {
           )}
         </div>
 
-        <div className="flex items-center justify-between">
-          <label className="flex items-center gap-2 text-sm text-slate-600 select-none">
-            <input
-              type="checkbox"
-              className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-            />
-            Remember me
-          </label>
-          <Link
-            to="/forgot-password"
-            className="text-sm font-medium text-indigo-600 hover:text-indigo-500 transition-colors"
-          >
-            Forgot password?
-          </Link>
-        </div>
+        <label className="flex items-center gap-2 text-sm text-slate-600 select-none">
+          <input
+            type="checkbox"
+            className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+          />
+          Remember me
+        </label>
 
         <Button
           type="submit"
           isLoading={isSubmitting}
+          disabled={lockoutActive}
           className="w-full py-2.5"
           size="lg"
         >
-          {isSubmitting ? 'Signing in...' : 'Sign in'}
+          {lockoutActive
+            ? `Wait ${lockoutSeconds}s…`
+            : isSubmitting
+              ? 'Signing in...'
+              : 'Sign in'}
         </Button>
       </form>
     </div>

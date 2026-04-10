@@ -20,7 +20,6 @@ import {
 } from '@/components/ui/Table';
 import {
   listSubjects,
-  createSubject,
   updateSubject,
   listAcademicYears,
   createAcademicYear,
@@ -33,7 +32,7 @@ import type {
   Subject,
   AcademicYear,
   Semester,
-  CreateSubjectPayload,
+  UpdateSubjectPayload,
   CreateAcademicYearPayload,
   CreateSemesterPayload,
 } from '@/types/admin';
@@ -54,7 +53,7 @@ export default function AcademicPage() {
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Academic Management</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Manage subjects, academic years, and semesters.
+          Manage academic years, semesters, and the three core subjects (MATH, PHY, CHEM).
         </p>
       </div>
 
@@ -86,19 +85,17 @@ export default function AcademicPage() {
 // SUBJECTS TAB
 // ═══════════════════════════════════════════════
 
-const subjectSchema = z.object({
+const subjectEditSchema = z.object({
   name: z.string().min(1, 'Name is required').max(50),
-  code: z.string().min(1, 'Code is required').max(10),
   description: z.string().max(500).optional().or(z.literal('')),
-  status: z.coerce.number().default(1),
+  status: z.coerce.number(),
 });
 
-type SubjectFormData = z.infer<typeof subjectSchema>;
+type SubjectFormData = z.infer<typeof subjectEditSchema>;
 
 function SubjectsTab() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Subject | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -115,26 +112,19 @@ function SubjectsTab() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  function openCreate() { setEditing(null); setShowModal(true); }
-  function openEdit(s: Subject) { setEditing(s); setShowModal(true); }
+  function openEdit(s: Subject) { setEditing(s); }
 
   return (
     <>
       <div className="flex items-center justify-between">
         <p className="text-sm text-slate-500">{subjects.length} subject(s) total</p>
-        <Button onClick={openCreate}>
-          <svg className="mr-1.5 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-          </svg>
-          Add Subject
-        </Button>
       </div>
 
       <Card padding="none">
         {loading ? (
           <div className="flex items-center justify-center py-16"><Spinner size="lg" /></div>
         ) : subjects.length === 0 ? (
-          <EmptyState icon="book" message="No subjects yet" sub="Add your first subject to get started." />
+          <EmptyState icon="book" message="No core subjects" sub="Run the database seed so MATH, PHY, and CHEM exist." />
         ) : (
           <Table>
             <TableHead>
@@ -175,47 +165,43 @@ function SubjectsTab() {
         )}
       </Card>
 
-      <SubjectModal
-        isOpen={showModal}
-        subject={editing}
-        onClose={() => setShowModal(false)}
-        onSuccess={() => { setShowModal(false); fetchData(); }}
-      />
+      {editing && (
+        <SubjectModal
+          subject={editing}
+          onClose={() => setEditing(null)}
+          onSuccess={() => { setEditing(null); fetchData(); }}
+        />
+      )}
     </>
   );
 }
 
 function SubjectModal({
-  isOpen,
   subject,
   onClose,
   onSuccess,
 }: {
-  isOpen: boolean;
-  subject: Subject | null;
+  subject: Subject;
   onClose: () => void;
   onSuccess: () => void;
 }) {
-  const isEdit = !!subject;
   const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<SubjectFormData>({
-    resolver: zodResolver(subjectSchema),
+    resolver: zodResolver(subjectEditSchema),
   });
 
   useEffect(() => {
-    if (isOpen) {
-      reset(subject
-        ? { name: subject.name, code: subject.code, description: subject.description ?? '', status: subject.status }
-        : { name: '', code: '', description: '', status: 1 }
-      );
-    }
-  }, [isOpen, subject, reset]);
+    reset({
+      name: subject.name,
+      description: subject.description ?? '',
+      status: subject.status,
+    });
+  }, [subject, reset]);
 
   async function onSubmit(data: SubjectFormData) {
     try {
-      const payload: CreateSubjectPayload = { ...data, description: data.description || undefined };
-      if (isEdit) await updateSubject(subject!.id, payload);
-      else await createSubject(payload);
-      toast.success(isEdit ? 'Subject updated' : 'Subject created');
+      const payload: UpdateSubjectPayload = { ...data, description: data.description || undefined };
+      await updateSubject(subject.id, payload);
+      toast.success('Subject updated');
       onSuccess();
     } catch (err: any) {
       toast.error(err?.response?.data?.message ?? 'Operation failed');
@@ -223,12 +209,14 @@ function SubjectModal({
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={isEdit ? 'Edit Subject' : 'Add Subject'}>
+    <Modal isOpen onClose={onClose} title="Edit Subject">
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Input label="Subject Name" error={errors.name?.message} {...register('name')} />
-          <Input label="Code" error={errors.code?.message} placeholder="e.g. MATH" {...register('code')} />
+        <div>
+          <p className="mb-1.5 text-sm font-medium text-slate-700">Code</p>
+          <Badge variant="info">{subject.code}</Badge>
+          <p className="mt-1 text-xs text-slate-500">Subject codes are fixed for this deployment.</p>
         </div>
+        <Input label="Subject Name" error={errors.name?.message} {...register('name')} />
         <div>
           <label className="mb-1.5 block text-sm font-medium text-slate-700">Description</label>
           <textarea
@@ -249,7 +237,7 @@ function SubjectModal({
         </div>
         <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
           <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-          <Button type="submit" isLoading={isSubmitting}>{isEdit ? 'Save Changes' : 'Create Subject'}</Button>
+          <Button type="submit" isLoading={isSubmitting}>Save Changes</Button>
         </div>
       </form>
     </Modal>
@@ -264,7 +252,7 @@ const yearSchema = z.object({
   name: z.string().min(1, 'Name is required').max(20),
   startDate: z.string().min(1, 'Start date is required'),
   endDate: z.string().min(1, 'End date is required'),
-  isCurrent: z.boolean().default(false),
+  isCurrent: z.boolean(),
 });
 
 type YearFormData = z.infer<typeof yearSchema>;

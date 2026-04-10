@@ -3,6 +3,7 @@ import { authService } from './auth.service';
 import { env } from '../../config/env';
 import { REFRESH_COOKIE_NAME } from '../../utils/constants';
 import { AppError } from '../../middlewares/errorHandler';
+import { getClientIp } from '../../utils/request';
 
 function setRefreshCookie(res: Response, token: string): void {
   res.cookie(REFRESH_COOKIE_NAME, token, {
@@ -25,7 +26,7 @@ function clearRefreshCookie(res: Response): void {
 
 export async function login(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const result = await authService.login(req.body);
+    const result = await authService.login(req.body, getClientIp(req));
 
     setRefreshCookie(res, result.refreshToken);
 
@@ -76,32 +77,6 @@ export async function refresh(req: Request, res: Response, next: NextFunction): 
       message: 'Token refreshed successfully',
       data: { accessToken: result.accessToken },
     });
-  } catch (error: unknown) {
-    next(error instanceof Error ? error : new Error('Unexpected error'));
-  }
-}
-
-export async function forgotPassword(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): Promise<void> {
-  try {
-    const result = await authService.forgotPassword(req.body);
-    res.json(result);
-  } catch (error: unknown) {
-    next(error instanceof Error ? error : new Error('Unexpected error'));
-  }
-}
-
-export async function resetPassword(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): Promise<void> {
-  try {
-    const result = await authService.resetPassword(req.body);
-    res.json(result);
   } catch (error: unknown) {
     next(error instanceof Error ? error : new Error('Unexpected error'));
   }

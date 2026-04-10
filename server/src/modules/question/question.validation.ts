@@ -22,14 +22,14 @@ export const createQuestionSchema = z.object({
   chapterId: z.coerce.number().int().positive('Chapter is required'),
   topicId: z.coerce.number().int().positive('Topic is required'),
   content: z.string().min(1, 'Question content is required'),
-  questionType: z.enum(['SINGLE_CHOICE', 'MULTIPLE_CHOICE']).default('SINGLE_CHOICE'),
+  questionType: z.enum(['SINGLE_CHOICE']).default('SINGLE_CHOICE'),
   difficulty: z.coerce.number().int().min(1, 'Difficulty min is 1').max(5, 'Difficulty max is 5'),
   explanation: z.string().optional().nullable(),
   options: z
     .array(questionOptionSchema)
     .length(4, 'Exactly 4 options (A, B, C, D) are required')
-    .refine((opts) => opts.some((o) => o.isCorrect), {
-      message: 'At least one option must be marked as correct',
+    .refine((opts) => opts.filter((o) => o.isCorrect).length === 1, {
+      message: 'Exactly one option must be marked as correct (SINGLE_CHOICE)',
     }),
 });
 
@@ -39,7 +39,7 @@ export const createQuestionSchema = z.object({
 
 export const updateQuestionSchema = z.object({
   content: z.string().min(1, 'Question content cannot be empty').optional(),
-  questionType: z.enum(['SINGLE_CHOICE', 'MULTIPLE_CHOICE']).optional(),
+  questionType: z.enum(['SINGLE_CHOICE']).optional(),
   difficulty: z.coerce.number().int().min(1).max(5).optional(),
   explanation: z.string().optional().nullable(),
   subjectId: z.coerce.number().int().positive().optional(),
@@ -48,8 +48,8 @@ export const updateQuestionSchema = z.object({
   options: z
     .array(questionOptionSchema)
     .length(4, 'Exactly 4 options required')
-    .refine((opts) => opts.some((o) => o.isCorrect), {
-      message: 'At least one option must be marked as correct',
+    .refine((opts) => opts.filter((o) => o.isCorrect).length === 1, {
+      message: 'Exactly one option must be marked as correct (SINGLE_CHOICE)',
     })
     .optional(),
 });

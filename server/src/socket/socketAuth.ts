@@ -8,6 +8,7 @@ export interface AuthenticatedSocket extends Socket {
   data: {
     userId: number;
     email: string;
+    username: string;
     role: string;
   };
 }
@@ -33,6 +34,7 @@ export function socketAuthMiddleware(
     socket.data = {
       userId: decoded.id,
       email: decoded.email,
+      username: decoded.username ?? '',
       role: decoded.role,
     };
 

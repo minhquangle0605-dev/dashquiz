@@ -19,6 +19,7 @@ const router = Router();
 router.get(
   '/',
   authenticate,
+  authorize(ROLES.TEACHER, ROLES.ADMIN),
   validate(listExamsQuerySchema, 'query'),
   examController.listExams,
 );
@@ -27,6 +28,7 @@ router.get(
 router.get(
   '/:id',
   authenticate,
+  authorize(ROLES.TEACHER, ROLES.ADMIN),
   examController.getExam,
 );
 

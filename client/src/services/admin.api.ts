@@ -5,8 +5,9 @@ import type {
   CreateUserPayload,
   UpdateUserPayload,
   ChangeRolePayload,
+  RoleOption,
   Subject,
-  CreateSubjectPayload,
+  UpdateSubjectPayload,
   AcademicYear,
   CreateAcademicYearPayload,
   Semester,
@@ -31,6 +32,11 @@ export async function listUsers(
   params: ListUsersParams = {}
 ): Promise<PaginatedResponse<AdminUser>> {
   const { data } = await api.get(API_ENDPOINTS.ADMIN.USERS.BASE, { params });
+  return data.data ?? data;
+}
+
+export async function listAdminRoles(): Promise<RoleOption[]> {
+  const { data } = await api.get(API_ENDPOINTS.ADMIN.USERS.ROLES);
   return data.data ?? data;
 }
 
@@ -77,14 +83,9 @@ export async function listSubjects(): Promise<Subject[]> {
   return data.data ?? data;
 }
 
-export async function createSubject(payload: CreateSubjectPayload): Promise<Subject> {
-  const { data } = await api.post(API_ENDPOINTS.ADMIN.ACADEMIC.SUBJECTS, payload);
-  return data.data ?? data;
-}
-
 export async function updateSubject(
   id: number,
-  payload: Partial<CreateSubjectPayload>
+  payload: UpdateSubjectPayload
 ): Promise<Subject> {
   const { data } = await api.put(
     API_ENDPOINTS.ADMIN.ACADEMIC.SUBJECT_BY_ID(id),

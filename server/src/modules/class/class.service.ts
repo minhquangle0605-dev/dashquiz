@@ -2,6 +2,7 @@ import * as XLSX from 'xlsx';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError } from '../../middlewares/errorHandler';
+import { isCoreSubjectCode } from '../../constants/subjects';
 import { PAGINATION } from '../../utils/constants';
 import type {
   CreateClassInput,
@@ -90,7 +91,7 @@ export class ClassService {
     ]);
 
     if (!semester) throw new AppError('Semester not found', 404);
-    if (!subject) throw new AppError('Subject not found', 404);
+    if (!subject || !isCoreSubjectCode(subject.code)) throw new AppError('Subject not found', 404);
 
     const classEntity = await prisma.class.create({
       data: {
@@ -139,7 +140,7 @@ export class ClassService {
 
     if (data.subjectId) {
       const subject = await prisma.subject.findUnique({ where: { id: data.subjectId } });
-      if (!subject) throw new AppError('Subject not found', 404);
+      if (!subject || !isCoreSubjectCode(subject.code)) throw new AppError('Subject not found', 404);
     }
 
     const updated = await prisma.class.update({

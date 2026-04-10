@@ -11,8 +11,6 @@ import ParentLayout from './layouts/ParentLayout';
 import AdminLayout from './layouts/AdminLayout';
 
 const LoginPage = lazy(() => import('./pages/auth/LoginPage'));
-const ForgotPasswordPage = lazy(() => import('./pages/auth/ForgotPasswordPage'));
-const ResetPasswordPage = lazy(() => import('./pages/auth/ResetPasswordPage'));
 
 const StudentDashboard = lazy(() => import('./pages/student/DashboardPage'));
 const KnowledgeGraphPage = lazy(() => import('./pages/student/KnowledgeGraphPage'));
@@ -57,11 +55,9 @@ export default function App() {
   return (
     <Suspense fallback={<LoadingSpinner />}>
       <Routes>
-        {/* Public auth routes */}
-        <Route element={<AuthLayout />}>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-          <Route path="/reset-password" element={<ResetPasswordPage />} />
+        {/* Public auth routes — explicit path so layout + Outlet match reliably (RR v7) */}
+        <Route path="/login" element={<AuthLayout />}>
+          <Route index element={<LoginPage />} />
         </Route>
 
         {/* Student routes (protected) */}

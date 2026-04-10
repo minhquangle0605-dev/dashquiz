@@ -24,6 +24,8 @@ export const ATTEMPT_STATUS = {
   GRADED: 'graded',
 } as const;
 
+export const COMPLETED_ATTEMPT_STATUSES = ['SUBMITTED', 'GRADED'] as const;
+
 export const PAGINATION = {
   DEFAULT_PAGE: 1,
   DEFAULT_LIMIT: 20,
@@ -31,8 +33,12 @@ export const PAGINATION = {
 } as const;
 
 export const RATE_LIMIT = {
-  LOGIN_MAX: 5,
-  LOGIN_WINDOW_MS: 15 * 60 * 1000, // 15 minutes
+  /** Failed login attempts (per IP + username) before lockout */
+  LOGIN_MAX_FAILED_ATTEMPTS: 5,
+  /** Seconds before next login attempt is allowed after lockout */
+  LOGIN_LOCKOUT_SECONDS: 30,
+  /** Window for counting consecutive failures (resets counter if idle) */
+  LOGIN_FAIL_COUNT_WINDOW_SEC: 15 * 60,
   API_MAX: 100,
   API_WINDOW_MS: 60 * 1000, // 1 minute
 } as const;

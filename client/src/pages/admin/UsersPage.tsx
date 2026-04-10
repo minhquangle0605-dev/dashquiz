@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/Table';
 import {
   listUsers,
+  listAdminRoles,
   createUser,
   updateUser,
   deleteUser,
@@ -27,7 +28,8 @@ import {
   getImportTemplateUrl,
 } from '@/services/admin.api';
 import api from '@/services/api';
-import type { AdminUser, CreateUserPayload, UpdateUserPayload, UserStatus } from '@/types/admin';
+import type { AdminUser, CreateUserPayload, RoleOption, UpdateUserPayload, UserStatus } from '@/types/admin';
+import { ROLES } from '@/utils/constants';
 import { useDebounce } from '@/hooks/useDebounce';
 
 const STATUS_BADGE: Record<UserStatus, { variant: 'success' | 'warning' | 'danger'; label: string }> = {
@@ -36,18 +38,30 @@ const STATUS_BADGE: Record<UserStatus, { variant: 'success' | 'warning' | 'dange
   SUSPENDED: { variant: 'danger', label: 'Suspended' },
 };
 
+const createUserPasswordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+
 const createUserSchema = z.object({
-  username: z.string().min(3, 'Username must be at least 3 characters').max(50),
-  email: z.string().email('Invalid email address'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
-  fullName: z.string().min(1, 'Full name is required').max(100),
-  phone: z.string().max(20).optional().or(z.literal('')),
+  username: z
+    .string()
+    .min(3, 'Username must be at least 3 characters')
+    .max(191)
+    .regex(
+      /^[a-zA-Z0-9._-]+$/,
+      'Username can only contain letters, numbers, dots, underscores, and hyphens',
+    ),
+  password: z
+    .string()
+    .min(8, 'Password must be at least 8 characters')
+    .regex(
+      createUserPasswordRegex,
+      'Password must contain at least one uppercase letter, one lowercase letter, and one number',
+    ),
+  fullName: z.string().min(2, 'Full name must be at least 2 characters').max(100),
   roleId: z.coerce.number().min(1, 'Please select a role'),
-  status: z.enum(['ACTIVE', 'INACTIVE', 'SUSPENDED']).default('ACTIVE'),
 });
 
 const editUserSchema = z.object({
-  username: z.string().min(3).max(50),
+  username: z.string().min(3).max(191),
   email: z.string().email('Invalid email address'),
   fullName: z.string().min(1, 'Full name is required').max(100),
   phone: z.string().max(20).optional().or(z.literal('')),
@@ -56,6 +70,10 @@ const editUserSchema = z.object({
 
 type CreateFormData = z.infer<typeof createUserSchema>;
 type EditFormData = z.infer<typeof editUserSchema>;
+
+function formatRoleLabel(name: string): string {
+  return name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
+}
 
 export default function UsersPage() {
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -420,6 +438,9 @@ function CreateUserModal({
   onClose: () => void;
   onSuccess: () => void;
 }) {
+  const [roleOptions, setRoleOptions] = useState<RoleOption[]>([]);
+  const [rolesLoading, setRolesLoading] = useState(false);
+
   const {
     register,
     handleSubmit,
@@ -427,18 +448,39 @@ function CreateUserModal({
     formState: { errors, isSubmitting },
   } = useForm<CreateFormData>({
     resolver: zodResolver(createUserSchema),
-    defaultValues: { status: 'ACTIVE', roleId: 3 },
+    defaultValues: { username: '', password: '', fullName: '', roleId: 1 },
   });
 
   useEffect(() => {
-    if (isOpen) reset({ status: 'ACTIVE', roleId: 3, username: '', email: '', password: '', fullName: '', phone: '' });
+    if (!isOpen) return;
+    let cancelled = false;
+    setRolesLoading(true);
+    listAdminRoles()
+      .then((opts) => {
+        if (cancelled) return;
+        setRoleOptions(opts);
+        const teacher = opts.find((r) => r.name === ROLES.TEACHER);
+        const defaultRoleId = teacher?.id ?? opts[0]?.id ?? 1;
+        reset({ username: '', password: '', fullName: '', roleId: defaultRoleId });
+      })
+      .catch(() => {
+        if (!cancelled) toast.error('Failed to load roles');
+      })
+      .finally(() => {
+        if (!cancelled) setRolesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [isOpen, reset]);
 
   async function onSubmit(data: CreateFormData) {
     try {
       const payload: CreateUserPayload = {
-        ...data,
-        phone: data.phone || undefined,
+        username: data.username,
+        password: data.password,
+        fullName: data.fullName,
+        roleId: data.roleId,
       };
       await createUser(payload);
       toast.success('User created successfully');
@@ -453,39 +495,24 @@ function CreateUserModal({
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Input label="Username" error={errors.username?.message} {...register('username')} />
-          <Input label="Email" type="email" error={errors.email?.message} {...register('email')} />
-        </div>
-        <Input label="Password" type="password" error={errors.password?.message} {...register('password')} />
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Input label="Full Name" error={errors.fullName?.message} {...register('fullName')} />
-          <Input label="Phone" error={errors.phone?.message} {...register('phone')} />
-        </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Role</label>
             <select
-              className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:bg-slate-100 disabled:text-slate-500"
               {...register('roleId')}
+              disabled={rolesLoading || roleOptions.length === 0}
             >
-              <option value={1}>Admin</option>
-              <option value={2}>Teacher</option>
-              <option value={3}>Student</option>
-              <option value={4}>Parent</option>
+              {roleOptions.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {formatRoleLabel(r.name)}
+                </option>
+              ))}
             </select>
             {errors.roleId && <p className="mt-1.5 text-sm text-red-600">{errors.roleId.message}</p>}
           </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">Status</label>
-            <select
-              className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-              {...register('status')}
-            >
-              <option value="ACTIVE">Active</option>
-              <option value="INACTIVE">Inactive</option>
-              <option value="SUSPENDED">Suspended</option>
-            </select>
-          </div>
         </div>
+        <Input label="Password" type="password" error={errors.password?.message} {...register('password')} />
+        <Input label="Full Name" error={errors.fullName?.message} {...register('fullName')} />
         <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
           <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
           <Button type="submit" isLoading={isSubmitting}>Create User</Button>
@@ -599,7 +626,6 @@ function ImportUsersModal({
     const f = e.target.files?.[0];
     if (!f) return;
     setFile(f);
-    setPreview(null);
   }
 
   async function handleImport() {

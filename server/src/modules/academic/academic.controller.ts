@@ -16,19 +16,6 @@ export async function listSubjects(
   }
 }
 
-export async function createSubject(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): Promise<void> {
-  try {
-    const result = await academicService.createSubject(req.body);
-    res.status(201).json(result);
-  } catch (error: unknown) {
-    next(error instanceof Error ? error : new Error('Unexpected error'));
-  }
-}
-
 export async function updateSubject(
   req: Request,
   res: Response,

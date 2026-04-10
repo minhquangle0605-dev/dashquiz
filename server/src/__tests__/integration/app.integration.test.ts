@@ -10,6 +10,9 @@ jest.mock('../../config/database', () => ({
   },
   connectDatabase: jest.fn(),
   disconnectDatabase: jest.fn(),
+  getDatabaseStatus: jest
+    .fn()
+    .mockResolvedValue({ connected: true, message: 'PostgreSQL connected via Prisma' }),
 }));
 
 jest.mock('../../config/redis', () => ({
@@ -21,9 +24,15 @@ jest.mock('../../config/redis', () => ({
     incr: jest.fn().mockResolvedValue(1),
     expire: jest.fn().mockResolvedValue(1),
     ttl: jest.fn().mockResolvedValue(60),
+    scan: jest.fn().mockResolvedValue(['0', []]),
   }),
   connectRedis: jest.fn(),
   disconnectRedis: jest.fn(),
+  getRedisStatus: jest.fn().mockResolvedValue({ connected: true, message: 'Redis OK' }),
+}));
+
+jest.mock('../../config/minio', () => ({
+  getMinioStatus: jest.fn().mockResolvedValue({ connected: true, message: 'MinIO OK' }),
 }));
 
 describe('App Integration Tests', () => {
@@ -91,7 +100,7 @@ describe('App Integration Tests', () => {
     it('POST /api/auth/login with invalid body should return 400', async () => {
       const res = await request(app)
         .post('/api/auth/login')
-        .send({ email: 'not-an-email' });
+        .send({ username: 'ab', password: '12' });
 
       expect(res.status).toBe(400);
       expect(res.body.success).toBe(false);

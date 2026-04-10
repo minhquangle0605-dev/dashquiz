@@ -31,6 +31,8 @@ export interface PaginatedResponse<T> extends ApiResponse<T> {
 export interface JwtPayload {
   id: number;
   email: string;
+  /** Present on tokens issued after username-only login; older tokens may omit. */
+  username?: string;
   role: string;
   jti?: string;
   iat?: number;

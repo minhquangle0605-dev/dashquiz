@@ -12,7 +12,7 @@ export interface QuestionTag {
   tagName: string;
 }
 
-export type QuestionKind = 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE';
+export type QuestionKind = 'SINGLE_CHOICE';
 
 export interface Question {
   id: number;

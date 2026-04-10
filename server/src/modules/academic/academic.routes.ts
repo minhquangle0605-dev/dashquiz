@@ -4,7 +4,6 @@ import { authenticate, authorize } from '../../middlewares/auth';
 import { validate } from '../../middlewares/validate';
 import { activityLogger } from '../../middlewares/activityLogger';
 import {
-  createSubjectSchema,
   updateSubjectSchema,
   createAcademicYearSchema,
   updateAcademicYearSchema,
@@ -20,12 +19,6 @@ router.use(authenticate, authorize(ROLES.ADMIN));
 
 // Subjects
 router.get('/subjects', academicController.listSubjects);
-router.post(
-  '/subjects',
-  validate(createSubjectSchema),
-  activityLogger('CREATE_SUBJECT', 'subject'),
-  academicController.createSubject,
-);
 router.put(
   '/subjects/:id',
   validate(updateSubjectSchema),

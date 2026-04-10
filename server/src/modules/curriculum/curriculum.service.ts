@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middlewares/errorHandler';
+import { CORE_SUBJECT_CODES, isCoreSubjectCode } from '../../constants/subjects';
 import type { CreateChapterInput, CreateTopicInput } from './curriculum.validation';
 
 export class CurriculumService {
@@ -9,7 +10,7 @@ export class CurriculumService {
 
   async listSubjects() {
     const subjects = await prisma.subject.findMany({
-      where: { status: 1 },
+      where: { status: 1, code: { in: [...CORE_SUBJECT_CODES] } },
       include: {
         _count: { select: { chapters: true, questions: true } },
       },
@@ -29,7 +30,7 @@ export class CurriculumService {
 
   async getChaptersBySubject(subjectId: number) {
     const subject = await prisma.subject.findUnique({ where: { id: subjectId } });
-    if (!subject) {
+    if (!subject || !isCoreSubjectCode(subject.code)) {
       throw new AppError('Subject not found', 404);
     }
 
@@ -94,7 +95,7 @@ export class CurriculumService {
 
   async createChapter(data: CreateChapterInput) {
     const subject = await prisma.subject.findUnique({ where: { id: data.subjectId } });
-    if (!subject) {
+    if (!subject || !isCoreSubjectCode(subject.code)) {
       throw new AppError('Subject not found', 404);
     }
 

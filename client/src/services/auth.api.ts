@@ -1,41 +1,42 @@
 import api from './api';
 import type { LoginResponse, User } from '@/types/user';
-import { API_ENDPOINTS } from '@/utils/constants';
+import { API_ENDPOINTS, ROLES, type UserRole } from '@/utils/constants';
 
 interface ServerLoginResponse {
   success: boolean;
   message: string;
   data: {
     accessToken: string;
-    user: User;
+    user: User & { id: number | string };
+  };
+}
+
+const KNOWN_ROLES: UserRole[] = [ROLES.ADMIN, ROLES.TEACHER, ROLES.STUDENT, ROLES.PARENT];
+
+function normalizeLoginUser(raw: User & { id: number | string }): User {
+  const roleLower = String(raw.role).toLowerCase() as UserRole;
+  const role = KNOWN_ROLES.includes(roleLower) ? roleLower : ROLES.STUDENT;
+  return {
+    ...raw,
+    id: String(raw.id),
+    role,
   };
 }
 
 export async function login(
-  email: string,
+  username: string,
   password: string
 ): Promise<LoginResponse> {
   const { data } = await api.post<ServerLoginResponse>(
     API_ENDPOINTS.AUTH.LOGIN,
-    { email, password },
+    { username, password },
   );
   return {
-    user: data.data.user,
+    user: normalizeLoginUser(data.data.user),
     tokens: { accessToken: data.data.accessToken },
   };
 }
 
 export async function logout(): Promise<void> {
   await api.post(API_ENDPOINTS.AUTH.LOGOUT);
-}
-
-export async function forgotPassword(email: string): Promise<void> {
-  await api.post(API_ENDPOINTS.AUTH.FORGOT_PASSWORD, { email });
-}
-
-export async function resetPassword(
-  token: string,
-  password: string
-): Promise<void> {
-  await api.post(API_ENDPOINTS.AUTH.RESET_PASSWORD, { token, password });
 }

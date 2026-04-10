@@ -3,7 +3,7 @@ import { prisma } from '../../config/database';
 import { getRedisClient } from '../../config/redis';
 import { AppError } from '../../middlewares/errorHandler';
 import { logger } from '../../utils/logger';
-import { PAGINATION } from '../../utils/constants';
+import { PAGINATION, COMPLETED_ATTEMPT_STATUSES } from '../../utils/constants';
 import { invalidateStudentCache } from '../analytics/analytics.service';
 import { notificationService } from '../notification/notification.service';
 import { emitStudentSubmitted, emitDashboardUpdate } from '../../socket';
@@ -99,32 +99,42 @@ export class StudentExamService {
       orderBy: { createdAt: 'desc' },
     });
 
+    const now = new Date();
     const enriched = allExams.map((exam) => {
       const attempts = exam.examAttempts;
       const hasInProgress = attempts.some((a) => a.status === 'IN_PROGRESS');
       const completedAttempts = attempts.filter(
-        (a) => a.status === 'SUBMITTED' || a.status === 'GRADED',
+        (a) => (COMPLETED_ATTEMPT_STATUSES as readonly string[]).includes(a.status),
       );
       const bestScore = completedAttempts.length > 0
         ? Math.max(...completedAttempts.map((a) => Number(a.totalScore ?? 0)))
         : null;
       const schedule = exam.examSchedules[0] ?? null;
+      const maxedOut = completedAttempts.length >= exam.maxAttempts;
+
+      const isOpen = exam.status === 'PUBLISHED';
+      const isScheduledAndActive = schedule
+        && schedule.status === 'ACTIVE'
+        && new Date(schedule.startTime) <= now
+        && new Date(schedule.endTime) > now;
+      const isAvailable = isOpen || isScheduledAndActive;
 
       let examPhase: 'upcoming' | 'in_progress' | 'completed';
       if (hasInProgress) {
         examPhase = 'in_progress';
-      } else if (completedAttempts.length >= exam.maxAttempts) {
+      } else if (maxedOut || exam.status === 'CLOSED') {
         examPhase = 'completed';
-      } else if (exam.status === 'CLOSED') {
-        examPhase = 'completed';
-      } else if (schedule && new Date(schedule.startTime) > new Date()) {
+      } else if (isAvailable && completedAttempts.length > 0 && !maxedOut) {
+        examPhase = 'in_progress';
+      } else if (isAvailable) {
+        examPhase = 'upcoming';
+      } else if (schedule && new Date(schedule.startTime) > now) {
         examPhase = 'upcoming';
       } else {
-        examPhase = 'upcoming';
-        if (exam.status === 'PUBLISHED') {
-          examPhase = completedAttempts.length > 0 ? 'completed' : 'upcoming';
-        }
+        examPhase = 'completed';
       }
+
+      const canStart = isAvailable && !hasInProgress && !maxedOut;
 
       const { examAttempts, ...examData } = exam;
       return {
@@ -134,10 +144,7 @@ export class StudentExamService {
         completedCount: completedAttempts.length,
         bestScore,
         hasInProgress,
-        canStart:
-          exam.status === 'PUBLISHED' &&
-          !hasInProgress &&
-          completedAttempts.length < exam.maxAttempts,
+        canStart,
       };
     });
 
@@ -188,7 +195,17 @@ export class StudentExamService {
 
     if (!exam) throw new AppError('Exam not found', 404);
     if (exam.status !== 'PUBLISHED') {
-      throw new AppError('This exam is not currently available', 400);
+      const activeSchedule = await prisma.examSchedule.findFirst({
+        where: {
+          examId,
+          status: 'ACTIVE',
+          startTime: { lte: new Date() },
+          endTime: { gt: new Date() },
+        },
+      });
+      if (!activeSchedule) {
+        throw new AppError('This exam is not currently available', 400);
+      }
     }
 
     const assignedClassIds = exam.examAssignments.map((a) => a.classId);
@@ -439,7 +456,8 @@ export class StudentExamService {
       throw new AppError('Exam has not been submitted yet', 400);
     }
 
-    if (!attempt.exam.showResult && attempt.status !== 'GRADED') {
+    const isCompleted = (COMPLETED_ATTEMPT_STATUSES as readonly string[]).includes(attempt.status);
+    if (!attempt.exam.showResult && !isCompleted) {
       return {
         success: true,
         message: 'Results are not available yet. Please wait for your teacher to release results.',

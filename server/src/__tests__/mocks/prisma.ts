@@ -42,7 +42,6 @@ export const prismaMock: MockPrismaClient = {
   user: createModelMock(),
   role: createModelMock(),
   parentStudent: createModelMock(),
-  passwordResetToken: createModelMock(),
   academicYear: createModelMock(),
   semester: createModelMock(),
   class: createModelMock(),

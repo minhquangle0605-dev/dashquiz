@@ -233,12 +233,20 @@ export class UserService {
     };
   }
 
-  async adminCreateUser(data: CreateUserInput) {
-    const existingEmail = await prisma.user.findUnique({ where: { email: data.email } });
-    if (existingEmail) {
-      throw new AppError('Email already exists', 409);
-    }
+  async adminListRoles() {
+    const roles = await prisma.role.findMany({
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true, description: true },
+    });
 
+    return {
+      success: true,
+      message: 'Roles retrieved successfully',
+      data: roles,
+    };
+  }
+
+  async adminCreateUser(data: CreateUserInput) {
     const existingUsername = await prisma.user.findUnique({ where: { username: data.username } });
     if (existingUsername) {
       throw new AppError('Username already exists', 409);
@@ -249,18 +257,26 @@ export class UserService {
       throw new AppError('Invalid role ID', 400);
     }
 
+    const internalDomain = 'users.internal';
+    let email = `${data.username}@${internalDomain}`;
+    let suffix = 0;
+    while (await prisma.user.findUnique({ where: { email } })) {
+      suffix += 1;
+      email = `${data.username}.${suffix}@${internalDomain}`;
+    }
+
     const salt = await bcrypt.genSalt(12);
     const passwordHash = await bcrypt.hash(data.password, salt);
 
     const user = await prisma.user.create({
       data: {
         username: data.username,
-        email: data.email,
+        email,
         passwordHash,
         fullName: data.fullName || null,
-        phone: data.phone || null,
+        phone: null,
         roleId: data.roleId,
-        status: (data.status as 'ACTIVE' | 'INACTIVE' | 'SUSPENDED') ?? 'ACTIVE',
+        status: 'ACTIVE',
       },
       include: { role: { select: { id: true, name: true } } },
     });

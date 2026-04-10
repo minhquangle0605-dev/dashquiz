@@ -6,13 +6,9 @@ import jwt from 'jsonwebtoken';
 import { prismaMock } from '../../mocks/prisma';
 import { redisMock, clearRedisStore } from '../../mocks/redis';
 
-jest.mock('nodemailer', () => ({
-  createTransport: jest.fn().mockReturnValue({
-    sendMail: jest.fn().mockResolvedValue({ messageId: 'test-id' }),
-  }),
-}));
-
 import { AuthService } from '../../../modules/auth/auth.service';
+
+const testIp = '127.0.0.1';
 
 const authService = new AuthService();
 
@@ -46,10 +42,13 @@ describe('AuthService', () => {
       prismaMock.user.findFirst.mockResolvedValue(mockUser);
       prismaMock.user.update.mockResolvedValue(mockUser);
 
-      const result = await authService.login({
-        email: 'student@test.com',
-        password: 'Password123!',
-      });
+      const result = await authService.login(
+        {
+          username: 'teststudent',
+          password: 'Password123!',
+        },
+        testIp,
+      );
 
       expect(result.accessToken).toBeDefined();
       expect(result.refreshToken).toBeDefined();
@@ -62,16 +61,16 @@ describe('AuthService', () => {
       prismaMock.user.findFirst.mockResolvedValue(null);
 
       await expect(
-        authService.login({ email: 'noone@test.com', password: 'Password123!' }),
-      ).rejects.toThrow('Invalid email or password');
+        authService.login({ username: 'noone', password: 'Password123!' }, testIp),
+      ).rejects.toThrow('Invalid username or password');
     });
 
     it('should throw 401 on wrong password', async () => {
       prismaMock.user.findFirst.mockResolvedValue(mockUser);
 
       await expect(
-        authService.login({ email: 'student@test.com', password: 'WrongPass!' }),
-      ).rejects.toThrow('Invalid email or password');
+        authService.login({ username: 'teststudent', password: 'WrongPass!' }, testIp),
+      ).rejects.toThrow('Invalid username or password');
     });
 
     it('should throw 403 when account is suspended', async () => {
@@ -81,7 +80,7 @@ describe('AuthService', () => {
       });
 
       await expect(
-        authService.login({ email: 'student@test.com', password: 'Password123!' }),
+        authService.login({ username: 'teststudent', password: 'Password123!' }, testIp),
       ).rejects.toThrow('Account is disabled or suspended');
     });
 
@@ -89,10 +88,13 @@ describe('AuthService', () => {
       prismaMock.user.findFirst.mockResolvedValue(mockUser);
       prismaMock.user.update.mockResolvedValue(mockUser);
 
-      const result = await authService.login({
-        email: 'student@test.com',
-        password: 'Password123!',
-      });
+      const result = await authService.login(
+        {
+          username: 'teststudent',
+          password: 'Password123!',
+        },
+        testIp,
+      );
 
       const decoded = jwt.verify(
         result.accessToken,
@@ -102,16 +104,20 @@ describe('AuthService', () => {
       expect(decoded.id).toBe(1);
       expect(decoded.email).toBe('student@test.com');
       expect(decoded.role).toBe('student');
+      expect((decoded as { username?: string }).username).toBe('teststudent');
     });
 
     it('should update lastLoginAt on successful login', async () => {
       prismaMock.user.findFirst.mockResolvedValue(mockUser);
       prismaMock.user.update.mockResolvedValue(mockUser);
 
-      await authService.login({
-        email: 'student@test.com',
-        password: 'Password123!',
-      });
+      await authService.login(
+        {
+          username: 'teststudent',
+          password: 'Password123!',
+        },
+        testIp,
+      );
 
       expect(prismaMock.user.update).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -119,6 +125,21 @@ describe('AuthService', () => {
           data: { lastLoginAt: expect.any(Date) },
         }),
       );
+    });
+
+    it('should return 429 after five failed password attempts for the same username', async () => {
+      prismaMock.user.findFirst.mockResolvedValue(mockUser);
+      for (let i = 0; i < 5; i++) {
+        await expect(
+          authService.login({ username: 'teststudent', password: 'WrongPass!' }, testIp),
+        ).rejects.toThrow('Invalid username or password');
+      }
+      await expect(
+        authService.login({ username: 'teststudent', password: 'WrongPass!' }, testIp),
+      ).rejects.toMatchObject({
+        statusCode: 429,
+        data: { retryAfterSeconds: expect.any(Number) },
+      });
     });
   });
 
@@ -167,92 +188,6 @@ describe('AuthService', () => {
       await expect(
         authService.refresh('valid-token'),
       ).rejects.toThrow('User not found or account disabled');
-    });
-  });
-
-  describe('forgotPassword', () => {
-    it('should always return success message (no user enumeration)', async () => {
-      prismaMock.user.findUnique.mockResolvedValue(null);
-
-      const result = await authService.forgotPassword({ email: 'noone@test.com' });
-
-      expect(result.success).toBe(true);
-      expect(result.message).toContain('If the email exists');
-    });
-
-    it('should create reset token when user exists', async () => {
-      prismaMock.user.findUnique.mockResolvedValue(mockUser);
-      prismaMock.passwordResetToken.deleteMany.mockResolvedValue({ count: 0 });
-      prismaMock.passwordResetToken.create.mockResolvedValue({
-        id: 1,
-        userId: 1,
-        token: 'reset-token',
-        expiresAt: new Date(Date.now() + 900000),
-        createdAt: new Date(),
-      });
-
-      const result = await authService.forgotPassword({ email: 'student@test.com' });
-
-      expect(result.success).toBe(true);
-      expect(prismaMock.passwordResetToken.create).toHaveBeenCalled();
-    });
-  });
-
-  describe('resetPassword', () => {
-    it('should reset password with valid token', async () => {
-      const resetRecord = {
-        id: 1,
-        userId: 1,
-        token: 'valid-reset-token',
-        expiresAt: new Date(Date.now() + 900000),
-        createdAt: new Date(),
-        user: mockUser,
-      };
-
-      prismaMock.passwordResetToken.findUnique.mockResolvedValue(resetRecord);
-      prismaMock.$transaction.mockResolvedValue([]);
-      redisMock.keys.mockResolvedValue([]);
-
-      const result = await authService.resetPassword({
-        token: 'valid-reset-token',
-        newPassword: 'NewPassword123!',
-        confirmPassword: 'NewPassword123!',
-      });
-
-      expect(result.success).toBe(true);
-      expect(result.message).toContain('Password has been reset');
-    });
-
-    it('should throw 400 for invalid reset token', async () => {
-      prismaMock.passwordResetToken.findUnique.mockResolvedValue(null);
-
-      await expect(
-        authService.resetPassword({
-          token: 'invalid-token',
-          newPassword: 'NewPassword123!',
-          confirmPassword: 'NewPassword123!',
-        }),
-      ).rejects.toThrow('Invalid or expired reset token');
-    });
-
-    it('should throw 400 for expired token', async () => {
-      prismaMock.passwordResetToken.findUnique.mockResolvedValue({
-        id: 1,
-        userId: 1,
-        token: 'expired-token',
-        expiresAt: new Date(Date.now() - 100000),
-        createdAt: new Date(),
-        user: mockUser,
-      });
-      prismaMock.passwordResetToken.delete.mockResolvedValue({});
-
-      await expect(
-        authService.resetPassword({
-          token: 'expired-token',
-          newPassword: 'NewPassword123!',
-          confirmPassword: 'NewPassword123!',
-        }),
-      ).rejects.toThrow('Reset token has expired');
     });
   });
 });

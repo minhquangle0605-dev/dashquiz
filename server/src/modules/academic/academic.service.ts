@@ -1,7 +1,7 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middlewares/errorHandler';
+import { CORE_SUBJECT_CODES, isCoreSubjectCode } from '../../constants/subjects';
 import type {
-  CreateSubjectInput,
   UpdateSubjectInput,
   CreateAcademicYearInput,
   UpdateAcademicYearInput,
@@ -17,6 +17,7 @@ export class AcademicService {
 
   async listSubjects() {
     const subjects = await prisma.subject.findMany({
+      where: { code: { in: [...CORE_SUBJECT_CODES] } },
       include: {
         _count: { select: { chapters: true, questions: true, exams: true } },
       },
@@ -30,45 +31,19 @@ export class AcademicService {
     };
   }
 
-  async createSubject(data: CreateSubjectInput) {
-    const existing = await prisma.subject.findUnique({ where: { code: data.code } });
-    if (existing) {
-      throw new AppError(`Subject code "${data.code}" already exists`, 409);
-    }
-
-    const subject = await prisma.subject.create({
-      data: {
-        name: data.name,
-        code: data.code.toUpperCase(),
-        description: data.description ?? null,
-      },
-    });
-
-    return {
-      success: true,
-      message: 'Subject created successfully',
-      data: subject,
-    };
-  }
-
   async updateSubject(id: number, data: UpdateSubjectInput) {
     const subject = await prisma.subject.findUnique({ where: { id } });
     if (!subject) {
       throw new AppError('Subject not found', 404);
     }
-
-    if (data.code && data.code !== subject.code) {
-      const existing = await prisma.subject.findUnique({ where: { code: data.code } });
-      if (existing) {
-        throw new AppError(`Subject code "${data.code}" already exists`, 409);
-      }
+    if (!isCoreSubjectCode(subject.code)) {
+      throw new AppError('Subject not found', 404);
     }
 
     const updated = await prisma.subject.update({
       where: { id },
       data: {
         ...(data.name !== undefined && { name: data.name }),
-        ...(data.code !== undefined && { code: data.code.toUpperCase() }),
         ...(data.description !== undefined && { description: data.description }),
         ...(data.status !== undefined && { status: data.status }),
       },

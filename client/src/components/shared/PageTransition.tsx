@@ -12,13 +12,13 @@ export type PageTransitionProps = {
 
 export function PageTransition({ children, transitionKey, className }: PageTransitionProps) {
   return (
-    <AnimatePresence mode="wait" initial={false}>
+    <AnimatePresence mode="sync" initial={false}>
       <motion.div
         key={transitionKey}
         className={className}
-        initial={{ opacity: 0, y: 8 }}
+        initial={false}
         animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0 }}
+        exit={{ opacity: 0, y: -4 }}
         transition={transition}
       >
         {children}

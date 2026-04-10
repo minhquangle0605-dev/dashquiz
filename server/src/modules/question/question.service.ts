@@ -2,6 +2,7 @@ import * as XLSX from 'xlsx';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError } from '../../middlewares/errorHandler';
+import { isCoreSubjectCode } from '../../constants/subjects';
 import { PAGINATION } from '../../utils/constants';
 import { cacheGet, cacheSet, cacheInvalidate } from '../../utils/cache';
 import { buildPaginationResponse } from '../../utils/pagination';
@@ -605,6 +606,7 @@ export class QuestionService {
     ]);
 
     if (!subject) throw new AppError('Subject not found', 404);
+    if (!isCoreSubjectCode(subject.code)) throw new AppError('Subject not found', 404);
     if (!chapter) throw new AppError('Chapter not found', 404);
     if (!topic) throw new AppError('Topic not found', 404);
 

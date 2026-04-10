@@ -21,12 +21,9 @@ export interface AdminUser {
 
 export interface CreateUserPayload {
   username: string;
-  email: string;
   password: string;
   fullName?: string;
-  phone?: string;
   roleId: number;
-  status?: UserStatus;
 }
 
 export interface UpdateUserPayload {
@@ -54,9 +51,8 @@ export interface Subject {
   };
 }
 
-export interface CreateSubjectPayload {
-  name: string;
-  code: string;
+export interface UpdateSubjectPayload {
+  name?: string;
   description?: string;
   status?: number;
 }

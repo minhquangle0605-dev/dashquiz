@@ -416,6 +416,50 @@ export class NotificationService {
   }
 
   /**
+   * Trigger: Teacher publishes (opens) an exam → notify assigned students.
+   * Different from onResultsPublished which is about releasing scores.
+   */
+  async onExamPublished(examId: number, examTitle: string) {
+    try {
+      const assignments = await prisma.examAssignment.findMany({
+        where: { examId },
+        select: { classId: true },
+      });
+      const classIds = assignments.map((a) => a.classId);
+      if (classIds.length === 0) return;
+
+      const classStudents = await prisma.classStudent.findMany({
+        where: { classId: { in: classIds } },
+        include: {
+          student: {
+            select: { id: true, fullName: true, username: true },
+          },
+        },
+      });
+
+      const notified = new Set<number>();
+
+      for (const cs of classStudents) {
+        if (notified.has(cs.student.id)) continue;
+        notified.add(cs.student.id);
+
+        const title = `Bài kiểm tra đã mở: ${examTitle}`;
+        const message = `Bài kiểm tra "${examTitle}" đã được mở. Bạn có thể bắt đầu làm bài ngay!`;
+
+        await this.createNotification(cs.student.id, title, message, 'exam_published');
+
+        this.sendWebPush(cs.student.id, {
+          title,
+          body: message,
+          url: '/student/exams',
+        }).catch(() => {});
+      }
+    } catch (error) {
+      logger.error('onExamPublished notification trigger failed:', error);
+    }
+  }
+
+  /**
    * Trigger: Teacher assigns new exam to class → notify students.
    */
   async onExamAssigned(examId: number, classIds: number[]) {

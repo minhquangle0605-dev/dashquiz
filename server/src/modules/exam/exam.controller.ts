@@ -24,9 +24,10 @@ export async function listExams(req: Request, res: Response, next: NextFunction)
 
 export async function getExam(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    if (!req.user) throw new AppError('Authentication required', 401);
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) throw new AppError('Invalid exam ID', 400);
-    const result = await examService.getExamById(id);
+    const result = await examService.getExamById(id, req.user.id, req.user.role);
     res.json(result);
   } catch (error: unknown) {
     next(error instanceof Error ? error : new Error('Unexpected error'));
@@ -56,7 +57,7 @@ export async function updateExam(req: Request, res: Response, next: NextFunction
     if (!req.user) throw new AppError('Authentication required', 401);
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) throw new AppError('Invalid exam ID', 400);
-    const result = await examService.updateExam(id, req.body, req.user.id);
+    const result = await examService.updateExam(id, req.body, req.user.id, req.user.role);
     res.json(result);
   } catch (error: unknown) {
     next(error instanceof Error ? error : new Error('Unexpected error'));
@@ -72,7 +73,7 @@ export async function addQuestions(req: Request, res: Response, next: NextFuncti
     if (!req.user) throw new AppError('Authentication required', 401);
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) throw new AppError('Invalid exam ID', 400);
-    const result = await examService.addQuestions(id, req.body, req.user.id);
+    const result = await examService.addQuestions(id, req.body, req.user.id, req.user.role);
     res.json(result);
   } catch (error: unknown) {
     next(error instanceof Error ? error : new Error('Unexpected error'));
@@ -88,7 +89,7 @@ export async function publishExam(req: Request, res: Response, next: NextFunctio
     if (!req.user) throw new AppError('Authentication required', 401);
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) throw new AppError('Invalid exam ID', 400);
-    const result = await examService.publishExam(id, req.user.id);
+    const result = await examService.publishExam(id, req.user.id, req.user.role);
     res.json(result);
   } catch (error: unknown) {
     next(error instanceof Error ? error : new Error('Unexpected error'));
@@ -104,7 +105,7 @@ export async function scheduleExam(req: Request, res: Response, next: NextFuncti
     if (!req.user) throw new AppError('Authentication required', 401);
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) throw new AppError('Invalid exam ID', 400);
-    const result = await examService.scheduleExam(id, req.body, req.user.id);
+    const result = await examService.scheduleExam(id, req.body, req.user.id, req.user.role);
     res.json(result);
   } catch (error: unknown) {
     next(error instanceof Error ? error : new Error('Unexpected error'));

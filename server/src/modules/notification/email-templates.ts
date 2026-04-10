@@ -150,30 +150,3 @@ export function accountVerificationEmail(params: {
     html: baseLayout(content),
   };
 }
-
-export function passwordResetEmail(params: {
-  fullName: string;
-  resetUrl: string;
-}): { subject: string; html: string } {
-  const content = `
-    <h2 style="color:#1e293b;margin:0 0 8px;font-size:18px;">🔐 Đặt lại mật khẩu</h2>
-    <p style="color:#64748b;margin:0 0 24px;font-size:14px;">Xin chào <strong>${params.fullName}</strong>,</p>
-    <p style="color:#334155;font-size:14px;line-height:1.7;">
-      Bạn đã yêu cầu đặt lại mật khẩu. Nhấn nút bên dưới để tiếp tục:
-    </p>
-    <div style="text-align:center;margin:24px 0;">
-      <a href="${params.resetUrl}" style="display:inline-block;padding:14px 36px;background:linear-gradient(135deg,#2563eb,#7c3aed);color:#fff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">
-        Đặt lại mật khẩu
-      </a>
-    </div>
-    <p style="color:#ef4444;font-size:13px;font-weight:600;">⏰ Link này sẽ hết hạn sau 15 phút.</p>
-    <p style="color:#94a3b8;font-size:12px;margin-top:16px;">
-      Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này.
-    </p>
-  `;
-
-  return {
-    subject: '🔐 WebQuiz — Đặt lại mật khẩu',
-    html: baseLayout(content),
-  };
-}

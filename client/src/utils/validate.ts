@@ -16,7 +16,11 @@ export const emailSchema = z
 export const passwordSchema = passwordComplexity;
 
 export const loginSchema = z.object({
-  email: emailSchema,
+  username: z
+    .string()
+    .trim()
+    .min(3, 'Username must be at least 3 characters')
+    .max(191, 'Username is too long'),
   password: z.string().min(1, 'Password is required'),
 });
 

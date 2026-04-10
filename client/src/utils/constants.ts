@@ -26,8 +26,6 @@ export type ExamStatus = (typeof EXAM_STATUS)[keyof typeof EXAM_STATUS];
 export const ROUTES = {
   HOME: '/',
   LOGIN: '/login',
-  FORGOT_PASSWORD: '/forgot-password',
-  RESET_PASSWORD: '/reset-password',
   FORBIDDEN: '/403',
 } as const;
 
@@ -36,8 +34,6 @@ export const API_ENDPOINTS = {
     LOGIN: '/api/auth/login',
     LOGOUT: '/api/auth/logout',
     REFRESH: '/api/auth/refresh',
-    FORGOT_PASSWORD: '/api/auth/forgot-password',
-    RESET_PASSWORD: '/api/auth/reset-password',
   },
   USERS: {
     BASE: '/api/users',
@@ -51,6 +47,7 @@ export const API_ENDPOINTS = {
       BASE: '/api/admin/users',
       BY_ID: (id: number) => `/api/admin/users/${id}`,
       ROLE: (id: number) => `/api/admin/users/${id}/role`,
+      ROLES: '/api/admin/users/roles',
       IMPORT: '/api/admin/users/import',
       IMPORT_TEMPLATE: '/api/admin/users/import-template',
     },

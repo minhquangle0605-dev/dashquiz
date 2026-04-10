@@ -1,13 +1,12 @@
 import { Outlet, Navigate, useLocation } from 'react-router-dom';
 
 import { PageTransition } from '@/components/shared/PageTransition';
-import { useAuthStore, selectIsAuthenticated } from '@/stores/authStore';
+import { useAuth } from '@/hooks/useAuth';
 import { ROLE_DASHBOARDS } from '@/utils/constants';
 
 export default function AuthLayout() {
   const location = useLocation();
-  const isAuthenticated = useAuthStore(selectIsAuthenticated);
-  const user = useAuthStore((s) => s.user);
+  const { isAuthenticated, user } = useAuth();
 
   if (isAuthenticated && user) {
     const dashboard = ROLE_DASHBOARDS[user.role] ?? '/';

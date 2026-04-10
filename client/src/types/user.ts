@@ -5,7 +5,7 @@ export type UserStatus = 'active' | 'inactive' | 'suspended';
 export interface User {
   id: string;
   email: string;
-  username?: string;
+  username: string;
   fullName: string;
   role: UserRole;
   avatar?: string;
@@ -13,7 +13,7 @@ export interface User {
 }
 
 export interface LoginRequest {
-  email: string;
+  username: string;
   password: string;
 }
 
