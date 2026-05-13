@@ -1,29 +1,17 @@
 import type { StudentDashboardData, StrengthItem } from '@/services/analytics.api';
 
+// Dual-login: a "linked child" is just the student account this parent session
+// is bound to. The server always returns exactly one entry.
 export interface LinkedChild {
-  id: number;
-  studentId: number;
   student: {
     id: number;
-    fullName: string;
+    fullName: string | null;
     avatar: string | null;
     username: string;
+    status?: string;
+    lastLoginAt?: string | null;
+    classes?: { id: number; name: string; gradeLevel: number; subjectName: string }[];
   };
-  relationship: string;
-  linkedAt: string;
-}
-
-export interface LinkStudentRequest {
-  code: string;
-  relationship?: string;
-}
-
-export interface LinkStudentResponse {
-  id: number;
-  parentId: number;
-  studentId: number;
-  relationship: string;
-  linkedAt: string;
 }
 
 export interface ChildResultItem {

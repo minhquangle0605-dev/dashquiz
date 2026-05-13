@@ -23,25 +23,27 @@ const REFRESH_TTL = 7 * 24 * 60 * 60; // 7 days in seconds
 export class AuthService {
   private generateAccessToken(payload: JwtPayload): string {
     const jti = crypto.randomBytes(16).toString('hex');
-    return jwt.sign(
-      {
-        id: payload.id,
-        username: payload.username,
-        role: payload.role,
-        jti,
-      },
-      env.jwt.secret,
-      { expiresIn: env.jwt.accessExpiry as StringValue },
-    );
+    const body: Record<string, unknown> = {
+      id: payload.id,
+      username: payload.username,
+      role: payload.role,
+      jti,
+    };
+    if (payload.studentId !== undefined) body.studentId = payload.studentId;
+    return jwt.sign(body, env.jwt.secret, {
+      expiresIn: env.jwt.accessExpiry as StringValue,
+    });
   }
 
   private generateRefreshToken(): string {
     return crypto.randomBytes(40).toString('hex');
   }
 
-  private async storeRefreshToken(userId: number, token: string): Promise<void> {
+  private async storeRefreshToken(userId: number, token: string, role: string): Promise<void> {
     const redis = getRedisClient();
-    await redis.set(`${REFRESH_PREFIX}${token}`, userId.toString(), 'EX', REFRESH_TTL);
+    // Store "<userId>:<role>" so refresh can re-issue a parent-scoped token without
+    // a second DB roundtrip and without losing the dual-login distinction.
+    await redis.set(`${REFRESH_PREFIX}${token}`, `${userId}:${role}`, 'EX', REFRESH_TTL);
   }
 
   private async deleteRefreshToken(token: string): Promise<void> {
@@ -49,10 +51,15 @@ export class AuthService {
     await redis.del(`${REFRESH_PREFIX}${token}`);
   }
 
-  private async getRefreshTokenUserId(token: string): Promise<number | null> {
+  private async getRefreshTokenSession(token: string): Promise<{ userId: number; role: string } | null> {
     const redis = getRedisClient();
-    const userId = await redis.get(`${REFRESH_PREFIX}${token}`);
-    return userId ? parseInt(userId, 10) : null;
+    const raw = await redis.get(`${REFRESH_PREFIX}${token}`);
+    if (!raw) return null;
+    const [idStr, role] = raw.split(':');
+    const userId = parseInt(idStr, 10);
+    if (!Number.isFinite(userId)) return null;
+    // Legacy tokens stored only userId — fall back to the user's DB role.
+    return { userId, role: role || '' };
   }
 
   /**
@@ -94,7 +101,6 @@ export class AuthService {
       where: {
         username: { equals: username, mode: 'insensitive' },
       },
-      include: { role: true },
     });
 
     if (!user) {
@@ -106,26 +112,41 @@ export class AuthService {
       throw new AppError('Account is disabled or suspended', 403);
     }
 
-    const isPasswordValid = await bcrypt.compare(data.password, user.passwordHash);
-    if (!isPasswordValid) {
+    // Dual-login: STUDENT records may carry a parent password. Try the student's
+    // own password first; if it matches, role from DB. Otherwise (and only for
+    // students) try the parent password and grant the virtual PARENT role.
+    let resolvedRole: string;
+    let studentId: number | undefined;
+
+    const studentMatch = await bcrypt.compare(data.password, user.passwordHash);
+    if (studentMatch) {
+      resolvedRole = user.role.toLowerCase();
+    } else if (user.role === 'STUDENT' && user.parentPasswordHash) {
+      const parentMatch = await bcrypt.compare(data.password, user.parentPasswordHash);
+      if (!parentMatch) {
+        await recordLoginFailure(clientIp, userKey);
+        throw new AppError('Invalid username or password', 401);
+      }
+      resolvedRole = 'parent';
+      studentId = user.id;
+    } else {
       await recordLoginFailure(clientIp, userKey);
       throw new AppError('Invalid username or password', 401);
     }
 
     await clearLoginFailureState(clientIp, userKey);
 
-    const roleName = user.role.name.toLowerCase();
-
     const jwtPayload: JwtPayload = {
       id: user.id,
       username: user.username,
-      role: roleName,
+      role: resolvedRole,
+      studentId,
     };
 
     const accessToken = this.generateAccessToken(jwtPayload);
     const refreshToken = this.generateRefreshToken();
 
-    await this.storeRefreshToken(user.id, refreshToken);
+    await this.storeRefreshToken(user.id, refreshToken, resolvedRole);
 
     await prisma.user.update({
       where: { id: user.id },
@@ -140,7 +161,7 @@ export class AuthService {
         username: user.username,
         fullName: user.fullName,
         avatar: user.avatar,
-        role: roleName,
+        role: resolvedRole,
       },
     };
   }
@@ -157,14 +178,13 @@ export class AuthService {
   }
 
   async refresh(refreshToken: string) {
-    const userId = await this.getRefreshTokenUserId(refreshToken);
-    if (!userId) {
+    const session = await this.getRefreshTokenSession(refreshToken);
+    if (!session) {
       throw new AppError('Invalid or expired refresh token', 401);
     }
 
     const user = await prisma.user.findUnique({
-      where: { id: userId },
-      include: { role: true },
+      where: { id: session.userId },
     });
 
     if (!user || user.status !== 'ACTIVE') {
@@ -174,16 +194,20 @@ export class AuthService {
 
     await this.deleteRefreshToken(refreshToken);
 
+    const resolvedRole = session.role || user.role.toLowerCase();
+    const studentId = resolvedRole === 'parent' ? user.id : undefined;
+
     const jwtPayload: JwtPayload = {
       id: user.id,
       username: user.username,
-      role: user.role.name.toLowerCase(),
+      role: resolvedRole,
+      studentId,
     };
 
     const newAccessToken = this.generateAccessToken(jwtPayload);
     const newRefreshToken = this.generateRefreshToken();
 
-    await this.storeRefreshToken(user.id, newRefreshToken);
+    await this.storeRefreshToken(user.id, newRefreshToken, resolvedRole);
 
     return {
       accessToken: newAccessToken,

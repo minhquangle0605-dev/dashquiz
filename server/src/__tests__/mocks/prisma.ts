@@ -40,8 +40,6 @@ function createModelMock() {
 
 export const prismaMock: MockPrismaClient = {
   user: createModelMock(),
-  role: createModelMock(),
-  parentStudent: createModelMock(),
   academicYear: createModelMock(),
   semester: createModelMock(),
   class: createModelMock(),

@@ -28,8 +28,7 @@ import {
   getImportTemplateUrl,
 } from '@/services/admin.api';
 import api from '@/services/api';
-import type { AdminUser, CreateUserPayload, RoleOption, UpdateUserPayload, UserStatus } from '@/types/admin';
-import { ROLES } from '@/utils/constants';
+import type { AdminUser, AdminUserRole, CreateUserPayload, RoleOption, UpdateUserPayload, UserStatus } from '@/types/admin';
 import { useDebounce } from '@/hooks/useDebounce';
 
 const STATUS_BADGE: Record<UserStatus, { variant: 'success' | 'warning' | 'danger'; label: string }> = {
@@ -40,25 +39,36 @@ const STATUS_BADGE: Record<UserStatus, { variant: 'success' | 'warning' | 'dange
 
 const createUserPasswordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
 
-const createUserSchema = z.object({
-  username: z
-    .string()
-    .min(3, 'Username must be at least 3 characters')
-    .max(191)
-    .regex(
-      /^[a-zA-Z0-9._-]+$/,
-      'Username can only contain letters, numbers, dots, underscores, and hyphens',
-    ),
-  password: z
-    .string()
-    .min(8, 'Password must be at least 8 characters')
-    .regex(
-      createUserPasswordRegex,
-      'Password must contain at least one uppercase letter, one lowercase letter, and one number',
-    ),
-  fullName: z.string().min(2, 'Full name must be at least 2 characters').max(100),
-  roleId: z.coerce.number().min(1, 'Please select a role'),
-});
+const createUserSchema = z
+  .object({
+    username: z
+      .string()
+      .min(3, 'Username must be at least 3 characters')
+      .max(191)
+      .regex(
+        /^[a-zA-Z0-9._-]+$/,
+        'Username can only contain letters, numbers, dots, underscores, and hyphens',
+      ),
+    password: z
+      .string()
+      .min(8, 'Password must be at least 8 characters')
+      .regex(
+        createUserPasswordRegex,
+        'Password must contain at least one uppercase letter, one lowercase letter, and one number',
+      ),
+    fullName: z.string().min(2, 'Full name must be at least 2 characters').max(100),
+    role: z.enum(['ADMIN', 'TEACHER', 'STUDENT'], { message: 'Please select a role' }),
+    parentPassword: z
+      .string()
+      .min(6, 'Parent password must be at least 6 characters')
+      .max(100)
+      .optional()
+      .or(z.literal('')),
+  })
+  .refine(
+    (d) => !d.parentPassword || d.role === 'STUDENT',
+    { message: 'Parent password is only valid when role is STUDENT', path: ['parentPassword'] },
+  );
 
 const editUserSchema = z.object({
   username: z.string().min(3).max(191),
@@ -73,6 +83,12 @@ type EditFormData = z.infer<typeof editUserSchema>;
 function formatRoleLabel(name: string): string {
   return name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
 }
+
+const ROLE_FILTER_OPTIONS: { value: AdminUserRole; label: string }[] = [
+  { value: 'ADMIN', label: 'Admin' },
+  { value: 'TEACHER', label: 'Teacher' },
+  { value: 'STUDENT', label: 'Student' },
+];
 
 export default function UsersPage() {
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -204,10 +220,9 @@ export default function UsersPage() {
             onChange={(e) => setRoleFilter(e.target.value)}
           >
             <option value="">All Roles</option>
-            <option value="admin">Admin</option>
-            <option value="teacher">Teacher</option>
-            <option value="student">Student</option>
-            <option value="parent">Parent</option>
+            {ROLE_FILTER_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
           </select>
           <select
             className="rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
@@ -298,7 +313,10 @@ export default function UsersPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="info">{user.role?.name ?? 'N/A'}</Badge>
+                      <Badge variant="info">{formatRoleLabel(user.role)}</Badge>
+                      {user.role === 'STUDENT' && user.hasParentLogin && (
+                        <Badge variant="warning" className="ml-1.5">Parent login</Badge>
+                      )}
                     </TableCell>
                     <TableCell>
                       <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
@@ -444,11 +462,14 @@ function CreateUserModal({
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<CreateFormData>({
     resolver: zodResolver(createUserSchema),
-    defaultValues: { username: '', password: '', fullName: '', roleId: 1 },
+    defaultValues: { username: '', password: '', fullName: '', role: 'STUDENT', parentPassword: '' },
   });
+
+  const selectedRole = watch('role');
 
   useEffect(() => {
     if (!isOpen) return;
@@ -458,9 +479,8 @@ function CreateUserModal({
       .then((opts) => {
         if (cancelled) return;
         setRoleOptions(opts);
-        const teacher = opts.find((r) => r.name === ROLES.TEACHER);
-        const defaultRoleId = teacher?.id ?? opts[0]?.id ?? 1;
-        reset({ username: '', password: '', fullName: '', roleId: defaultRoleId });
+        const defaultRole: AdminUserRole = opts.find((r) => r.value === 'TEACHER')?.value ?? opts[0]?.value ?? 'STUDENT';
+        reset({ username: '', password: '', fullName: '', role: defaultRole, parentPassword: '' });
       })
       .catch(() => {
         if (!cancelled) toast.error('Failed to load roles');
@@ -479,7 +499,8 @@ function CreateUserModal({
         username: data.username,
         password: data.password,
         fullName: data.fullName,
-        roleId: data.roleId,
+        role: data.role,
+        ...(data.parentPassword ? { parentPassword: data.parentPassword } : {}),
       };
       await createUser(payload);
       toast.success('User created successfully');
@@ -498,20 +519,33 @@ function CreateUserModal({
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Role</label>
             <select
               className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:bg-slate-100 disabled:text-slate-500"
-              {...register('roleId')}
+              {...register('role')}
               disabled={rolesLoading || roleOptions.length === 0}
             >
               {roleOptions.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {formatRoleLabel(r.name)}
+                <option key={r.value} value={r.value}>
+                  {r.label}
                 </option>
               ))}
             </select>
-            {errors.roleId && <p className="mt-1.5 text-sm text-red-600">{errors.roleId.message}</p>}
+            {errors.role && <p className="mt-1.5 text-sm text-red-600">{errors.role.message}</p>}
           </div>
         </div>
         <Input label="Password" type="password" error={errors.password?.message} {...register('password')} />
         <Input label="Full Name" error={errors.fullName?.message} {...register('fullName')} />
+        {selectedRole === 'STUDENT' && (
+          <div>
+            <Input
+              label="Parent Password (optional — dual-login)"
+              type="password"
+              error={errors.parentPassword?.message}
+              {...register('parentPassword')}
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              Phụ huynh sẽ đăng nhập bằng cùng username + mật khẩu này. Để trống nếu chưa cần.
+            </p>
+          </div>
+        )}
         <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
           <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
           <Button type="submit" isLoading={isSubmitting}>Create User</Button>

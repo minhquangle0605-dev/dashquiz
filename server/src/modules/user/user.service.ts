@@ -14,6 +14,7 @@ import type {
   CreateUserInput,
   UpdateUserInput,
   ChangeRoleInput,
+  SetParentPasswordInput,
 } from './user.validation';
 
 export class UserService {
@@ -21,15 +22,18 @@ export class UserService {
   // USER SELF-SERVICE
   // ═══════════════════════════════════════════════
 
-  async getProfile(userId: number) {
+  async getProfile(userId: number, sessionRole?: string) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      include: { role: true },
     });
 
     if (!user) {
       throw new AppError('User not found', 404);
     }
+
+    // When a parent is logged in, the underlying record is a STUDENT — report
+    // the session's virtual role instead of the DB role.
+    const reportedRole = sessionRole === 'parent' ? 'parent' : user.role.toLowerCase();
 
     return {
       success: true,
@@ -40,7 +44,7 @@ export class UserService {
         fullName: user.fullName,
         phone: user.phone,
         avatar: user.avatar,
-        role: user.role.name,
+        role: reportedRole,
         status: user.status,
         lastLoginAt: user.lastLoginAt,
         createdAt: user.createdAt,
@@ -61,7 +65,6 @@ export class UserService {
     const updated = await prisma.user.update({
       where: { id: userId },
       data: updateData,
-      include: { role: true },
     });
 
     return {
@@ -73,7 +76,7 @@ export class UserService {
         fullName: updated.fullName,
         phone: updated.phone,
         avatar: updated.avatar,
-        role: updated.role.name,
+        role: updated.role.toLowerCase(),
       },
     };
   }
@@ -184,7 +187,7 @@ export class UserService {
     }
 
     if (query.role) {
-      where.role = { name: query.role };
+      where.role = query.role;
     }
 
     if (query.status) {
@@ -194,7 +197,6 @@ export class UserService {
     const [users, total] = await Promise.all([
       prisma.user.findMany({
         where,
-        include: { role: { select: { id: true, name: true } } },
         orderBy: { [sortField]: sortOrder },
         skip,
         take: limit,
@@ -207,13 +209,14 @@ export class UserService {
     return {
       success: true,
       message: 'Users retrieved successfully',
-      data: users.map((u: { id: number; username: string; fullName: string | null; phone: string | null; avatar: string | null; role: { id: number; name: string }; status: string; lastLoginAt: Date | null; createdAt: Date }) => ({
+      data: users.map((u) => ({
         id: u.id,
         username: u.username,
         fullName: u.fullName,
         phone: u.phone,
         avatar: u.avatar,
         role: u.role,
+        hasParentLogin: u.parentPasswordHash !== null,
         status: u.status,
         lastLoginAt: u.lastLoginAt,
         createdAt: u.createdAt,
@@ -229,16 +232,19 @@ export class UserService {
     };
   }
 
+  /**
+   * Static list — roles are a DB enum now, not a table.
+   * Kept for backwards compatibility with the admin UI.
+   */
   async adminListRoles() {
-    const roles = await prisma.role.findMany({
-      orderBy: { name: 'asc' },
-      select: { id: true, name: true, description: true },
-    });
-
     return {
       success: true,
       message: 'Roles retrieved successfully',
-      data: roles,
+      data: [
+        { value: 'ADMIN', label: 'Quản trị viên' },
+        { value: 'TEACHER', label: 'Giáo viên' },
+        { value: 'STUDENT', label: 'Học sinh (dual-login: kèm mật khẩu phụ huynh)' },
+      ],
     };
   }
 
@@ -248,24 +254,26 @@ export class UserService {
       throw new AppError('Username already exists', 409);
     }
 
-    const role = await prisma.role.findUnique({ where: { id: data.roleId } });
-    if (!role) {
-      throw new AppError('Invalid role ID', 400);
+    if (data.parentPassword && data.role !== 'STUDENT') {
+      throw new AppError('parentPassword is only valid for STUDENT role', 400);
     }
 
     const salt = await bcrypt.genSalt(12);
     const passwordHash = await bcrypt.hash(data.password, salt);
+    const parentPasswordHash = data.parentPassword
+      ? await bcrypt.hash(data.parentPassword, salt)
+      : null;
 
     const user = await prisma.user.create({
       data: {
         username: data.username,
         passwordHash,
+        parentPasswordHash,
         fullName: data.fullName || null,
         phone: null,
-        roleId: data.roleId,
+        role: data.role,
         status: 'ACTIVE',
       },
-      include: { role: { select: { id: true, name: true } } },
     });
 
     return {
@@ -277,6 +285,7 @@ export class UserService {
         fullName: user.fullName,
         phone: user.phone,
         role: user.role,
+        hasParentLogin: user.parentPasswordHash !== null,
         status: user.status,
         createdAt: user.createdAt,
       },
@@ -297,7 +306,6 @@ export class UserService {
     const updated = await prisma.user.update({
       where: { id: userId },
       data: updateData,
-      include: { role: { select: { id: true, name: true } } },
     });
 
     return {
@@ -312,6 +320,35 @@ export class UserService {
         status: updated.status,
         createdAt: updated.createdAt,
       },
+    };
+  }
+
+  /**
+   * Set or clear the parent password on a STUDENT account.
+   * Passing parentPassword: null clears the parent login entirely.
+   */
+  async adminSetParentPassword(userId: number, data: SetParentPasswordInput) {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new AppError('User not found', 404);
+    }
+    if (user.role !== 'STUDENT') {
+      throw new AppError('Parent password is only valid for STUDENT accounts', 400);
+    }
+
+    const parentPasswordHash = data.parentPassword
+      ? await bcrypt.hash(data.parentPassword, 12)
+      : null;
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { parentPasswordHash },
+    });
+
+    return {
+      success: true,
+      message: data.parentPassword ? 'Parent password set' : 'Parent password cleared',
+      data: { hasParentLogin: parentPasswordHash !== null },
     };
   }
 
@@ -343,15 +380,16 @@ export class UserService {
       throw new AppError('User not found', 404);
     }
 
-    const role = await prisma.role.findUnique({ where: { id: data.roleId } });
-    if (!role) {
-      throw new AppError('Invalid role ID', 400);
-    }
+    // Switching away from STUDENT clears any leftover parent password so
+    // a non-student can't accidentally retain a parent login.
+    const clearParent = user.role === 'STUDENT' && data.role !== 'STUDENT';
 
     const updated = await prisma.user.update({
       where: { id: userId },
-      data: { roleId: data.roleId },
-      include: { role: { select: { id: true, name: true } } },
+      data: {
+        role: data.role,
+        ...(clearParent ? { parentPasswordHash: null } : {}),
+      },
     });
 
     return {
@@ -389,11 +427,9 @@ export class UserService {
       throw new AppError('Excel file is empty', 400);
     }
 
-    const roles = await prisma.role.findMany();
-    const roleMap = new Map<string, number>();
-    for (const r of roles) {
-      roleMap.set(r.name.toLowerCase(), r.id);
-    }
+    const validRoles = ['ADMIN', 'TEACHER', 'STUDENT'] as const;
+    type ImportRole = (typeof validRoles)[number];
+    const roleSet = new Set<string>(validRoles);
 
     const existingUsernames = new Set(
       (await prisma.user.findMany({ select: { username: true } })).map((u: { username: string }) => u.username.toLowerCase()),
@@ -403,9 +439,10 @@ export class UserService {
     const validUsers: Array<{
       username: string;
       passwordHash: string;
+      parentPasswordHash: string | null;
       fullName: string | null;
       phone: string | null;
-      roleId: number;
+      role: ImportRole;
     }> = [];
 
     const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
@@ -416,9 +453,10 @@ export class UserService {
       const rowNum = i + 2; // row 1 is header
       const username = String(row.username ?? row.Username ?? '').trim();
       const password = String(row.password ?? row.Password ?? '').trim();
+      const parentPassword = String(row.parentPassword ?? row.parent_password ?? row.ParentPassword ?? '').trim();
       const fullName = String(row.fullName ?? row.full_name ?? row.FullName ?? '').trim() || null;
       const phone = String(row.phone ?? row.Phone ?? '').trim() || null;
-      const roleName = String(row.role ?? row.Role ?? '').trim().toLowerCase();
+      const roleName = String(row.role ?? row.Role ?? '').trim().toUpperCase();
 
       let hasError = false;
 
@@ -435,16 +473,28 @@ export class UserService {
         hasError = true;
       }
 
-      const roleId = roleMap.get(roleName);
-      if (!roleId) {
-        errors.push({ row: rowNum, field: 'role', message: `Invalid role "${roleName}". Valid: ${Array.from(roleMap.keys()).join(', ')}` });
+      if (!roleSet.has(roleName)) {
+        errors.push({ row: rowNum, field: 'role', message: `Invalid role "${roleName}". Valid: ${validRoles.join(', ')}` });
         hasError = true;
       }
 
-      if (!hasError && roleId) {
+      if (parentPassword && roleName !== 'STUDENT') {
+        errors.push({ row: rowNum, field: 'parentPassword', message: 'parentPassword is only valid when role=STUDENT' });
+        hasError = true;
+      }
+
+      if (!hasError) {
         const salt = await bcrypt.genSalt(12);
         const passwordHash = await bcrypt.hash(password, salt);
-        validUsers.push({ username, passwordHash, fullName, phone, roleId });
+        const parentPasswordHash = parentPassword ? await bcrypt.hash(parentPassword, salt) : null;
+        validUsers.push({
+          username,
+          passwordHash,
+          parentPasswordHash,
+          fullName,
+          phone,
+          role: roleName as ImportRole,
+        });
         newUsernames.add(username.toLowerCase());
       }
     }
@@ -474,9 +524,9 @@ export class UserService {
 
   getImportTemplate() {
     const templateData = [
-      { username: 'student01', password: 'Pass1234', fullName: 'Nguyen Van A', phone: '0901234567', role: 'student' },
-      { username: 'teacher01', password: 'Pass1234', fullName: 'Tran Thi B', phone: '0912345678', role: 'teacher' },
-      { username: 'parent01', password: 'Pass1234', fullName: 'Le Van C', phone: '0923456789', role: 'parent' },
+      { username: 'student01', password: 'Pass1234', parentPassword: 'Parent1234', fullName: 'Nguyen Van A', phone: '0901234567', role: 'STUDENT' },
+      { username: 'student02', password: 'Pass1234', parentPassword: '', fullName: 'Pham Thi D', phone: '0934567890', role: 'STUDENT' },
+      { username: 'teacher01', password: 'Pass1234', parentPassword: '', fullName: 'Tran Thi B', phone: '0912345678', role: 'TEACHER' },
     ];
 
     const worksheet = XLSX.utils.json_to_sheet(templateData);
@@ -484,6 +534,7 @@ export class UserService {
     const colWidths = [
       { wch: 15 }, // username
       { wch: 15 }, // password
+      { wch: 17 }, // parentPassword
       { wch: 25 }, // fullName
       { wch: 15 }, // phone
       { wch: 10 }, // role

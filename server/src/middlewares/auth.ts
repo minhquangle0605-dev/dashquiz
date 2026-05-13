@@ -30,6 +30,7 @@ export const authenticate = async (req: Request, _res: Response, next: NextFunct
       id: decoded.id,
       username: decoded.username,
       role: typeof decoded.role === 'string' ? decoded.role.toLowerCase() : decoded.role,
+      studentId: decoded.studentId,
     };
 
     next();

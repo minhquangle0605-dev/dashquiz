@@ -358,11 +358,8 @@ export class ClassService {
       throw new AppError('You can only manage your own classes', 403);
     }
 
-    const studentRole = await prisma.role.findFirst({ where: { name: 'student' } });
-    if (!studentRole) throw new AppError('Student role not configured', 500);
-
     const students = await prisma.user.findMany({
-      where: { id: { in: data.userIds }, roleId: studentRole.id },
+      where: { id: { in: data.userIds }, role: 'STUDENT' },
       select: { id: true },
     });
 
@@ -493,12 +490,9 @@ export class ClassService {
       };
     }
 
-    const studentRole = await prisma.role.findFirst({ where: { name: 'student' } });
-    if (!studentRole) throw new AppError('Student role not configured', 500);
-
     const foundStudents = await prisma.user.findMany({
       where: {
-        roleId: studentRole.id,
+        role: 'STUDENT',
         username: { in: lookupUsernames },
       },
       select: { id: true, username: true },

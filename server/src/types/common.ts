@@ -32,6 +32,8 @@ export interface JwtPayload {
   id: number;
   username: string;
   role: string;
+  // Present only when role === 'parent' (dual-login). Equal to the student's user id.
+  studentId?: number;
   jti?: string;
   iat?: number;
   exp?: number;

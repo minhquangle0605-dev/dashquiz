@@ -8,7 +8,7 @@ export async function getMe(req: Request, res: Response, next: NextFunction): Pr
     if (!req.user) {
       throw new AppError('Authentication required', 401);
     }
-    const result = await userService.getProfile(req.user.id);
+    const result = await userService.getProfile(req.user.id, req.user.role);
     res.json(result);
   } catch (error: unknown) {
     next(error instanceof Error ? error : new Error('Unexpected error'));
@@ -123,6 +123,19 @@ export async function adminChangeRole(req: Request, res: Response, next: NextFun
       throw new AppError('Invalid user ID', 400);
     }
     const result = await userService.adminChangeRole(userId, req.body);
+    res.json(result);
+  } catch (error: unknown) {
+    next(error instanceof Error ? error : new Error('Unexpected error'));
+  }
+}
+
+export async function adminSetParentPassword(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const userId = parseInt(req.params.id, 10);
+    if (isNaN(userId)) {
+      throw new AppError('Invalid user ID', 400);
+    }
+    const result = await userService.adminSetParentPassword(userId, req.body);
     res.json(result);
   } catch (error: unknown) {
     next(error instanceof Error ? error : new Error('Unexpected error'));

@@ -1,6 +1,8 @@
-import type { UserRole } from '@/utils/constants';
-
 export type UserStatus = 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
+
+// DB-stored roles (UserRole enum). PARENT is intentionally absent — it is a
+// virtual role granted only via parentPasswordHash login.
+export type AdminUserRole = 'ADMIN' | 'TEACHER' | 'STUDENT';
 
 export interface AdminUser {
   id: number;
@@ -11,18 +13,17 @@ export interface AdminUser {
   status: UserStatus;
   lastLoginAt: string | null;
   createdAt: string;
-  role: {
-    id: number;
-    name: UserRole;
-    description: string | null;
-  };
+  role: AdminUserRole;
+  hasParentLogin?: boolean;
 }
 
 export interface CreateUserPayload {
   username: string;
   password: string;
+  /** Only valid when role === 'STUDENT'. Sets the dual-login parent password. */
+  parentPassword?: string;
   fullName?: string;
-  roleId: number;
+  role: AdminUserRole;
 }
 
 export interface UpdateUserPayload {
@@ -33,7 +34,11 @@ export interface UpdateUserPayload {
 }
 
 export interface ChangeRolePayload {
-  roleId: number;
+  role: AdminUserRole;
+}
+
+export interface SetParentPasswordPayload {
+  parentPassword: string | null;
 }
 
 export interface Subject {
@@ -158,7 +163,6 @@ export interface DashboardStats {
 }
 
 export interface RoleOption {
-  id: number;
-  name: string;
-  description: string | null;
+  value: AdminUserRole;
+  label: string;
 }

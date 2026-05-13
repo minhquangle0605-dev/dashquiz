@@ -2,19 +2,10 @@ import api from './api';
 import { API_ENDPOINTS } from '@/utils/constants';
 import type {
   LinkedChild,
-  LinkStudentRequest,
-  LinkStudentResponse,
   ChildResultsResponse,
   ChildDashboardData,
   ChildStrengthItem,
 } from '@/types/parent';
-
-export async function linkStudent(
-  payload: LinkStudentRequest,
-): Promise<LinkStudentResponse> {
-  const { data } = await api.post(API_ENDPOINTS.PARENT.LINK_STUDENT, payload);
-  return data.data;
-}
 
 export async function getChildren(): Promise<LinkedChild[]> {
   const { data } = await api.get(API_ENDPOINTS.PARENT.CHILDREN);

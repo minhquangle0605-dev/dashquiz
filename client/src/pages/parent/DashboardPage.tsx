@@ -121,19 +121,6 @@ export default function DashboardPage() {
       </div>
 
       {selectedChildId && <ChildDashboardContent childId={selectedChildId} />}
-
-      {/* Link more children */}
-      <div className="text-center">
-        <Link
-          to="/parent/link-student"
-          className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-dashed border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-600 transition-colors hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700"
-        >
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-          </svg>
-          Link Another Child
-        </Link>
-      </div>
     </div>
   );
 }
@@ -345,19 +332,11 @@ function NoChildrenView() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
             </svg>
           </div>
-          <h2 className="mt-4 text-xl font-bold text-slate-900">No students linked yet</h2>
+          <h2 className="mt-4 text-xl font-bold text-slate-900">Không tìm thấy hồ sơ học sinh</h2>
           <p className="mt-2 text-sm text-slate-500">
-            Link your child's student account to start monitoring their learning progress and exam results.
+            Tài khoản phụ huynh của bạn được gắn trực tiếp vào tài khoản học sinh.
+            Vui lòng liên hệ giáo viên hoặc quản trị viên nếu bạn không thấy dữ liệu.
           </p>
-          <Link
-            to="/parent/link-student"
-            className="mt-6 inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700"
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-            </svg>
-            Link a Student
-          </Link>
         </div>
       </Card>
     </div>

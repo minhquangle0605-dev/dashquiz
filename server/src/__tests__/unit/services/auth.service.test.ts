@@ -16,14 +16,14 @@ const mockUser = {
   id: 1,
   username: 'teststudent',
   passwordHash: '',
+  parentPasswordHash: null,
   fullName: 'Test Student',
   phone: null,
   avatar: null,
   status: 'ACTIVE' as const,
-  roleId: 1,
+  role: 'STUDENT' as const,
   lastLoginAt: null,
   createdAt: new Date(),
-  role: { id: 1, name: 'student', description: 'Student role' },
 };
 
 beforeAll(async () => {

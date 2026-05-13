@@ -142,7 +142,6 @@ export const API_ENDPOINTS = {
       `/api/chapters/${chapterId}/topics`,
   },
   PARENT: {
-    LINK_STUDENT: '/api/parent/link-student',
     CHILDREN: '/api/parent/children',
     CHILD_RESULTS: (childId: number) => `/api/parent/children/${childId}/results`,
     CHILD_DASHBOARD: (childId: number) => `/api/parent/children/${childId}/dashboard`,

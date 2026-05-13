@@ -28,7 +28,6 @@ const ClassesPage = lazy(() => import('./pages/teacher/ClassesPage'));
 
 const ParentDashboard = lazy(() => import('./pages/parent/DashboardPage'));
 const ChildResultsPage = lazy(() => import('./pages/parent/ChildResultsPage'));
-const LinkStudentPage = lazy(() => import('./pages/parent/LinkStudentPage'));
 
 const AdminDashboard = lazy(() => import('./pages/admin/DashboardPage'));
 const UsersPage = lazy(() => import('./pages/admin/UsersPage'));
@@ -97,7 +96,6 @@ export default function App() {
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<ParentDashboard />} />
             <Route path="results" element={<ChildResultsPage />} />
-            <Route path="link-student" element={<LinkStudentPage />} />
             <Route path="notifications" element={<NotificationsPage />} />
             <Route path="profile" element={<ProfilePage />} />
           </Route>

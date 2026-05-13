@@ -9,8 +9,14 @@ datasource db {
 }
 
 
-// ENUM TYPES (6)
+// ENUM TYPES (7)
 
+
+enum UserRole {
+  ADMIN
+  TEACHER
+  STUDENT
+}
 
 enum UserStatus {
   ACTIVE
@@ -53,35 +59,22 @@ enum BackupStatus {
 }
 
 
-// USER MANAGEMENT (4 models)
+// USER MANAGEMENT (1 model — dual-login: student record carries parent password)
 
-
-model Role {
-  id          Int     @id @default(autoincrement())
-  name        String  @unique @db.VarChar(20)
-  description String? @db.VarChar(255)
-
-  users User[]
-
-  @@map("roles")
-}
 
 model User {
-  id           Int        @id @default(autoincrement())
-  roleId       Int        @map("role_id")
-  username     String     @unique @db.VarChar(191)
-  passwordHash String     @map("password_hash") @db.VarChar(255)
-  fullName     String?    @map("full_name") @db.VarChar(100)
-  phone        String?    @db.VarChar(20)
-  avatar       String?    @db.VarChar(255)
-  status       UserStatus @default(ACTIVE)
-  lastLoginAt  DateTime?  @map("last_login_at") @db.Timestamptz()
-  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz()
+  id                 Int        @id @default(autoincrement())
+  role               UserRole   @default(STUDENT)
+  username           String     @unique @db.VarChar(191)
+  passwordHash       String     @map("password_hash") @db.VarChar(255)
+  parentPasswordHash String?    @map("parent_password_hash") @db.VarChar(255)
+  fullName           String?    @map("full_name") @db.VarChar(100)
+  phone              String?    @db.VarChar(20)
+  avatar             String?    @db.VarChar(255)
+  status             UserStatus @default(ACTIVE)
+  lastLoginAt        DateTime?  @map("last_login_at") @db.Timestamptz()
+  createdAt          DateTime   @default(now()) @map("created_at") @db.Timestamptz()
 
-  role Role @relation(fields: [roleId], references: [id], onDelete: Restrict)
-
-  parentLinks          ParentStudent[]       @relation("ParentUser")
-  childLinks           ParentStudent[]       @relation("StudentUser")
   teachingClasses      Class[]               @relation("TeacherClasses")
   enrolledClasses      ClassStudent[]
   createdQuestions     Question[]
@@ -94,20 +87,8 @@ model User {
   backups              Backup[]
   webPushSubscriptions WebPushSubscription[]
 
+  @@index([username, role])
   @@map("users")
-}
-
-model ParentStudent {
-  id           Int      @id @default(autoincrement())
-  parentId     Int      @map("parent_id")
-  studentId    Int      @map("student_id")
-  relationship String?  @db.VarChar(20)
-  linkedAt     DateTime @default(now()) @map("linked_at") @db.Timestamptz()
-
-  parent  User @relation("ParentUser", fields: [parentId], references: [id], onDelete: Cascade)
-  student User @relation("StudentUser", fields: [studentId], references: [id], onDelete: Cascade)
-
-  @@map("parent_student")
 }
 
 

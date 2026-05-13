@@ -6,40 +6,21 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('Seeding database...\n');
 
-  // ── 1. Seed Roles ────────────────────────────────
-  const roles = await Promise.all(
-    [
-      { name: 'student', description: 'Học sinh — làm bài kiểm tra, xem kết quả' },
-      { name: 'parent', description: 'Phụ huynh — theo dõi kết quả học tập con em' },
-      { name: 'teacher', description: 'Giáo viên — tạo câu hỏi, bài kiểm tra, phân tích' },
-      { name: 'admin', description: 'Quản trị viên — quản lý toàn bộ hệ thống' },
-    ].map((r) =>
-      prisma.role.upsert({
-        where: { name: r.name },
-        update: {},
-        create: r,
-      }),
-    ),
-  );
-  console.log(`✓ ${roles.length} roles seeded`);
-
-  const adminRole = roles.find((r) => r.name === 'admin')!;
-  const studentRole = roles.find((r) => r.name === 'student')!;
-  const teacherRole = roles.find((r) => r.name === 'teacher')!;
-  const parentRole = roles.find((r) => r.name === 'parent')!;
-
-  // ── 2. Seed Admin Account (login: admin.web / 123456) ──
+  // ── 1. Seed Admin Account (login: admin.web / 123456) ──
+  // Admin is the bootstrap account — created via upsert so re-running seed is safe.
   const passwordHash = await bcrypt.hash('123456', 12);
+  const parentPasswordHash = await bcrypt.hash('parent123', 12);
+
   const admin = await prisma.user.upsert({
     where: { username: 'admin.web' },
     update: {
       passwordHash,
-      roleId: adminRole.id,
+      role: 'ADMIN',
       fullName: 'System Administrator',
       status: 'ACTIVE',
     },
     create: {
-      roleId: adminRole.id,
+      role: 'ADMIN',
       username: 'admin.web',
       passwordHash,
       fullName: 'System Administrator',
@@ -50,26 +31,19 @@ async function main() {
 
   const student = await prisma.user.upsert({
     where: { username: 'student.demo' },
-    update: { passwordHash, roleId: studentRole.id, fullName: 'Demo Student', status: 'ACTIVE' },
-    create: { roleId: studentRole.id, username: 'student.demo', passwordHash, fullName: 'Demo Student', status: 'ACTIVE' },
+    update: { passwordHash, parentPasswordHash, role: 'STUDENT', fullName: 'Demo Student', status: 'ACTIVE' },
+    create: { role: 'STUDENT', username: 'student.demo', passwordHash, parentPasswordHash, fullName: 'Demo Student', status: 'ACTIVE' },
   });
-  console.log(`✓ Student account seeded: ${student.username}`);
+  console.log(`✓ Student account seeded: ${student.username} (parent login: same username, password parent123)`);
 
   const teacher = await prisma.user.upsert({
     where: { username: 'teacher.demo' },
-    update: { passwordHash, roleId: teacherRole.id, fullName: 'Demo Teacher', status: 'ACTIVE' },
-    create: { roleId: teacherRole.id, username: 'teacher.demo', passwordHash, fullName: 'Demo Teacher', status: 'ACTIVE' },
+    update: { passwordHash, role: 'TEACHER', fullName: 'Demo Teacher', status: 'ACTIVE' },
+    create: { role: 'TEACHER', username: 'teacher.demo', passwordHash, fullName: 'Demo Teacher', status: 'ACTIVE' },
   });
   console.log(`✓ Teacher account seeded: ${teacher.username}`);
 
-  const parent = await prisma.user.upsert({
-    where: { username: 'parent.demo' },
-    update: { passwordHash, roleId: parentRole.id, fullName: 'Demo Parent', status: 'ACTIVE' },
-    create: { roleId: parentRole.id, username: 'parent.demo', passwordHash, fullName: 'Demo Parent', status: 'ACTIVE' },
-  });
-  console.log(`✓ Parent account seeded: ${parent.username}`);
-
-  // ── 3. Seed Subjects (Toán, Lý, Hóa — theo proposal) ──
+  // ── 2. Seed Subjects (Toán, Lý, Hóa — theo proposal) ──
   const subjectsData = [
     { name: 'Toán', code: 'MATH', description: 'Toán học phổ thông — Đại số, Hình học, Giải tích' },
     { name: 'Vật lý', code: 'PHY', description: 'Vật lý phổ thông — Cơ học, Điện, Quang, Nhiệt' },
@@ -87,7 +61,7 @@ async function main() {
   );
   console.log(`✓ ${subjects.length} subjects seeded`);
 
-  // ── 4. Seed Academic Year & Semesters ────────────
+  // ── 3. Seed Academic Year & Semesters ────────────
   const academicYear = await prisma.academicYear.upsert({
     where: { id: 1 },
     update: {},
@@ -126,7 +100,7 @@ async function main() {
   );
   console.log(`✓ ${semesters.length} semesters seeded`);
 
-  // ── 5. Seed Chapters & Topics ────────────────────
+  // ── 4. Seed Chapters & Topics ────────────────────
   const chaptersConfig: Record<string, { name: string; topics: string[] }[]> = {
     MATH: [
       {
@@ -200,7 +174,7 @@ async function main() {
   console.log(`✓ ${totalChapters} chapters seeded`);
   console.log(`✓ ${totalTopics} topics seeded`);
 
-  // ── 6. Seed Topic Relations (Knowledge Graph) ────
+  // ── 5. Seed Topic Relations (Knowledge Graph) ────
   // MATH: 0-11, PHY: 12-19, CHEM: 20-29
   const relationsData = [
     // Toán: Hàm số bậc nhất → Hàm số bậc hai → Đồ thị hàm số
@@ -236,7 +210,7 @@ async function main() {
   }
   console.log(`✓ ${relCount} topic relations seeded (Knowledge Graph)`);
 
-  // ── 7. Seed System Configs ───────────────────────
+  // ── 6. Seed System Configs ───────────────────────
   const configs = [
     { configKey: 'school_name', configValue: 'Trường THPT WebQuiz Demo', description: 'Tên trường hiển thị trên hệ thống' },
     { configKey: 'school_logo', configValue: '/images/logo.png', description: 'Đường dẫn logo trường' },

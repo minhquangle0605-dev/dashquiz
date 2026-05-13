@@ -1,24 +1,5 @@
 import { z } from 'zod';
 
-export const linkStudentBodySchema = z.object({
-  code: z
-    .string()
-    .min(6, 'Link code must be 6 characters')
-    .max(6, 'Link code must be 6 characters')
-    .regex(/^[A-Z0-9]{6}$/, 'Link code must be 6 uppercase alphanumeric characters'),
-  relationship: z
-    .string()
-    .max(20)
-    .optional()
-    .default('parent'),
-});
-
-export type LinkStudentInput = z.infer<typeof linkStudentBodySchema>;
-
-export const generateLinkCodeParamsSchema = z.object({
-  studentId: z.coerce.number().int().positive(),
-});
-
 export const childIdParamSchema = z.object({
   id: z.coerce.number().int().positive(),
 });

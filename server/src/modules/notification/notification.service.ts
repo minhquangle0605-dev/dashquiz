@@ -255,37 +255,33 @@ export class NotificationService {
   // ═══════════════════════════════════════════════════
 
   /**
-   * Trigger: Student submitted exam → notify parent(s).
+   * Trigger: Student submitted exam.
+   *
+   * Dual-login: the parent shares the student's user record, so the student's
+   * notification feed is what the parent sees on login. We only push a separate
+   * web-push when the student row has a parentPasswordHash (a parent is
+   * actually configured) so the device gets a parent-framed message.
    */
   async onExamSubmitted(studentId: number, examTitle: string, score: number, totalQuestions: number, correctCount: number) {
     try {
       const student = await prisma.user.findUnique({
         where: { id: studentId },
-        select: { fullName: true, username: true },
+        select: { fullName: true, username: true, parentPasswordHash: true },
       });
-      const studentName = student?.fullName || student?.username || 'Học sinh';
+      if (!student) return;
 
-      const parentLinks = await prisma.parentStudent.findMany({
-        where: { studentId },
-        include: {
-          parent: {
-            select: { id: true, fullName: true, username: true },
-          },
-        },
-      });
+      const studentName = student.fullName || student.username || 'Học sinh';
 
-      for (const link of parentLinks) {
+      if (student.parentPasswordHash) {
         const title = `Kết quả bài KT: ${examTitle}`;
         const message = `Con bạn ${studentName} đã hoàn thành bài kiểm tra "${examTitle}", điểm: ${score}/10 (${correctCount}/${totalQuestions} câu đúng).`;
 
-        await this.createNotification(link.parent.id, title, message, 'exam_result');
-
-        emitDashboardUpdate(link.parent.id, {
+        emitDashboardUpdate(studentId, {
           reason: 'child_exam_submitted',
           entityType: 'exam_attempt',
         });
 
-        this.sendWebPush(link.parent.id, {
+        this.sendWebPush(studentId, {
           title,
           body: message,
           url: `/parent/children/${studentId}/results`,
@@ -335,19 +331,21 @@ export class NotificationService {
         }).catch(() => {});
       }
 
-      for (const studentId of studentIds) {
-        const parentLinks = await prisma.parentStudent.findMany({
-          where: { studentId },
-          select: { parent: { select: { id: true } } },
+      // Dual-login: the parent reads the student's notification feed, so the
+      // 'results_published' notification we just created is already visible to
+      // the parent. We don't insert duplicate parent rows; just send an extra
+      // web-push framed for the parent device when one is configured.
+      if (studentIds.size > 0) {
+        const studentsWithParent = await prisma.user.findMany({
+          where: { id: { in: Array.from(studentIds) }, parentPasswordHash: { not: null } },
+          select: { id: true },
         });
 
-        for (const link of parentLinks) {
+        for (const { id: studentId } of studentsWithParent) {
           const title = `Kết quả bài KT đã công bố: ${examTitle}`;
           const message = `Giáo viên đã công bố kết quả bài kiểm tra "${examTitle}" cho con bạn.`;
 
-          await this.createNotification(link.parent.id, title, message, 'results_published');
-
-          this.sendWebPush(link.parent.id, {
+          this.sendWebPush(studentId, {
             title,
             body: message,
             url: `/parent/children/${studentId}/results`,

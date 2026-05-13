@@ -1,9 +1,14 @@
+// JWT/request-level role strings (lowercase). PARENT is virtual: only set when
+// login matches parentPasswordHash on a STUDENT user. DB stores UserRole enum
+// (ADMIN/TEACHER/STUDENT) — auth service normalises to lowercase for tokens.
 export const ROLES = {
   STUDENT: 'student',
   PARENT: 'parent',
   TEACHER: 'teacher',
   ADMIN: 'admin',
 } as const;
+
+export type Role = (typeof ROLES)[keyof typeof ROLES];
 
 export const USER_STATUS = {
   ACTIVE: 'active',

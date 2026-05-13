@@ -47,7 +47,6 @@ function commandsForRole(role: UserRole | undefined): CommandItem[] {
       return [
         { id: 'parent-dashboard', label: 'Dashboard', to: '/parent/dashboard', keywords: 'home overview' },
         { id: 'parent-results', label: "Child's Results", to: '/parent/results', keywords: 'results grades scores children' },
-        { id: 'parent-link', label: 'Link Student', to: '/parent/link-student', keywords: 'connect child enroll' },
         { id: 'parent-profile', label: 'Profile', to: '/parent/profile', keywords: 'account me settings' },
       ];
     default:
