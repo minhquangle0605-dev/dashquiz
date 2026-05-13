@@ -40,7 +40,7 @@ const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
 export const listUsersQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(20).optional(),
-  sort: z.enum(['createdAt', 'fullName', 'email', 'username', 'status']).default('createdAt').optional(),
+  sort: z.enum(['createdAt', 'fullName', 'username', 'status']).default('createdAt').optional(),
   order: z.enum(['asc', 'desc']).default('desc').optional(),
   search: z.string().max(100).optional(),
   role: z.string().optional(),
@@ -73,11 +73,6 @@ export const updateUserSchema = z.object({
     .string()
     .min(2, 'Full name must be at least 2 characters')
     .max(100, 'Full name must not exceed 100 characters')
-    .optional(),
-  email: z
-    .string()
-    .email('Invalid email format')
-    .max(100, 'Email must not exceed 100 characters')
     .optional(),
   phone: z
     .string()

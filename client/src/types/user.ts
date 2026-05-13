@@ -4,7 +4,6 @@ export type UserStatus = 'active' | 'inactive' | 'suspended';
 
 export interface User {
   id: string;
-  email: string;
   username: string;
   fullName: string;
   role: UserRole;

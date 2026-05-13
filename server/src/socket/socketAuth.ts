@@ -7,7 +7,6 @@ import type { JwtPayload } from '../types/common';
 export interface AuthenticatedSocket extends Socket {
   data: {
     userId: number;
-    email: string;
     username: string;
     role: string;
   };
@@ -33,8 +32,7 @@ export function socketAuthMiddleware(
 
     socket.data = {
       userId: decoded.id,
-      email: decoded.email,
-      username: decoded.username ?? '',
+      username: decoded.username,
       role: decoded.role,
     };
 

@@ -26,7 +26,6 @@ export class AuthService {
     return jwt.sign(
       {
         id: payload.id,
-        email: payload.email,
         username: payload.username,
         role: payload.role,
         jti,
@@ -119,7 +118,6 @@ export class AuthService {
 
     const jwtPayload: JwtPayload = {
       id: user.id,
-      email: user.email,
       username: user.username,
       role: roleName,
     };
@@ -140,7 +138,6 @@ export class AuthService {
       user: {
         id: user.id,
         username: user.username,
-        email: user.email,
         fullName: user.fullName,
         avatar: user.avatar,
         role: roleName,
@@ -179,7 +176,6 @@ export class AuthService {
 
     const jwtPayload: JwtPayload = {
       id: user.id,
-      email: user.email,
       username: user.username,
       role: user.role.name.toLowerCase(),
     };

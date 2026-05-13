@@ -5,7 +5,6 @@ export type UserStatus = 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
 export interface AdminUser {
   id: number;
   username: string;
-  email: string;
   fullName: string | null;
   phone: string | null;
   avatar: string | null;
@@ -28,7 +27,6 @@ export interface CreateUserPayload {
 
 export interface UpdateUserPayload {
   username?: string;
-  email?: string;
   fullName?: string;
   phone?: string;
   status?: UserStatus;

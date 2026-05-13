@@ -159,7 +159,7 @@ export class SystemService {
       prisma.activityLog.findMany({
         where,
         include: {
-          user: { select: { id: true, username: true, email: true, fullName: true } },
+          user: { select: { id: true, username: true, fullName: true } },
         },
         orderBy: { createdAt: 'desc' },
         skip,

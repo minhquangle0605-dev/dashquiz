@@ -163,7 +163,7 @@ export interface ExamDistributionData {
 }
 
 export interface WeakStudentItem {
-  student: { id: number; fullName: string; email: string };
+  student: { id: number; fullName: string; username: string };
   avgScore: number;
   recentScores: { score: number; examTitle: string; submittedAt: string }[];
 }
@@ -172,7 +172,7 @@ export interface ExamResultItem {
   attemptId: number;
   studentId: number;
   studentName: string;
-  studentEmail: string;
+  studentUsername: string;
   score: number;
   passed: boolean | null;
   timeSpentSec: number | null;

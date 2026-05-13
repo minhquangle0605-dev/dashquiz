@@ -9,11 +9,10 @@ export const handlers = [
         success: true,
         message: 'Login successful',
         data: {
-          accessToken: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwiZW1haWwiOiJzdHVkZW50QHRlc3QuY29tIiwicm9sZSI6InN0dWRlbnQiLCJpYXQiOjk5OTk5OTk5OTksImV4cCI6OTk5OTk5OTk5OX0.test',
+          accessToken: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwidXNlcm5hbWUiOiJ0ZXN0c3R1ZGVudCIsInJvbGUiOiJzdHVkZW50IiwiaWF0Ijo5OTk5OTk5OTk5LCJleHAiOjk5OTk5OTk5OTl9.test',
           user: {
             id: 1,
             username: 'teststudent',
-            email: 'student@test.com',
             fullName: 'Test Student',
             avatar: null,
             role: 'student',

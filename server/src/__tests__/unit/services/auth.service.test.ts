@@ -15,7 +15,6 @@ const authService = new AuthService();
 const mockUser = {
   id: 1,
   username: 'teststudent',
-  email: 'student@test.com',
   passwordHash: '',
   fullName: 'Test Student',
   phone: null,
@@ -52,7 +51,7 @@ describe('AuthService', () => {
 
       expect(result.accessToken).toBeDefined();
       expect(result.refreshToken).toBeDefined();
-      expect(result.user.email).toBe('student@test.com');
+      expect(result.user.username).toBe('teststudent');
       expect(result.user.role).toBe('student');
       expect(redisMock.set).toHaveBeenCalled();
     });
@@ -102,9 +101,8 @@ describe('AuthService', () => {
       ) as jwt.JwtPayload;
 
       expect(decoded.id).toBe(1);
-      expect(decoded.email).toBe('student@test.com');
+      expect(decoded.username).toBe('teststudent');
       expect(decoded.role).toBe('student');
-      expect((decoded as { username?: string }).username).toBe('teststudent');
     });
 
     it('should update lastLoginAt on successful login', async () => {

@@ -19,7 +19,6 @@ interface ImportError {
 }
 
 interface ExcelStudentRow {
-  email?: string;
   username?: string;
   full_name?: string;
 }
@@ -52,7 +51,7 @@ export class ClassService {
       prisma.class.findMany({
         where,
         include: {
-          teacher: { select: { id: true, fullName: true, email: true } },
+          teacher: { select: { id: true, fullName: true } },
           subject: { select: { id: true, name: true, code: true } },
           semester: {
             select: {
@@ -90,7 +89,7 @@ export class ClassService {
       include: {
         class: {
           include: {
-            teacher: { select: { id: true, fullName: true, email: true } },
+            teacher: { select: { id: true, fullName: true } },
             subject: { select: { id: true, name: true, code: true } },
             semester: {
               select: {
@@ -182,7 +181,7 @@ export class ClassService {
         subjectId: data.subjectId,
       },
       include: {
-        teacher: { select: { id: true, fullName: true, email: true } },
+        teacher: { select: { id: true, fullName: true } },
         subject: { select: { id: true, name: true, code: true } },
         semester: {
           select: {
@@ -270,7 +269,7 @@ export class ClassService {
         ...(data.subjectId !== undefined && { subjectId: data.subjectId }),
       },
       include: {
-        teacher: { select: { id: true, fullName: true, email: true } },
+        teacher: { select: { id: true, fullName: true } },
         subject: { select: { id: true, name: true, code: true } },
         semester: {
           select: {
@@ -307,7 +306,6 @@ export class ClassService {
       where.student = {
         OR: [
           { fullName: { contains: query.search, mode: 'insensitive' } },
-          { email: { contains: query.search, mode: 'insensitive' } },
           { username: { contains: query.search, mode: 'insensitive' } },
         ],
       };
@@ -321,7 +319,6 @@ export class ClassService {
             select: {
               id: true,
               username: true,
-              email: true,
               fullName: true,
               phone: true,
               avatar: true,
@@ -463,36 +460,32 @@ export class ClassService {
     if (rows.length === 0) throw new AppError('Excel file is empty', 400);
 
     const headers = Object.keys(rows[0] || {}).map((h) => h.toLowerCase().trim());
-    const hasEmail = headers.includes('email');
     const hasUsername = headers.includes('username');
 
-    if (!hasEmail && !hasUsername) {
+    if (!hasUsername) {
       throw new AppError(
-        'Excel must contain at least an "email" or "username" column to identify students',
+        'Excel must contain a "username" column to identify students',
         400,
       );
     }
 
     const errors: ImportError[] = [];
-    const lookupEmails: string[] = [];
     const lookupUsernames: string[] = [];
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       const rowNum = i + 2;
-      const email = String(row.email || '').trim().toLowerCase();
       const username = String(row.username || '').trim();
 
-      if (!email && !username) {
-        errors.push({ row: rowNum, field: 'email/username', message: 'Both email and username are empty' });
+      if (!username) {
+        errors.push({ row: rowNum, field: 'username', message: 'Username is empty' });
         continue;
       }
 
-      if (email) lookupEmails.push(email);
-      if (username) lookupUsernames.push(username);
+      lookupUsernames.push(username);
     }
 
-    if (lookupEmails.length === 0 && lookupUsernames.length === 0) {
+    if (lookupUsernames.length === 0) {
       return {
         success: false,
         message: 'No valid student identifiers found in file',
@@ -506,31 +499,26 @@ export class ClassService {
     const foundStudents = await prisma.user.findMany({
       where: {
         roleId: studentRole.id,
-        OR: [
-          ...(lookupEmails.length > 0 ? [{ email: { in: lookupEmails } }] : []),
-          ...(lookupUsernames.length > 0 ? [{ username: { in: lookupUsernames } }] : []),
-        ],
+        username: { in: lookupUsernames },
       },
-      select: { id: true, email: true, username: true },
+      select: { id: true, username: true },
     });
 
-    const emailMap = new Map(foundStudents.map((s) => [s.email.toLowerCase(), s.id]));
     const usernameMap = new Map(foundStudents.map((s) => [s.username.toLowerCase(), s.id]));
 
     const studentIds: number[] = [];
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       const rowNum = i + 2;
-      const email = String(row.email || '').trim().toLowerCase();
       const username = String(row.username || '').trim().toLowerCase();
 
-      let studentId = emailMap.get(email) ?? usernameMap.get(username);
+      const studentId = usernameMap.get(username);
 
       if (!studentId) {
         errors.push({
           row: rowNum,
-          field: 'email/username',
-          message: `Student not found: ${email || username}`,
+          field: 'username',
+          message: `Student not found: ${username}`,
         });
         continue;
       }
@@ -579,12 +567,12 @@ export class ClassService {
 
   generateImportTemplate(): Buffer {
     const sampleData = [
-      { email: 'student1@school.edu.vn', username: 'student001', full_name: 'Nguyễn Văn A' },
-      { email: 'student2@school.edu.vn', username: 'student002', full_name: 'Trần Thị B' },
+      { username: 'student001', full_name: 'Nguyễn Văn A' },
+      { username: 'student002', full_name: 'Trần Thị B' },
     ];
 
     const worksheet = XLSX.utils.json_to_sheet(sampleData);
-    worksheet['!cols'] = [{ wch: 30 }, { wch: 20 }, { wch: 25 }];
+    worksheet['!cols'] = [{ wch: 20 }, { wch: 25 }];
 
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Students');
@@ -593,8 +581,7 @@ export class ClassService {
       ['Hướng dẫn Import Học sinh vào Lớp'],
       [''],
       ['Cột', 'Mô tả', 'Bắt buộc'],
-      ['email', 'Email học sinh (đã có trong hệ thống)', 'Có (hoặc username)'],
-      ['username', 'Tên đăng nhập của học sinh', 'Có (hoặc email)'],
+      ['username', 'Tên đăng nhập của học sinh', 'Có'],
       ['full_name', 'Họ tên (chỉ để tham khảo, không dùng để lookup)', 'Không'],
       [''],
       ['Lưu ý:', 'Học sinh phải đã có tài khoản trong hệ thống với vai trò Student'],

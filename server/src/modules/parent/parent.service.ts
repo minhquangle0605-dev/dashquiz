@@ -66,7 +66,7 @@ export class ParentService {
 
     const student = await prisma.user.findUnique({
       where: { id: studentId },
-      select: { id: true, fullName: true, email: true, username: true },
+      select: { id: true, fullName: true, username: true },
     });
 
     if (!student) {
@@ -87,7 +87,7 @@ export class ParentService {
       id: link.id,
       studentId: student.id,
       studentName: student.fullName || student.username,
-      studentEmail: student.email,
+      studentUsername: student.username,
       relationship: link.relationship,
       linkedAt: link.linkedAt,
     };
@@ -104,7 +104,6 @@ export class ParentService {
           select: {
             id: true,
             username: true,
-            email: true,
             fullName: true,
             avatar: true,
             status: true,
@@ -134,7 +133,6 @@ export class ParentService {
       student: {
         id: link.student.id,
         username: link.student.username,
-        email: link.student.email,
         fullName: link.student.fullName,
         avatar: link.student.avatar,
         status: link.student.status,

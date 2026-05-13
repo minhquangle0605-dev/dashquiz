@@ -28,7 +28,7 @@ export const authenticate = async (req: Request, _res: Response, next: NextFunct
 
     req.user = {
       id: decoded.id,
-      email: decoded.email,
+      username: decoded.username,
       role: typeof decoded.role === 'string' ? decoded.role.toLowerCase() : decoded.role,
     };
 

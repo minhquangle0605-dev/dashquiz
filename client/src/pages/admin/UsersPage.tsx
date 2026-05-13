@@ -62,7 +62,6 @@ const createUserSchema = z.object({
 
 const editUserSchema = z.object({
   username: z.string().min(3).max(191),
-  email: z.string().email('Invalid email address'),
   fullName: z.string().min(1, 'Full name is required').max(100),
   phone: z.string().max(20).optional().or(z.literal('')),
   status: z.enum(['ACTIVE', 'INACTIVE', 'SUSPENDED']),
@@ -193,7 +192,7 @@ export default function UsersPage() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
           <div className="flex-1">
             <Input
-              placeholder="Search by name, email, or username..."
+              placeholder="Search by name or username..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="max-w-sm"
@@ -294,7 +293,7 @@ export default function UsersPage() {
                           <p className="truncate text-sm font-medium text-slate-900">
                             {user.fullName ?? user.username}
                           </p>
-                          <p className="truncate text-xs text-slate-400">{user.email}</p>
+                          <p className="truncate text-xs text-slate-400">@{user.username}</p>
                         </div>
                       </div>
                     </TableCell>
@@ -548,7 +547,6 @@ function EditUserModal({
     if (isOpen && user) {
       reset({
         username: user.username,
-        email: user.email,
         fullName: user.fullName ?? '',
         phone: user.phone ?? '',
         status: user.status,
@@ -575,12 +573,9 @@ function EditUserModal({
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Input label="Username" error={errors.username?.message} {...register('username')} />
-          <Input label="Email" type="email" error={errors.email?.message} {...register('email')} />
-        </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Input label="Full Name" error={errors.fullName?.message} {...register('fullName')} />
-          <Input label="Phone" error={errors.phone?.message} {...register('phone')} />
         </div>
+        <Input label="Phone" error={errors.phone?.message} {...register('phone')} />
         <div>
           <label className="mb-1.5 block text-sm font-medium text-slate-700">Status</label>
           <select

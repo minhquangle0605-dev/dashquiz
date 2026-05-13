@@ -7,7 +7,7 @@ vi.mock('react-router-dom', () => ({
 
 vi.mock('@/stores/authStore', () => {
   let state = {
-    user: null as { id: number; email: string; role: string; fullName: string } | null,
+    user: null as { id: number; username: string; role: string; fullName: string } | null,
     accessToken: null as string | null,
   };
 

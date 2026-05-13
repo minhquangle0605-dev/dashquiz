@@ -1,4 +1,3 @@
-import nodemailer from 'nodemailer';
 import webpush from 'web-push';
 
 import { prisma } from '../../config/database';
@@ -7,7 +6,6 @@ import { logger } from '../../utils/logger';
 import { cacheGet, cacheSet, cacheInvalidateExact } from '../../utils/cache';
 import { AppError } from '../../middlewares/errorHandler';
 import { emitNotification, emitDashboardUpdate } from '../../socket';
-import * as emailTemplates from './email-templates';
 import type { ListNotificationsQuery, PushSubscribeInput } from './notification.validation';
 
 // ═══════════════════════════════════════════════════
@@ -17,7 +15,7 @@ import type { ListNotificationsQuery, PushSubscribeInput } from './notification.
 if (env.vapid.publicKey && env.vapid.privateKey) {
   try {
     webpush.setVapidDetails(
-      env.vapid.email ? `mailto:${env.vapid.email}` : 'mailto:admin@webquiz.local',
+      env.vapid.contact || 'mailto:admin@webquiz.local',
       env.vapid.publicKey,
       env.vapid.privateKey,
     );
@@ -25,22 +23,6 @@ if (env.vapid.publicKey && env.vapid.privateKey) {
   } catch (err) {
     logger.warn('Failed to set VAPID details — web push disabled:', err);
   }
-}
-
-// ═══════════════════════════════════════════════════
-// EMAIL TRANSPORTER
-// ═══════════════════════════════════════════════════
-
-function getTransporter() {
-  return nodemailer.createTransport({
-    host: env.smtp.host,
-    port: env.smtp.port,
-    secure: env.smtp.port === 465,
-    auth: {
-      user: env.smtp.user,
-      pass: env.smtp.password,
-    },
-  });
 }
 
 // ═══════════════════════════════════════════════════
@@ -166,31 +148,6 @@ export class NotificationService {
   }
 
   /**
-   * Send email via SMTP (nodemailer).
-   */
-  async sendEmail(to: string, subject: string, html: string): Promise<boolean> {
-    if (!env.smtp.user || !env.smtp.password) {
-      logger.warn('SMTP not configured — skipping email send');
-      return false;
-    }
-
-    try {
-      const transporter = getTransporter();
-      await transporter.sendMail({
-        from: `"WebQuiz" <${env.smtp.user}>`,
-        to,
-        subject,
-        html,
-      });
-      logger.info(`Email sent to ${to}: ${subject}`);
-      return true;
-    } catch (error) {
-      logger.error(`Failed to send email to ${to}:`, error);
-      return false;
-    }
-  }
-
-  /**
    * Send web push to all subscribed devices of a user.
    */
   async sendWebPush(userId: number, payload: { title: string; body: string; url?: string }): Promise<number> {
@@ -312,13 +269,12 @@ export class NotificationService {
         where: { studentId },
         include: {
           parent: {
-            select: { id: true, fullName: true, username: true, email: true },
+            select: { id: true, fullName: true, username: true },
           },
         },
       });
 
       for (const link of parentLinks) {
-        const parentName = link.parent.fullName || link.parent.username || 'Phụ huynh';
         const title = `Kết quả bài KT: ${examTitle}`;
         const message = `Con bạn ${studentName} đã hoàn thành bài kiểm tra "${examTitle}", điểm: ${score}/10 (${correctCount}/${totalQuestions} câu đúng).`;
 
@@ -328,18 +284,6 @@ export class NotificationService {
           reason: 'child_exam_submitted',
           entityType: 'exam_attempt',
         });
-
-        const emailData = emailTemplates.examResultEmail({
-          parentName,
-          studentName,
-          examTitle,
-          score,
-          totalQuestions,
-          correctCount,
-          submittedAt: new Date().toLocaleString('vi-VN'),
-          dashboardUrl: `${env.clientUrl}/parent/children/${studentId}/dashboard`,
-        });
-        this.sendEmail(link.parent.email, emailData.subject, emailData.html).catch(() => {});
 
         this.sendWebPush(link.parent.id, {
           title,
@@ -367,7 +311,7 @@ export class NotificationService {
         where: { classId: { in: classIds } },
         include: {
           student: {
-            select: { id: true, fullName: true, username: true, email: true },
+            select: { id: true, fullName: true, username: true },
           },
         },
       });
@@ -478,7 +422,7 @@ export class NotificationService {
         where: { classId: { in: classIds } },
         include: {
           student: {
-            select: { id: true, fullName: true, username: true, email: true },
+            select: { id: true, fullName: true, username: true },
           },
         },
       });
@@ -490,21 +434,10 @@ export class NotificationService {
         if (notified.has(cs.student.id)) continue;
         notified.add(cs.student.id);
 
-        const studentName = cs.student.fullName || cs.student.username || 'Học sinh';
         const title = `Bài kiểm tra mới: ${exam.title}`;
         const message = `Giáo viên ${teacherName} đã giao bài kiểm tra "${exam.title}" (${exam.subject.name}, ${exam.durationMin} phút).`;
 
         await this.createNotification(cs.student.id, title, message, 'new_exam');
-
-        const emailData = emailTemplates.newExamAssignedEmail({
-          studentName,
-          examTitle: exam.title,
-          subjectName: exam.subject.name,
-          durationMin: exam.durationMin,
-          teacherName,
-          examListUrl: `${env.clientUrl}/student/exams`,
-        });
-        this.sendEmail(cs.student.email, emailData.subject, emailData.html).catch(() => {});
 
         this.sendWebPush(cs.student.id, {
           title,

@@ -62,13 +62,6 @@ export const env = {
     path: '/api/auth',
   },
 
-  smtp: {
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: parseInt(process.env.SMTP_PORT || '587', 10),
-    user: process.env.SMTP_USER || '',
-    password: process.env.SMTP_PASSWORD || '',
-  },
-
   openai: {
     apiKey: process.env.OPENAI_API_KEY || '',
   },
@@ -76,6 +69,6 @@ export const env = {
   vapid: {
     publicKey: process.env.VAPID_PUBLIC_KEY || '',
     privateKey: process.env.VAPID_PRIVATE_KEY || '',
-    email: process.env.VAPID_EMAIL || '',
+    contact: process.env.VAPID_CONTACT || '',
   },
 } as const;

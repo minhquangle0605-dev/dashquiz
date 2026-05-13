@@ -18,7 +18,7 @@ function createMockReqRes(headers: Record<string, string> = {}) {
 describe('authenticate middleware', () => {
   it('should set req.user with valid token', () => {
     const token = jwt.sign(
-      { id: 1, email: 'test@test.com', username: 'testuser', role: 'student' },
+      { id: 1, username: 'testuser', role: 'student' },
       JWT_SECRET,
     );
     const { req, res, next } = createMockReqRes({
@@ -30,7 +30,7 @@ describe('authenticate middleware', () => {
     expect(next).toHaveBeenCalledWith();
     expect(req.user).toBeDefined();
     expect(req.user!.id).toBe(1);
-    expect(req.user!.email).toBe('test@test.com');
+    expect(req.user!.username).toBe('testuser');
     expect(req.user!.role).toBe('student');
   });
 
@@ -70,7 +70,7 @@ describe('authenticate middleware', () => {
 
   it('should call next with error for expired token', () => {
     const token = jwt.sign(
-      { id: 1, email: 'test@test.com', username: 'testuser', role: 'student' },
+      { id: 1, username: 'testuser', role: 'student' },
       JWT_SECRET,
       { expiresIn: '0s' },
     );
@@ -89,7 +89,7 @@ describe('authenticate middleware', () => {
 describe('authorize middleware', () => {
   it('should call next() when user has correct role', () => {
     const { req, res, next } = createMockReqRes();
-    (req as any).user = { id: 1, email: 'test@test.com', username: 'testuser', role: 'admin' };
+    (req as any).user = { id: 1, username: 'testuser', role: 'admin' };
 
     const middleware = authorize('admin', 'teacher');
     middleware(req, res, next);
@@ -99,7 +99,7 @@ describe('authorize middleware', () => {
 
   it('should return 403 when user does not have required role', () => {
     const { req, res, next } = createMockReqRes();
-    (req as any).user = { id: 1, email: 'test@test.com', username: 'testuser', role: 'student' };
+    (req as any).user = { id: 1, username: 'testuser', role: 'student' };
 
     const middleware = authorize('admin');
     middleware(req, res, next);
@@ -125,7 +125,7 @@ describe('authorize middleware', () => {
 
   it('should allow any role when no specific roles are passed', () => {
     const { req, res, next } = createMockReqRes();
-    (req as any).user = { id: 1, email: 'test@test.com', username: 'testuser', role: 'student' };
+    (req as any).user = { id: 1, username: 'testuser', role: 'student' };
 
     const middleware = authorize();
     middleware(req, res, next);

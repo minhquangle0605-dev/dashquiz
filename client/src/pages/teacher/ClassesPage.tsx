@@ -333,7 +333,6 @@ export default function ClassesPage() {
                     <TableHeaderCell>#</TableHeaderCell>
                     <TableHeaderCell>Full Name</TableHeaderCell>
                     <TableHeaderCell>Username</TableHeaderCell>
-                    <TableHeaderCell>Email</TableHeaderCell>
                     <TableHeaderCell>Enrolled</TableHeaderCell>
                     <TableHeaderCell className="text-right">Action</TableHeaderCell>
                   </TableRow>
@@ -346,7 +345,6 @@ export default function ClassesPage() {
                         {s.student.fullName || '—'}
                       </TableCell>
                       <TableCell>{s.student.username}</TableCell>
-                      <TableCell>{s.student.email}</TableCell>
                       <TableCell className="text-xs">
                         {new Date(s.enrolledAt).toLocaleDateString()}
                       </TableCell>

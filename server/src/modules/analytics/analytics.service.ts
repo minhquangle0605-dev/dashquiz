@@ -695,13 +695,13 @@ export class TeacherAnalyticsService {
       if (allBelowThreshold) {
         const student = await prisma.user.findUnique({
           where: { id: studentId },
-          select: { id: true, fullName: true, email: true },
+          select: { id: true, fullName: true, username: true },
         });
 
         const avgScore = recentAttempts.reduce((s, a) => s + Number(a.totalScore ?? 0), 0) / recentAttempts.length;
 
         weakStudents.push({
-          student: { id: student?.id, fullName: student?.fullName, email: student?.email },
+          student: { id: student?.id, fullName: student?.fullName, username: student?.username },
           avgScore: Math.round(avgScore * 100) / 100,
           recentScores: recentAttempts.map((a) => ({
             score: Number(a.totalScore ?? 0),
@@ -820,7 +820,7 @@ export class TeacherAnalyticsService {
           timeSpentSec: true,
           submittedAt: true,
           isAutoSubmitted: true,
-          student: { select: { id: true, fullName: true, email: true } },
+          student: { select: { id: true, fullName: true, username: true } },
           _count: { select: { attemptAnswers: true } },
         },
       }),
@@ -834,7 +834,7 @@ export class TeacherAnalyticsService {
         attemptId: a.id,
         studentId: a.student.id,
         studentName: a.student.fullName,
-        studentEmail: a.student.email,
+        studentUsername: a.student.username,
         score: a.totalScore ? Number(a.totalScore) : 0,
         passed: exam.passingScore ? Number(a.totalScore ?? 0) >= Number(exam.passingScore) : null,
         timeSpentSec: a.timeSpentSec,
@@ -913,11 +913,11 @@ export class TeacherAnalyticsService {
 
     return {
       title: `Kết quả kiểm tra: ${result.exam.title}`,
-      headers: ['STT', 'Họ tên', 'Email', 'Điểm', 'Đạt/Không', 'Thời gian (phút)', 'Nộp lúc'],
+      headers: ['STT', 'Họ tên', 'Tên đăng nhập', 'Điểm', 'Đạt/Không', 'Thời gian (phút)', 'Nộp lúc'],
       rows: result.results.map((r, i) => [
         i + 1,
         r.studentName || '',
-        r.studentEmail || '',
+        r.studentUsername || '',
         r.score,
         r.passed === null ? '-' : r.passed ? 'Đạt' : 'Không đạt',
         r.timeSpentSec ? Math.round(r.timeSpentSec / 60) : 0,
@@ -937,7 +937,7 @@ export class TeacherAnalyticsService {
           select: {
             id: true,
             fullName: true,
-            email: true,
+            username: true,
             examAttempts: {
               where: { status: { in: ['SUBMITTED', 'GRADED'] } },
               select: { totalScore: true },
@@ -949,14 +949,14 @@ export class TeacherAnalyticsService {
 
     return {
       title: `Tổng hợp lớp: ${dashboard.class.name}`,
-      headers: ['STT', 'Họ tên', 'Email', 'Số bài đã làm', 'Điểm TB', 'Điểm cao nhất', 'Điểm thấp nhất'],
+      headers: ['STT', 'Họ tên', 'Tên đăng nhập', 'Số bài đã làm', 'Điểm TB', 'Điểm cao nhất', 'Điểm thấp nhất'],
       rows: students.map((s, i) => {
         const scores = s.student.examAttempts.map((a) => Number(a.totalScore ?? 0));
         const avg = scores.length > 0 ? Math.round((scores.reduce((sum, v) => sum + v, 0) / scores.length) * 100) / 100 : 0;
         return [
           i + 1,
           s.student.fullName || '',
-          s.student.email || '',
+          s.student.username || '',
           scores.length,
           avg,
           scores.length > 0 ? Math.max(...scores) : 0,

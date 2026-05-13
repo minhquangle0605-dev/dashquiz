@@ -290,7 +290,6 @@ export interface ClassStudent {
   student: {
     id: number;
     username: string;
-    email: string;
     fullName: string | null;
     phone: string | null;
     avatar: string | null;

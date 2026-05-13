@@ -375,7 +375,7 @@ export default function DashboardPage() {
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium text-slate-900">{ws.student.fullName}</p>
-                        <p className="text-xs text-slate-400">{ws.student.email}</p>
+                        <p className="text-xs text-slate-400">@{ws.student.username}</p>
                         <div className="mt-1 flex items-center gap-2">
                           <Badge variant="danger">Avg: {ws.avgScore.toFixed(1)}</Badge>
                           <span className="text-xs text-slate-400">
@@ -419,7 +419,7 @@ export default function DashboardPage() {
                         <TableCell>
                           <div>
                             <p className="font-medium text-slate-900">{r.studentName}</p>
-                            <p className="text-xs text-slate-400">{r.studentEmail}</p>
+                            <p className="text-xs text-slate-400">@{r.studentUsername}</p>
                           </div>
                         </TableCell>
                         <TableCell>

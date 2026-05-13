@@ -6,7 +6,6 @@ export interface LinkedChild {
   student: {
     id: number;
     fullName: string;
-    email: string;
     avatar: string | null;
     username: string;
   };

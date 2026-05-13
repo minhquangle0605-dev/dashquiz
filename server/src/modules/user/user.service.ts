@@ -37,7 +37,6 @@ export class UserService {
       data: {
         id: user.id,
         username: user.username,
-        email: user.email,
         fullName: user.fullName,
         phone: user.phone,
         avatar: user.avatar,
@@ -71,7 +70,6 @@ export class UserService {
       data: {
         id: updated.id,
         username: updated.username,
-        email: updated.email,
         fullName: updated.fullName,
         phone: updated.phone,
         avatar: updated.avatar,
@@ -181,7 +179,6 @@ export class UserService {
     if (query.search) {
       where.OR = [
         { fullName: { contains: query.search, mode: 'insensitive' } },
-        { email: { contains: query.search, mode: 'insensitive' } },
         { username: { contains: query.search, mode: 'insensitive' } },
       ];
     }
@@ -210,10 +207,9 @@ export class UserService {
     return {
       success: true,
       message: 'Users retrieved successfully',
-      data: users.map((u: { id: number; username: string; email: string; fullName: string | null; phone: string | null; avatar: string | null; role: { id: number; name: string }; status: string; lastLoginAt: Date | null; createdAt: Date }) => ({
+      data: users.map((u: { id: number; username: string; fullName: string | null; phone: string | null; avatar: string | null; role: { id: number; name: string }; status: string; lastLoginAt: Date | null; createdAt: Date }) => ({
         id: u.id,
         username: u.username,
-        email: u.email,
         fullName: u.fullName,
         phone: u.phone,
         avatar: u.avatar,
@@ -257,21 +253,12 @@ export class UserService {
       throw new AppError('Invalid role ID', 400);
     }
 
-    const internalDomain = 'users.internal';
-    let email = `${data.username}@${internalDomain}`;
-    let suffix = 0;
-    while (await prisma.user.findUnique({ where: { email } })) {
-      suffix += 1;
-      email = `${data.username}.${suffix}@${internalDomain}`;
-    }
-
     const salt = await bcrypt.genSalt(12);
     const passwordHash = await bcrypt.hash(data.password, salt);
 
     const user = await prisma.user.create({
       data: {
         username: data.username,
-        email,
         passwordHash,
         fullName: data.fullName || null,
         phone: null,
@@ -287,7 +274,6 @@ export class UserService {
       data: {
         id: user.id,
         username: user.username,
-        email: user.email,
         fullName: user.fullName,
         phone: user.phone,
         role: user.role,
@@ -303,16 +289,8 @@ export class UserService {
       throw new AppError('User not found', 404);
     }
 
-    if (data.email && data.email !== user.email) {
-      const existing = await prisma.user.findUnique({ where: { email: data.email } });
-      if (existing) {
-        throw new AppError('Email already taken by another user', 409);
-      }
-    }
-
     const updateData: Record<string, unknown> = {};
     if (data.fullName !== undefined) updateData.fullName = data.fullName;
-    if (data.email !== undefined) updateData.email = data.email;
     if (data.phone !== undefined) updateData.phone = data.phone;
     if (data.status !== undefined) updateData.status = data.status;
 
@@ -328,7 +306,6 @@ export class UserService {
       data: {
         id: updated.id,
         username: updated.username,
-        email: updated.email,
         fullName: updated.fullName,
         phone: updated.phone,
         role: updated.role,
@@ -383,7 +360,6 @@ export class UserService {
       data: {
         id: updated.id,
         username: updated.username,
-        email: updated.email,
         role: updated.role,
       },
     };
@@ -419,9 +395,6 @@ export class UserService {
       roleMap.set(r.name.toLowerCase(), r.id);
     }
 
-    const existingEmails = new Set(
-      (await prisma.user.findMany({ select: { email: true } })).map((u: { email: string }) => u.email.toLowerCase()),
-    );
     const existingUsernames = new Set(
       (await prisma.user.findMany({ select: { username: true } })).map((u: { username: string }) => u.username.toLowerCase()),
     );
@@ -429,7 +402,6 @@ export class UserService {
     const errors: { row: number; field: string; message: string }[] = [];
     const validUsers: Array<{
       username: string;
-      email: string;
       passwordHash: string;
       fullName: string | null;
       phone: string | null;
@@ -437,15 +409,12 @@ export class UserService {
     }> = [];
 
     const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    const newEmails = new Set<string>();
     const newUsernames = new Set<string>();
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       const rowNum = i + 2; // row 1 is header
       const username = String(row.username ?? row.Username ?? '').trim();
-      const email = String(row.email ?? row.Email ?? '').trim();
       const password = String(row.password ?? row.Password ?? '').trim();
       const fullName = String(row.fullName ?? row.full_name ?? row.FullName ?? '').trim() || null;
       const phone = String(row.phone ?? row.Phone ?? '').trim() || null;
@@ -458,14 +427,6 @@ export class UserService {
         hasError = true;
       } else if (existingUsernames.has(username.toLowerCase()) || newUsernames.has(username.toLowerCase())) {
         errors.push({ row: rowNum, field: 'username', message: `Username "${username}" already exists` });
-        hasError = true;
-      }
-
-      if (!email || !emailRegex.test(email)) {
-        errors.push({ row: rowNum, field: 'email', message: 'Invalid email format' });
-        hasError = true;
-      } else if (existingEmails.has(email.toLowerCase()) || newEmails.has(email.toLowerCase())) {
-        errors.push({ row: rowNum, field: 'email', message: `Email "${email}" already exists` });
         hasError = true;
       }
 
@@ -483,8 +444,7 @@ export class UserService {
       if (!hasError && roleId) {
         const salt = await bcrypt.genSalt(12);
         const passwordHash = await bcrypt.hash(password, salt);
-        validUsers.push({ username, email, passwordHash, fullName, phone, roleId });
-        newEmails.add(email.toLowerCase());
+        validUsers.push({ username, passwordHash, fullName, phone, roleId });
         newUsernames.add(username.toLowerCase());
       }
     }
@@ -514,16 +474,15 @@ export class UserService {
 
   getImportTemplate() {
     const templateData = [
-      { username: 'student01', email: 'student01@school.edu.vn', password: 'Pass1234', fullName: 'Nguyen Van A', phone: '0901234567', role: 'student' },
-      { username: 'teacher01', email: 'teacher01@school.edu.vn', password: 'Pass1234', fullName: 'Tran Thi B', phone: '0912345678', role: 'teacher' },
-      { username: 'parent01', email: 'parent01@school.edu.vn', password: 'Pass1234', fullName: 'Le Van C', phone: '0923456789', role: 'parent' },
+      { username: 'student01', password: 'Pass1234', fullName: 'Nguyen Van A', phone: '0901234567', role: 'student' },
+      { username: 'teacher01', password: 'Pass1234', fullName: 'Tran Thi B', phone: '0912345678', role: 'teacher' },
+      { username: 'parent01', password: 'Pass1234', fullName: 'Le Van C', phone: '0923456789', role: 'parent' },
     ];
 
     const worksheet = XLSX.utils.json_to_sheet(templateData);
 
     const colWidths = [
       { wch: 15 }, // username
-      { wch: 30 }, // email
       { wch: 15 }, // password
       { wch: 25 }, // fullName
       { wch: 15 }, // phone

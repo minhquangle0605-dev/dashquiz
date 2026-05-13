@@ -30,13 +30,9 @@ async function main() {
 
   // ── 2. Seed Admin Account (login: admin.web / 123456) ──
   const passwordHash = await bcrypt.hash('123456', 12);
-  const adminEmail = 'admin.web@webquiz.local';
-  // Upsert theo username — đảm bảo chạy seed lại luôn cập nhật đúng admin.web / 123456
-  // (upsert theo email cũ sẽ không khớp nếu DB chỉ có user admin@school.edu.vn).
   const admin = await prisma.user.upsert({
     where: { username: 'admin.web' },
     update: {
-      email: adminEmail,
       passwordHash,
       roleId: adminRole.id,
       fullName: 'System Administrator',
@@ -45,32 +41,31 @@ async function main() {
     create: {
       roleId: adminRole.id,
       username: 'admin.web',
-      email: adminEmail,
       passwordHash,
       fullName: 'System Administrator',
       status: 'ACTIVE',
     },
   });
-  console.log(`✓ Admin account seeded: ${admin.username} (${admin.email})`);
+  console.log(`✓ Admin account seeded: ${admin.username}`);
 
   const student = await prisma.user.upsert({
     where: { username: 'student.demo' },
-    update: { email: 'student.demo@webquiz.local', passwordHash, roleId: studentRole.id, fullName: 'Demo Student', status: 'ACTIVE' },
-    create: { roleId: studentRole.id, username: 'student.demo', email: 'student.demo@webquiz.local', passwordHash, fullName: 'Demo Student', status: 'ACTIVE' },
+    update: { passwordHash, roleId: studentRole.id, fullName: 'Demo Student', status: 'ACTIVE' },
+    create: { roleId: studentRole.id, username: 'student.demo', passwordHash, fullName: 'Demo Student', status: 'ACTIVE' },
   });
   console.log(`✓ Student account seeded: ${student.username}`);
 
   const teacher = await prisma.user.upsert({
     where: { username: 'teacher.demo' },
-    update: { email: 'teacher.demo@webquiz.local', passwordHash, roleId: teacherRole.id, fullName: 'Demo Teacher', status: 'ACTIVE' },
-    create: { roleId: teacherRole.id, username: 'teacher.demo', email: 'teacher.demo@webquiz.local', passwordHash, fullName: 'Demo Teacher', status: 'ACTIVE' },
+    update: { passwordHash, roleId: teacherRole.id, fullName: 'Demo Teacher', status: 'ACTIVE' },
+    create: { roleId: teacherRole.id, username: 'teacher.demo', passwordHash, fullName: 'Demo Teacher', status: 'ACTIVE' },
   });
   console.log(`✓ Teacher account seeded: ${teacher.username}`);
 
   const parent = await prisma.user.upsert({
     where: { username: 'parent.demo' },
-    update: { email: 'parent.demo@webquiz.local', passwordHash, roleId: parentRole.id, fullName: 'Demo Parent', status: 'ACTIVE' },
-    create: { roleId: parentRole.id, username: 'parent.demo', email: 'parent.demo@webquiz.local', passwordHash, fullName: 'Demo Parent', status: 'ACTIVE' },
+    update: { passwordHash, roleId: parentRole.id, fullName: 'Demo Parent', status: 'ACTIVE' },
+    create: { roleId: parentRole.id, username: 'parent.demo', passwordHash, fullName: 'Demo Parent', status: 'ACTIVE' },
   });
   console.log(`✓ Parent account seeded: ${parent.username}`);
 
@@ -245,7 +240,6 @@ async function main() {
   const configs = [
     { configKey: 'school_name', configValue: 'Trường THPT WebQuiz Demo', description: 'Tên trường hiển thị trên hệ thống' },
     { configKey: 'school_logo', configValue: '/images/logo.png', description: 'Đường dẫn logo trường' },
-    { configKey: 'admin_email', configValue: adminEmail, description: 'Email hệ thống gắn với tài khoản admin' },
     { configKey: 'max_upload_size_mb', configValue: '10', description: 'Kích thước tải lên tối đa (MB)' },
     { configKey: 'session_timeout_min', configValue: '30', description: 'Thời gian hết phiên (phút)' },
   ];
