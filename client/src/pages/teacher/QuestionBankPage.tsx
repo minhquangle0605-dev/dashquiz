@@ -15,7 +15,12 @@ import { QuestionFormModal } from '@/components/shared/QuestionFormModal';
 import { ImportExcelModal } from '@/components/shared/ImportExcelModal';
 import { ImportDocumentModal } from '@/components/shared/ImportDocumentModal';
 import { useDebounce } from '@/hooks/useDebounce';
-import { listQuestions, deleteQuestion, bulkDeleteQuestions } from '@/services/question.api';
+import {
+  listQuestions,
+  deleteQuestion,
+  bulkDeleteQuestions,
+  exportQuestionsGift,
+} from '@/services/question.api';
 import type { Question, QuestionFilter } from '@/types/question';
 import type { PaginatedResponse } from '@/types/api';
 
@@ -43,6 +48,7 @@ export default function QuestionBankPage() {
   const [showImportDocModal, setShowImportDocModal] = useState(false);
   const [deleting, setDeleting] = useState<number | null>(null);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [exportingGift, setExportingGift] = useState(false);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
@@ -111,6 +117,28 @@ export default function QuestionBankPage() {
       toast.error('Failed to delete questions.');
     } finally {
       setBulkDeleting(false);
+    }
+  };
+
+  const handleExportGift = async () => {
+    const ids = selectedIds.length > 0 ? selectedIds : questions.map((q) => q.id);
+    if (ids.length === 0) return;
+    setExportingGift(true);
+    try {
+      const blob = await exportQuestionsGift(ids);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `questions_${new Date().toISOString().slice(0, 10)}.gift`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      toast.success(`Exported ${ids.length} question(s) to GIFT.`);
+    } catch {
+      toast.error('Failed to export GIFT file.');
+    } finally {
+      setExportingGift(false);
     }
   };
 
@@ -297,6 +325,29 @@ export default function QuestionBankPage() {
                   Delete Selected ({selectedIds.length})
                 </Button>
               )}
+              <Button
+                variant="outline"
+                size="md"
+                isLoading={exportingGift}
+                disabled={questions.length === 0}
+                onClick={handleExportGift}
+                title={selectedIds.length > 0 ? 'Export selected questions to GIFT' : 'Export current page to GIFT'}
+              >
+                <svg
+                  className="mr-1.5 h-4 w-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M12 3v12m0 0l4-4m-4 4l-4-4M5 21h14"
+                  />
+                </svg>
+                Export GIFT
+              </Button>
               <Button
                 variant="outline"
                 size="md"
@@ -496,9 +547,7 @@ export default function QuestionBankPage() {
                         <div className="mb-2 flex flex-wrap items-center gap-2">
                           <DifficultyBadge level={q.difficulty} />
                           <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
-                            {q.questionType === 'SINGLE_CHOICE'
-                              ? 'Single Choice'
-                              : 'Multiple Choice'}
+                            {q.questionType.replace('_', ' ')}
                           </span>
                           {q.subject && (
                             <span className="rounded bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">

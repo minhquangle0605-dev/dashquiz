@@ -1,6 +1,7 @@
 import type { Question } from '@/types/question';
 
 import { DifficultyBadge } from './DifficultyBadge';
+import { MathText } from './MathText';
 
 export interface QuestionCardProps {
   question: Question;
@@ -25,7 +26,9 @@ export function QuestionCard({
           {question.questionType.replace('_', ' ')}
         </span>
       </div>
-      <p className="text-base font-medium text-slate-900">{question.content}</p>
+      <div className="text-base font-medium text-slate-900">
+        <MathText>{question.content}</MathText>
+      </div>
 
       {question.options.length > 0 && (
         <ul className="mt-4 space-y-2">
@@ -51,7 +54,7 @@ export function QuestionCard({
             return (
               <li key={opt.id} className={row}>
                 <span className="font-medium text-slate-600">{opt.label}.</span>{' '}
-                {opt.content}
+                <MathText>{opt.content}</MathText>
               </li>
             );
           })}
@@ -59,10 +62,10 @@ export function QuestionCard({
       )}
 
       {showAnswer && question.explanation && (
-        <p className="mt-4 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
+        <div className="mt-4 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
           <span className="font-semibold text-slate-800">Explanation: </span>
-          {question.explanation}
-        </p>
+          <MathText>{question.explanation}</MathText>
+        </div>
       )}
     </article>
   );

@@ -21,6 +21,9 @@ enum UserStatus {
 enum QuestionKind {
   SINGLE_CHOICE
   MULTIPLE_CHOICE
+  TRUE_FALSE
+  SHORT_ANSWER
+  MATCHING
 }
 
 enum ExamStatus {
@@ -373,6 +376,8 @@ model AttemptAnswer {
   attemptId        Int     @map("attempt_id")
   questionId       Int     @map("question_id")
   selectedOptionId Int?    @map("selected_option_id")
+  selectedOptionIds Json?   @map("selected_option_ids")
+  answerText       String? @map("answer_text") @db.Text
   isCorrect        Boolean @default(false) @map("is_correct")
   timeSpentSec     Int?    @map("time_spent_sec")
   answerChanges    Int     @default(0) @map("answer_changes")

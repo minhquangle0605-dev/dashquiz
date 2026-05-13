@@ -9,10 +9,18 @@ export const listStudentExamsQuerySchema = z.object({
 
 export const startExamSchema = z.object({}).optional();
 
+const answerValueSchema = z.union([
+  z.number().int().positive(),
+  z.array(z.number().int().positive()),
+  z.string(),
+  z.record(z.string(), z.string()),
+  z.null(),
+]);
+
 export const saveAnswersSchema = z.object({
   answers: z.record(
     z.string().regex(/^\d+$/, 'Question ID must be numeric'),
-    z.number().int().positive().nullable(),
+    answerValueSchema,
   ),
 });
 
@@ -20,7 +28,7 @@ export const submitAttemptSchema = z.object({
   answers: z
     .record(
       z.string().regex(/^\d+$/, 'Question ID must be numeric'),
-      z.number().int().positive().nullable(),
+      answerValueSchema,
     )
     .optional(),
 });

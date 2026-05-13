@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
 import { Badge } from '@/components/ui/Badge';
 import { DifficultyBadge, DIFFICULTY_OPTIONS } from '@/components/shared/DifficultyBadge';
+import { MathText } from '@/components/shared/MathText';
 import {
   SubjectChapterTopicSelect,
   emptyCurriculumSelection,
@@ -249,12 +250,12 @@ export default function CreateExamPage() {
               .filter((q) => form.selectedQuestionIds.includes(q.id))
               .map((q, idx) => (
                 <div key={q.id} className="rounded-xl border border-slate-200 p-4">
-                  <p className="mb-3 text-sm font-medium text-slate-800">
+                  <div className="mb-3 text-sm font-medium text-slate-800">
                     <span className="mr-2 inline-flex h-6 w-6 items-center justify-center rounded-md bg-indigo-100 text-xs font-bold text-indigo-700">
                       {idx + 1}
                     </span>
-                    {q.content}
-                  </p>
+                    <MathText>{q.content}</MathText>
+                  </div>
                   <div className="space-y-2 pl-8">
                     {q.options.map((opt) => (
                       <div
@@ -264,7 +265,9 @@ export default function CreateExamPage() {
                         <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-slate-100 text-xs font-bold text-slate-500">
                           {opt.label}
                         </span>
-                        <span>{opt.content}</span>
+                        <div className="min-w-0 flex-1">
+                          <MathText>{opt.content}</MathText>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -489,13 +492,15 @@ export default function CreateExamPage() {
                         <div className="mb-1 flex flex-wrap items-center gap-2">
                           <DifficultyBadge level={q.difficulty} />
                           <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
-                            {q.questionType === 'SINGLE_CHOICE' ? 'Single' : 'Multiple'}
+                            {q.questionType.replace('_', ' ')}
                           </span>
                           {q.chapter && (
                             <span className="text-xs text-slate-400">{q.chapter.name}</span>
                           )}
                         </div>
-                        <p className="text-sm text-slate-800 line-clamp-2">{q.content}</p>
+                        <div className="line-clamp-2 text-sm text-slate-800">
+                          <MathText>{q.content}</MathText>
+                        </div>
                       </div>
                     </button>
                   );

@@ -11,12 +11,13 @@ import toast from 'react-hot-toast';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { Spinner } from '@/components/ui/Spinner';
+import { MathText } from '@/components/shared/MathText';
 import {
   useStartStudentExam,
   useSaveAnswers,
   useSubmitStudentExam,
 } from '@/hooks/useExam';
-import type { ExamQuestion, StartExamData } from '@/types/exam';
+import type { ExamQuestion, StartExamData, StudentAnswerValue } from '@/types/exam';
 
 const AUTO_SAVE_INTERVAL = 30_000;
 const WARNING_THRESHOLD = 300;
@@ -30,7 +31,7 @@ export default function TakeExamPage() {
 
   const [examData, setExamData] = useState<StartExamData | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, number | null>>({});
+  const [answers, setAnswers] = useState<Record<string, StudentAnswerValue>>({});
   const [flagged, setFlagged] = useState<Set<number>>(new Set());
   const [timeLeft, setTimeLeft] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -42,7 +43,7 @@ export default function TakeExamPage() {
   const [tabSwitchCount, setTabSwitchCount] = useState(0);
   const [showTabWarning, setShowTabWarning] = useState(false);
 
-  const pendingSave = useRef<Record<string, number | null>>({});
+  const pendingSave = useRef<Record<string, StudentAnswerValue>>({});
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const autoSaveRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const hasSubmitted = useRef(false);
@@ -281,6 +282,41 @@ export default function TakeExamPage() {
     }));
   };
 
+  const toggleMultiAnswer = (questionId: number, optionId: number) => {
+    setAnswers((prev) => {
+      const key = String(questionId);
+      const current = Array.isArray(prev[key]) ? (prev[key] as number[]) : [];
+      const next = current.includes(optionId)
+        ? current.filter((id) => id !== optionId)
+        : [...current, optionId];
+      return { ...prev, [key]: next.length > 0 ? next : null };
+    });
+  };
+
+  const setTextAnswer = (questionId: number, value: string) => {
+    setAnswers((prev) => ({
+      ...prev,
+      [String(questionId)]: value.trim() ? value : null,
+    }));
+  };
+
+  const setMatchingAnswer = (questionId: number, label: string, value: string) => {
+    setAnswers((prev) => {
+      const key = String(questionId);
+      const current =
+        prev[key] && typeof prev[key] === 'object' && !Array.isArray(prev[key])
+          ? (prev[key] as Record<string, string>)
+          : {};
+      return {
+        ...prev,
+        [key]: {
+          ...current,
+          [label]: value,
+        },
+      };
+    });
+  };
+
   const toggleFlag = (index: number) => {
     setFlagged((prev) => {
       const next = new Set(prev);
@@ -291,15 +327,30 @@ export default function TakeExamPage() {
   };
 
   const unansweredCount = useMemo(() => {
-    return questions.filter(
-      (q) => answers[String(q.questionId)] === undefined || answers[String(q.questionId)] === null,
-    ).length;
+    return questions.filter((q) => {
+      const answer = answers[String(q.questionId)];
+      if (answer === undefined || answer === null) return true;
+      if (Array.isArray(answer)) return answer.length === 0;
+      if (typeof answer === 'string') return answer.trim().length === 0;
+      if (typeof answer === 'object') {
+        return q.options.some((option) => !String(answer[option.label] || '').trim());
+      }
+      return false;
+    }).length;
   }, [questions, answers]);
 
   const formatTime = (sec: number) => {
     const m = Math.floor(sec / 60);
     const s = sec % 60;
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
+
+  const splitMatchingPair = (content: string) => {
+    const [left = '', ...rightParts] = content.split(/\s*=>\s*/);
+    return {
+      left: left.trim(),
+      right: rightParts.join(' => ').trim(),
+    };
   };
 
   // Loading state
@@ -450,52 +501,114 @@ export default function TakeExamPage() {
                 </div>
 
                 {/* Question content */}
-                <div
-                  className="text-base leading-relaxed text-slate-800"
-                  dangerouslySetInnerHTML={{
-                    __html: currentQuestion.content,
-                  }}
-                />
+                <div className="text-base leading-relaxed text-slate-800">
+                  <MathText>{currentQuestion.content}</MathText>
+                </div>
 
-                {/* Options */}
-                <div className="space-y-3">
-                  {currentQuestion.options.map((opt) => {
-                    const selected =
-                      answers[String(currentQuestion.questionId)] === opt.id;
-                    return (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        onClick={() =>
-                          selectAnswer(currentQuestion.questionId, opt.id)
-                        }
-                        className={`flex w-full items-start gap-4 rounded-xl border-2 p-4 text-left transition-colors min-h-[44px] ${
-                          selected
-                            ? 'border-indigo-500 bg-indigo-50'
-                            : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
-                        }`}
-                      >
-                        <span
-                          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
+                {currentQuestion.questionType === 'SHORT_ANSWER' ? (
+                  <textarea
+                    rows={4}
+                    value={
+                      typeof answers[String(currentQuestion.questionId)] === 'string'
+                        ? (answers[String(currentQuestion.questionId)] as string)
+                        : ''
+                    }
+                    onChange={(event) =>
+                      setTextAnswer(currentQuestion.questionId, event.target.value)
+                    }
+                    className="w-full rounded-xl border-2 border-slate-200 bg-white p-4 text-sm text-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                    placeholder="Type your answer"
+                  />
+                ) : currentQuestion.questionType === 'MATCHING' ? (
+                  <div className="space-y-3">
+                    {currentQuestion.options.map((opt) => {
+                      const pair = splitMatchingPair(opt.content);
+                      const answer =
+                        answers[String(currentQuestion.questionId)] &&
+                        typeof answers[String(currentQuestion.questionId)] === 'object' &&
+                        !Array.isArray(answers[String(currentQuestion.questionId)])
+                          ? (answers[String(currentQuestion.questionId)] as Record<string, string>)
+                          : {};
+                      return (
+                        <div
+                          key={opt.id}
+                          className="grid gap-3 rounded-xl border-2 border-slate-200 bg-white p-4 sm:grid-cols-[1fr_1fr]"
+                        >
+                          <div className="text-sm font-medium text-slate-700">
+                            <MathText>{pair.left || opt.content}</MathText>
+                          </div>
+                          <input
+                            type="text"
+                            value={answer[opt.label] || ''}
+                            onChange={(event) =>
+                              setMatchingAnswer(
+                                currentQuestion.questionId,
+                                opt.label,
+                                event.target.value,
+                              )
+                            }
+                            className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                            placeholder="Matching answer"
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {currentQuestion.options.map((opt) => {
+                      const answer = answers[String(currentQuestion.questionId)];
+                      const selected =
+                        currentQuestion.questionType === 'MULTIPLE_CHOICE'
+                          ? Array.isArray(answer) && answer.includes(opt.id)
+                          : answer === opt.id;
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() =>
+                            currentQuestion.questionType === 'MULTIPLE_CHOICE'
+                              ? toggleMultiAnswer(currentQuestion.questionId, opt.id)
+                              : selectAnswer(currentQuestion.questionId, opt.id)
+                          }
+                          className={`flex w-full items-start gap-4 rounded-xl border-2 p-4 text-left transition-colors min-h-[44px] ${
                             selected
-                              ? 'bg-indigo-600 text-white'
-                              : 'bg-slate-100 text-slate-600'
+                              ? 'border-indigo-500 bg-indigo-50'
+                              : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
                           }`}
                         >
-                          {opt.label}
-                        </span>
-                        <span
-                          className={`flex-1 pt-0.5 text-sm leading-relaxed ${
-                            selected
-                              ? 'text-indigo-900 font-medium'
-                              : 'text-slate-700'
-                          }`}
-                          dangerouslySetInnerHTML={{ __html: opt.content }}
-                        />
-                      </button>
-                    );
-                  })}
-                </div>
+                          <span
+                            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
+                              selected
+                                ? 'bg-indigo-600 text-white'
+                                : 'bg-slate-100 text-slate-600'
+                            }`}
+                          >
+                            {currentQuestion.questionType === 'MULTIPLE_CHOICE' ? (
+                              <input
+                                type="checkbox"
+                                checked={selected}
+                                readOnly
+                                className="h-4 w-4 rounded border-white text-indigo-600"
+                              />
+                            ) : (
+                              opt.label
+                            )}
+                          </span>
+                          <div
+                            className={`flex-1 pt-0.5 text-sm leading-relaxed ${
+                              selected
+                                ? 'text-indigo-900 font-medium'
+                                : 'text-slate-700'
+                            }`}
+                          >
+                            <MathText>{opt.content}</MathText>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             ) : (
               <div className="py-20 text-center text-slate-500">

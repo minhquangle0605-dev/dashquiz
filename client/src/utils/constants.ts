@@ -124,9 +124,12 @@ export const API_ENDPOINTS = {
     BY_ID: (id: number) => `/api/questions/${id}`,
     IMPORT: '/api/questions/import',
     IMPORT_TEMPLATE: '/api/questions/import-template',
+    DOCUMENT_IMPORT_TEMPLATE: '/api/questions/document-import-template',
     EXTRACT_FROM_DOCUMENT: '/api/questions/extract-from-document',
     BULK_CREATE: '/api/questions/bulk-create',
     BULK_DELETE: '/api/questions/bulk-delete',
+    IMAGE_UPLOAD: '/api/questions/images',
+    EXPORT_GIFT: '/api/questions/export-gift',
     TAGS: (id: number) => `/api/questions/${id}/tags`,
     TAG_BY_ID: (questionId: number, tagId: number) =>
       `/api/questions/${questionId}/tags/${tagId}`,

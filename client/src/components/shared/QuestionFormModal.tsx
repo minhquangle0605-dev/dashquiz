@@ -21,6 +21,7 @@ import {
   addTags,
 } from '@/services/question.api';
 import { MathText } from './MathText';
+import { RichTextEditor } from './RichTextEditor';
 
 interface OptionField {
   label: string;
@@ -29,9 +30,49 @@ interface OptionField {
 }
 
 const LABELS = ['A', 'B', 'C', 'D'];
+const QUESTION_TYPE_OPTIONS: Array<{ value: QuestionKind; label: string }> = [
+  { value: 'SINGLE_CHOICE', label: 'Single Choice' },
+  { value: 'MULTIPLE_CHOICE', label: 'Multiple Choice' },
+  { value: 'TRUE_FALSE', label: 'True / False' },
+  { value: 'SHORT_ANSWER', label: 'Short Answer' },
+  { value: 'MATCHING', label: 'Matching' },
+];
 
 function defaultOptions(): OptionField[] {
   return LABELS.map((l) => ({ label: l, content: '', isCorrect: false }));
+}
+
+function labelFromIndex(index: number): string {
+  return String.fromCharCode('A'.charCodeAt(0) + index);
+}
+
+function relabelOptions(options: OptionField[]): OptionField[] {
+  return options.map((option, index) => ({ ...option, label: labelFromIndex(index) }));
+}
+
+function trueFalseOptions(): OptionField[] {
+  return [
+    { label: 'A', content: 'True', isCorrect: true },
+    { label: 'B', content: 'False', isCorrect: false },
+  ];
+}
+
+function shortAnswerOptions(): OptionField[] {
+  return [{ label: 'A', content: '', isCorrect: true }];
+}
+
+function matchingOptions(): OptionField[] {
+  return [
+    { label: 'A', content: 'Left 1 => Right 1', isCorrect: true },
+    { label: 'B', content: 'Left 2 => Right 2', isCorrect: true },
+  ];
+}
+
+function hasRichTextContent(value: string): boolean {
+  if (/<img\b/i.test(value)) return true;
+  const template = document.createElement('template');
+  template.innerHTML = value;
+  return (template.content.textContent || '').trim().length > 0;
 }
 
 export interface QuestionFormModalProps {
@@ -101,13 +142,28 @@ export function QuestionFormModal({
     );
   }, []);
 
+  const addOption = useCallback(() => {
+    setOptions((prev) => [
+      ...prev,
+      {
+        label: labelFromIndex(prev.length),
+        content: questionType === 'MATCHING' ? 'Left => Right' : '',
+        isCorrect: questionType === 'SHORT_ANSWER' || questionType === 'MATCHING',
+      },
+    ]);
+  }, [questionType]);
+
+  const removeOption = useCallback((idx: number) => {
+    setOptions((prev) => relabelOptions(prev.filter((_, i) => i !== idx)));
+  }, []);
+
   const setCorrectOption = useCallback(
     (idx: number) => {
-      if (questionType === 'SINGLE_CHOICE') {
+      if (questionType === 'SINGLE_CHOICE' || questionType === 'TRUE_FALSE') {
         setOptions((prev) =>
           prev.map((o, i) => ({ ...o, isCorrect: i === idx })),
         );
-      } else {
+      } else if (questionType === 'MULTIPLE_CHOICE') {
         setOptions((prev) =>
           prev.map((o, i) =>
             i === idx ? { ...o, isCorrect: !o.isCorrect } : o,
@@ -120,11 +176,21 @@ export function QuestionFormModal({
 
   const validate = (): string | null => {
     if (!curriculum.subjectId) return 'Please select a subject.';
-    if (!content.trim()) return 'Question content is required.';
-    if (options.some((o) => !o.content.trim()))
-      return 'All 4 answer options are required.';
-    if (!options.some((o) => o.isCorrect))
+    if (!curriculum.chapterId) return 'Please select a chapter.';
+    if (!curriculum.topicId) return 'Please select a topic.';
+    if (!hasRichTextContent(content)) return 'Question content is required.';
+    if (options.some((o) => !hasRichTextContent(o.content)))
+      return 'All answer rows need content.';
+    if (questionType === 'SINGLE_CHOICE' && options.filter((o) => o.isCorrect).length !== 1)
+      return 'Select exactly one correct answer.';
+    if (questionType === 'TRUE_FALSE' && options.filter((o) => o.isCorrect).length !== 1)
+      return 'Select True or False as the correct answer.';
+    if (questionType === 'MULTIPLE_CHOICE' && !options.some((o) => o.isCorrect))
       return 'Select at least one correct answer.';
+    if (questionType === 'SHORT_ANSWER' && options.length < 1)
+      return 'Add at least one accepted answer.';
+    if (questionType === 'MATCHING' && options.length < 2)
+      return 'Add at least two matching pairs.';
     return null;
   };
 
@@ -221,19 +287,31 @@ export function QuestionFormModal({
               onChange={(e) => {
                 const next = e.target.value as QuestionKind;
                 setQuestionType(next);
-                if (next === 'SINGLE_CHOICE') {
+                if (next === 'TRUE_FALSE') {
+                  setOptions(trueFalseOptions());
+                } else if (next === 'SHORT_ANSWER') {
+                  setOptions(shortAnswerOptions());
+                } else if (next === 'MATCHING') {
+                  setOptions(matchingOptions());
+                } else if (next === 'SINGLE_CHOICE') {
                   setOptions((prev) => {
                     const firstCorrect = prev.findIndex((o) => o.isCorrect);
-                    return prev.map((o, i) => ({
+                    const normalized = prev.length >= 2 ? relabelOptions(prev) : defaultOptions();
+                    return normalized.map((o, i) => ({
                       ...o,
                       isCorrect: i === (firstCorrect >= 0 ? firstCorrect : 0),
                     }));
                   });
+                } else {
+                  setOptions((prev) => (prev.length >= 2 ? relabelOptions(prev) : defaultOptions()));
                 }
               }}
             >
-              <option value="SINGLE_CHOICE">Single Choice</option>
-              <option value="MULTIPLE_CHOICE">Multiple Choice</option>
+              {QUESTION_TYPE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -264,16 +342,14 @@ export function QuestionFormModal({
         <div>
           <label className="mb-1.5 flex justify-between text-sm font-medium text-slate-700">
             <span>Question Content</span>
-            <span className="text-xs font-normal text-slate-500">Supports LaTeX (e.g. $x^2$)</span>
+            <span className="text-xs font-normal text-slate-500">Supports LaTeX and images</span>
           </label>
-          <textarea
-            rows={4}
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-            placeholder="Enter the question text..."
+          <RichTextEditor
             value={content}
-            onChange={(e) => setContent(e.target.value)}
+            onChange={setContent}
+            placeholder="Enter the question text..."
           />
-          {content.includes('$') && (
+          {(content.includes('$') || content.includes('<img')) && (
             <div className="mt-2 rounded-lg border border-slate-100 bg-slate-50 p-3 text-sm text-slate-800">
               <MathText>{content}</MathText>
             </div>
@@ -283,35 +359,74 @@ export function QuestionFormModal({
         {/* Answer options */}
         <div>
           <label className="mb-2 block text-sm font-medium text-slate-700">
-            Answer Options
+            {questionType === 'SHORT_ANSWER'
+              ? 'Accepted Answers'
+              : questionType === 'MATCHING'
+                ? 'Matching Pairs'
+                : 'Answer Options'}
             <span className="ml-2 text-xs font-normal text-slate-400">
-              ({questionType === 'SINGLE_CHOICE' ? 'Select one correct' : 'Select all correct'})
+              {questionType === 'SINGLE_CHOICE' || questionType === 'TRUE_FALSE'
+                ? '(Select one correct)'
+                : questionType === 'MULTIPLE_CHOICE'
+                  ? '(Select all correct)'
+                  : ''}
             </span>
           </label>
           <div className="space-y-2">
             {options.map((opt, idx) => (
               <div key={opt.label} className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setCorrectOption(idx)}
-                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border-2 text-sm font-bold transition-colors ${
-                    opt.isCorrect
-                      ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
-                      : 'border-slate-200 bg-white text-slate-400 hover:border-slate-300'
-                  }`}
-                  title={opt.isCorrect ? 'Correct answer' : 'Mark as correct'}
-                >
-                  {opt.label}
-                </button>
+                {questionType === 'SHORT_ANSWER' || questionType === 'MATCHING' ? (
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-100 text-sm font-bold text-slate-600">
+                    {opt.label}
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setCorrectOption(idx)}
+                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border-2 text-sm font-bold transition-colors ${
+                      opt.isCorrect
+                        ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                        : 'border-slate-200 bg-white text-slate-400 hover:border-slate-300'
+                    }`}
+                    title={opt.isCorrect ? 'Correct answer' : 'Mark as correct'}
+                  >
+                    {opt.label}
+                  </button>
+                )}
                 <div className="flex-1 flex flex-col gap-1">
-                  <input
-                    type="text"
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                    placeholder={`Option ${opt.label}...`}
-                    value={opt.content}
-                    onChange={(e) => setOptionContent(idx, e.target.value)}
-                  />
-                  {opt.content.includes('$') && (
+                  {questionType === 'TRUE_FALSE' ? (
+                    <input
+                      type="text"
+                      className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 shadow-sm"
+                      value={opt.content}
+                      disabled
+                      readOnly
+                    />
+                  ) : (
+                    <RichTextEditor
+                      value={opt.content}
+                      minHeightClassName="min-h-[72px]"
+                      placeholder={
+                        questionType === 'MATCHING'
+                          ? 'Left item => Right answer'
+                          : questionType === 'SHORT_ANSWER'
+                            ? 'Accepted answer'
+                            : `Option ${opt.label}...`
+                      }
+                      onChange={(nextValue) => {
+                        if (questionType === 'SHORT_ANSWER' || questionType === 'MATCHING') {
+                          setOptions((prev) =>
+                            prev.map((o, i) =>
+                              i === idx ? { ...o, content: nextValue, isCorrect: true } : o,
+                            ),
+                          );
+                        } else {
+                          setOptionContent(idx, nextValue);
+                        }
+                      }}
+                    />
+                  )}
+                  {(opt.content.includes('$') || opt.content.includes('<img')) && (
                     <div className="rounded border border-slate-100 bg-slate-50 px-2 py-1 text-sm text-slate-700">
                       <MathText>{opt.content}</MathText>
                     </div>
@@ -330,9 +445,27 @@ export function QuestionFormModal({
                     />
                   </svg>
                 )}
+                {questionType !== 'TRUE_FALSE' && options.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => removeOption(idx)}
+                    className="text-xs font-medium text-red-600 hover:text-red-500"
+                  >
+                    Remove
+                  </button>
+                )}
               </div>
             ))}
           </div>
+          {questionType !== 'TRUE_FALSE' && options.length < 26 && (
+            <button
+              type="button"
+              onClick={addOption}
+              className="mt-2 text-xs font-semibold text-indigo-600 hover:text-indigo-500"
+            >
+              Add answer row
+            </button>
+          )}
         </div>
 
         {/* Explanation */}
@@ -341,12 +474,11 @@ export function QuestionFormModal({
             Explanation
             <span className="ml-1 text-xs font-normal text-slate-400">(optional)</span>
           </label>
-          <textarea
-            rows={3}
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-            placeholder="Explain why the correct answer is right..."
+          <RichTextEditor
             value={explanation}
-            onChange={(e) => setExplanation(e.target.value)}
+            onChange={setExplanation}
+            placeholder="Explain why the correct answer is right..."
+            minHeightClassName="min-h-[96px]"
           />
         </div>
 

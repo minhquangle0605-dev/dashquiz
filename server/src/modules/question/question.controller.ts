@@ -1,6 +1,14 @@
 import type { Request, Response, NextFunction } from 'express';
 import { questionService } from './question.service';
-import { questionExtractService } from './question.extract.service';
+import {
+  generateDocumentImportTemplatePdf,
+  questionExtractService,
+} from './question.extract.service';
+import {
+  decodeImageKey,
+  getQuestionImageObject,
+  uploadQuestionImage,
+} from './question.media';
 import { AppError } from '../../middlewares/errorHandler';
 import type { ListQuestionsQuery } from './question.validation';
 
@@ -171,6 +179,78 @@ export async function downloadImportTemplate(
       'Content-Type',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     );
+    res.send(buffer);
+  } catch (error: unknown) {
+    next(error instanceof Error ? error : new Error('Unexpected error'));
+  }
+}
+
+export async function uploadQuestionImageFile(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (!req.user) throw new AppError('Authentication required', 401);
+    if (!req.file) throw new AppError('Image file is required', 400);
+    const result = await uploadQuestionImage(req.user.id, req.file);
+    res.status(201).json({
+      success: true,
+      message: 'Question image uploaded successfully',
+      data: result,
+    });
+  } catch (error: unknown) {
+    next(error instanceof Error ? error : new Error('Unexpected error'));
+  }
+}
+
+export async function serveQuestionImage(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const objectName = decodeImageKey(req.params.key);
+    const { stream, contentType } = await getQuestionImageObject(objectName);
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    stream.pipe(res);
+  } catch (error: unknown) {
+    next(error instanceof Error ? error : new Error('Unexpected error'));
+  }
+}
+
+export async function exportQuestionsGift(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const ids = Array.isArray(req.body?.ids)
+      ? req.body.ids.map((id: unknown) => Number(id))
+      : [];
+    const gift = await questionService.generateGiftExport(ids);
+    const filename = `questions_${new Date().toISOString().slice(0, 10)}.gift`;
+    res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.send(gift);
+  } catch (error: unknown) {
+    next(error instanceof Error ? error : new Error('Unexpected error'));
+  }
+}
+
+export async function downloadDocumentImportTemplate(
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const buffer = await generateDocumentImportTemplatePdf();
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename=question_document_import_template.pdf',
+    );
+    res.setHeader('Content-Type', 'application/pdf');
     res.send(buffer);
   } catch (error: unknown) {
     next(error instanceof Error ? error : new Error('Unexpected error'));

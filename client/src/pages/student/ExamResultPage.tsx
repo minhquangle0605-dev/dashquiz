@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
+import { MathText } from '@/components/shared/MathText';
 import { useAttemptResult } from '@/hooks/useExam';
 import { formatDuration, formatDate } from '@/utils/format';
 import type { ResultQuestion } from '@/types/exam';
@@ -75,12 +76,17 @@ function QuestionReview({
   question: ResultQuestion;
   index: number;
 }) {
-  const borderColor = question.selectedOption === null
+  const selectedOptions = question.selectedOptions ?? [];
+  const hasTextAnswer = Boolean(question.answerText && question.answerText.trim());
+  const skipped =
+    question.selectedOption === null && selectedOptions.length === 0 && !hasTextAnswer;
+
+  const borderColor = skipped
     ? 'border-slate-200'
     : question.isCorrect
       ? 'border-emerald-200'
       : 'border-red-200';
-  const bgColor = question.selectedOption === null
+  const bgColor = skipped
     ? 'bg-slate-50'
     : question.isCorrect
       ? 'bg-emerald-50'
@@ -93,7 +99,7 @@ function QuestionReview({
         <div className="flex items-center gap-3">
           <span
             className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${
-              question.selectedOption === null
+              skipped
                 ? 'bg-slate-200 text-slate-600'
                 : question.isCorrect
                   ? 'bg-emerald-500 text-white'
@@ -104,14 +110,14 @@ function QuestionReview({
           </span>
           <Badge
             variant={
-              question.selectedOption === null
+              skipped
                 ? 'neutral'
                 : question.isCorrect
                   ? 'success'
                   : 'danger'
             }
           >
-            {question.selectedOption === null
+            {skipped
               ? 'Skipped'
               : question.isCorrect
                 ? 'Correct'
@@ -128,15 +134,16 @@ function QuestionReview({
 
       {/* Question content */}
       <div className="px-5 py-4 space-y-4">
-        <div
-          className="text-sm leading-relaxed text-slate-800"
-          dangerouslySetInnerHTML={{ __html: question.content }}
-        />
+        <div className="text-sm leading-relaxed text-slate-800">
+          <MathText>{question.content}</MathText>
+        </div>
 
         {/* Options */}
         <div className="space-y-2">
           {question.allOptions.map((opt) => {
-            const wasSelected = question.selectedOption?.id === opt.id;
+            const wasSelected =
+              question.selectedOption?.id === opt.id ||
+              selectedOptions.some((selected) => selected.id === opt.id);
             const isCorrectOption = opt.isCorrect;
 
             let optStyle = 'border-slate-200 bg-white';
@@ -173,15 +180,23 @@ function QuestionReview({
                 >
                   {opt.label}
                 </span>
-                <span
-                  className="flex-1 text-sm text-slate-700 pt-0.5"
-                  dangerouslySetInnerHTML={{ __html: opt.content }}
-                />
+                <div className="flex-1 pt-0.5 text-sm text-slate-700">
+                  <MathText>{opt.content}</MathText>
+                </div>
                 {icon}
               </div>
             );
           })}
         </div>
+
+        {hasTextAnswer && (
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <p className="text-xs font-semibold text-slate-600">Your answer</p>
+            <p className="mt-1 whitespace-pre-wrap text-sm text-slate-800">
+              {question.answerText}
+            </p>
+          </div>
+        )}
 
         {/* Explanation */}
         {question.explanation && (
@@ -192,9 +207,9 @@ function QuestionReview({
               </svg>
               <div>
                 <p className="text-sm font-semibold text-sky-800">Explanation</p>
-                <p className="mt-1 text-sm text-sky-700 leading-relaxed">
-                  {question.explanation}
-                </p>
+                <div className="mt-1 text-sm leading-relaxed text-sky-700">
+                  <MathText>{question.explanation}</MathText>
+                </div>
               </div>
             </div>
           </div>

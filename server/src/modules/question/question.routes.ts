@@ -40,22 +40,40 @@ const documentUpload = multer({
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       'application/msword',
       'application/pdf',
+      'text/plain',
+      'application/gift',
     ];
     const name = (file.originalname || '').toLowerCase();
     if (
       allowedMimes.includes(file.mimetype) ||
       name.endsWith('.docx') ||
       name.endsWith('.doc') ||
-      name.endsWith('.pdf')
+      name.endsWith('.pdf') ||
+      name.endsWith('.txt') ||
+      name.endsWith('.gift')
     ) {
       cb(null, true);
     } else {
-      cb(new Error('Only .docx, .doc, or .pdf files are allowed'));
+      cb(new Error('Only .docx, .doc, .pdf, .txt, or .gift files are allowed'));
     }
   },
 });
 
 // ── Public (authenticated) ──────────────────────
+const imageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: FILE_UPLOAD.MAX_QUESTION_IMAGE_SIZE },
+  fileFilter: (_req, file, cb) => {
+    if ((FILE_UPLOAD.ALLOWED_IMAGE_TYPES as readonly string[]).includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only JPG, PNG, and WebP images are allowed'));
+    }
+  },
+});
+
+router.get('/images/:key', questionController.serveQuestionImage);
+
 router.get(
   '/',
   authenticate,
@@ -72,6 +90,13 @@ router.get(
 );
 
 // ── Excel import (teacher/admin) ────────────────
+router.get(
+  '/document-import-template',
+  authenticate,
+  authorize(ROLES.TEACHER, ROLES.ADMIN),
+  questionController.downloadDocumentImportTemplate,
+);
+
 router.post(
   '/import',
   authenticate,
@@ -98,6 +123,23 @@ router.post(
   authorize(ROLES.TEACHER, ROLES.ADMIN),
   activityLogger('BULK_CREATE_QUESTIONS', 'question'),
   questionController.bulkCreateQuestions,
+);
+
+router.post(
+  '/images',
+  authenticate,
+  authorize(ROLES.TEACHER, ROLES.ADMIN),
+  imageUpload.single('image'),
+  activityLogger('UPLOAD_QUESTION_IMAGE', 'question_image'),
+  questionController.uploadQuestionImageFile,
+);
+
+router.post(
+  '/export-gift',
+  authenticate,
+  authorize(ROLES.TEACHER, ROLES.ADMIN),
+  activityLogger('EXPORT_QUESTIONS_GIFT', 'question'),
+  questionController.exportQuestionsGift,
 );
 
 // ── Bulk delete questions (teacher/admin) ──

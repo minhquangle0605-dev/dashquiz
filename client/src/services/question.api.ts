@@ -20,7 +20,15 @@ import type {
 export async function listQuestions(
   params: QuestionFilter = {},
 ): Promise<PaginatedResponse<Question>> {
-  const { data } = await api.get(API_ENDPOINTS.QUESTIONS.BASE, { params });
+  const requestParams = {
+    ...params,
+    limit: params.pageSize,
+    keyword: params.search,
+  };
+  delete (requestParams as Record<string, unknown>).pageSize;
+  delete (requestParams as Record<string, unknown>).search;
+
+  const { data } = await api.get(API_ENDPOINTS.QUESTIONS.BASE, { params: requestParams });
   
   if (data.pagination) {
     return {
@@ -76,6 +84,13 @@ export async function bulkDeleteQuestions(ids: number[]): Promise<void> {
   await api.post(API_ENDPOINTS.QUESTIONS.BULK_DELETE, { ids });
 }
 
+export async function uploadQuestionImage(file: File): Promise<{ url: string; objectName: string }> {
+  const formData = new FormData();
+  formData.append('image', file);
+  const { data } = await api.post(API_ENDPOINTS.QUESTIONS.IMAGE_UPLOAD, formData);
+  return data.data ?? data;
+}
+
 // ── Tags ───────────────────────────────────────────
 
 export async function addTags(
@@ -113,16 +128,43 @@ export function getImportTemplateUrl(): string {
   return API_ENDPOINTS.QUESTIONS.IMPORT_TEMPLATE;
 }
 
+export function getDocumentImportTemplateUrl(): string {
+  return API_ENDPOINTS.QUESTIONS.DOCUMENT_IMPORT_TEMPLATE;
+}
+
+export async function downloadDocumentImportTemplate(): Promise<Blob> {
+  const { data } = await api.get(API_ENDPOINTS.QUESTIONS.DOCUMENT_IMPORT_TEMPLATE, {
+    responseType: 'blob',
+  });
+  return data;
+}
+
+export async function exportQuestionsGift(ids: number[]): Promise<Blob> {
+  const { data } = await api.post(
+    API_ENDPOINTS.QUESTIONS.EXPORT_GIFT,
+    { ids },
+    { responseType: 'blob' },
+  );
+  return data;
+}
+
 // ── AI / Document extraction ──────────────────────
 
 export async function extractQuestionsFromDocument(
   file: File,
+  onUploadProgress?: (progress: number) => void,
 ): Promise<ExtractFromDocumentResult> {
   const formData = new FormData();
   formData.append('file', file);
   const { data } = await api.post(
     API_ENDPOINTS.QUESTIONS.EXTRACT_FROM_DOCUMENT,
     formData,
+    {
+      onUploadProgress: (event) => {
+        if (!event.total || !onUploadProgress) return;
+        onUploadProgress(Math.round((event.loaded * 100) / event.total));
+      },
+    },
   );
   return data.data ?? data;
 }

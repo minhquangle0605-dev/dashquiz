@@ -6,7 +6,13 @@ import {
 } from '@tanstack/react-query';
 
 import type { PaginatedResponse } from '@/types/api';
-import type { Exam, StudentExamItem, StartExamData, AttemptResultData } from '@/types/exam';
+import type {
+  AttemptResultData,
+  Exam,
+  StartExamData,
+  StudentAnswerValue,
+  StudentExamItem,
+} from '@/types/exam';
 import {
   type ExamListParams,
   getExamById,
@@ -131,7 +137,7 @@ export function useSaveAnswers() {
       answers,
     }: {
       attemptId: number;
-      answers: Record<string, number | null>;
+      answers: Record<string, StudentAnswerValue>;
     }) => saveStudentAnswers(attemptId, answers),
   });
 }
@@ -144,7 +150,7 @@ export function useSubmitStudentExam() {
       answers,
     }: {
       attemptId: number;
-      answers?: Record<string, number | null>;
+      answers?: Record<string, StudentAnswerValue>;
     }) => submitStudentExam(attemptId, answers),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: studentExamKeys.all });

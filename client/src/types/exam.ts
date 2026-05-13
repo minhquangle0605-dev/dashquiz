@@ -46,8 +46,15 @@ export interface StartExamData {
     shuffle: boolean;
   };
   questions: ExamQuestion[];
-  savedAnswers: Record<string, number | null>;
+  savedAnswers: Record<string, StudentAnswerValue>;
 }
+
+export type StudentAnswerValue =
+  | number
+  | number[]
+  | string
+  | Record<string, string>
+  | null;
 
 export interface ExamQuestion {
   questionId: number;
@@ -109,6 +116,8 @@ export interface ResultQuestion {
   topic: { id: number; name: string } | null;
   explanation: string | null;
   selectedOption: { id: number; label: string; content: string } | null;
+  selectedOptions?: Array<{ id: number; label: string; content: string }>;
+  answerText?: string | null;
   correctOptions: Array<{ id: number; label: string; content: string }>;
   allOptions: Array<{
     id: number;

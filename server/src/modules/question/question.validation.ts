@@ -4,14 +4,113 @@ import { z } from 'zod';
 // OPTION SUB-SCHEMA
 // ═══════════════════════════════════════════════
 
+const QUESTION_TYPES = [
+  'SINGLE_CHOICE',
+  'MULTIPLE_CHOICE',
+  'TRUE_FALSE',
+  'SHORT_ANSWER',
+  'MATCHING',
+] as const;
+
 const questionOptionSchema = z.object({
   label: z
     .string()
     .length(1, 'Label must be a single character')
-    .regex(/^[A-D]$/, 'Label must be A, B, C, or D'),
+    .regex(/^[A-Z]$/, 'Label must be A-Z'),
   content: z.string().min(1, 'Option content is required'),
   isCorrect: z.boolean(),
 });
+
+function validateQuestionShape(
+  value: {
+    questionType?: (typeof QUESTION_TYPES)[number];
+    options?: Array<{ label: string; content: string; isCorrect: boolean }>;
+  },
+  ctx: z.RefinementCtx,
+): void {
+  if (!value.options) return;
+
+  const questionType = value.questionType ?? 'SINGLE_CHOICE';
+  const options = value.options;
+  const correctCount = options.filter((o) => o.isCorrect).length;
+  const labels = options.map((o) => o.label.toUpperCase());
+  const duplicateLabels = labels.filter((label, index) => labels.indexOf(label) !== index);
+
+  if (duplicateLabels.length > 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['options'],
+      message: 'Option labels must be unique',
+    });
+  }
+
+  if (questionType === 'SINGLE_CHOICE') {
+    if (options.length < 2) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['options'],
+        message: 'Single choice questions need at least 2 options',
+      });
+    }
+    if (correctCount !== 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['options'],
+        message: 'Exactly one option must be marked correct',
+      });
+    }
+  }
+
+  if (questionType === 'TRUE_FALSE') {
+    if (options.length !== 2) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['options'],
+        message: 'True/False questions must have exactly 2 options',
+      });
+    }
+    if (correctCount !== 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['options'],
+        message: 'True/False questions need exactly one correct answer',
+      });
+    }
+  }
+
+  if (questionType === 'MULTIPLE_CHOICE' && correctCount < 1) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['options'],
+      message: 'Multiple choice questions need at least one correct option',
+    });
+  }
+
+  if (questionType === 'SHORT_ANSWER') {
+    if (options.length < 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['options'],
+        message: 'Short answer questions need at least one accepted answer',
+      });
+    }
+    if (correctCount < 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['options'],
+        message: 'Short answer accepted answers must be marked correct',
+      });
+    }
+  }
+
+  if (questionType === 'MATCHING' && options.length < 2) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['options'],
+      message: 'Matching questions need at least 2 pairs',
+    });
+  }
+}
 
 // ═══════════════════════════════════════════════
 // CREATE QUESTION
@@ -22,16 +121,14 @@ export const createQuestionSchema = z.object({
   chapterId: z.coerce.number().int().positive('Chapter is required'),
   topicId: z.coerce.number().int().positive('Topic is required'),
   content: z.string().min(1, 'Question content is required'),
-  questionType: z.enum(['SINGLE_CHOICE']).default('SINGLE_CHOICE'),
+  questionType: z.enum(QUESTION_TYPES).default('SINGLE_CHOICE'),
   difficulty: z.coerce.number().int().min(1, 'Difficulty min is 1').max(5, 'Difficulty max is 5'),
   explanation: z.string().optional().nullable(),
   options: z
     .array(questionOptionSchema)
-    .length(4, 'Exactly 4 options (A, B, C, D) are required')
-    .refine((opts) => opts.filter((o) => o.isCorrect).length === 1, {
-      message: 'Exactly one option must be marked as correct (SINGLE_CHOICE)',
-    }),
-});
+    .min(1, 'At least one answer/option is required')
+    .max(26, 'A question can have at most 26 options/answers'),
+}).superRefine(validateQuestionShape);
 
 // ═══════════════════════════════════════════════
 // UPDATE QUESTION
@@ -39,7 +136,7 @@ export const createQuestionSchema = z.object({
 
 export const updateQuestionSchema = z.object({
   content: z.string().min(1, 'Question content cannot be empty').optional(),
-  questionType: z.enum(['SINGLE_CHOICE']).optional(),
+  questionType: z.enum(QUESTION_TYPES).optional(),
   difficulty: z.coerce.number().int().min(1).max(5).optional(),
   explanation: z.string().optional().nullable(),
   subjectId: z.coerce.number().int().positive().optional(),
@@ -47,12 +144,10 @@ export const updateQuestionSchema = z.object({
   topicId: z.coerce.number().int().positive().optional(),
   options: z
     .array(questionOptionSchema)
-    .length(4, 'Exactly 4 options required')
-    .refine((opts) => opts.filter((o) => o.isCorrect).length === 1, {
-      message: 'Exactly one option must be marked as correct (SINGLE_CHOICE)',
-    })
+    .min(1, 'At least one answer/option is required')
+    .max(26, 'A question can have at most 26 options/answers')
     .optional(),
-});
+}).superRefine(validateQuestionShape);
 
 // ═══════════════════════════════════════════════
 // LIST QUESTIONS (QUERY PARAMS)

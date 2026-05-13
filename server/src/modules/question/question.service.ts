@@ -3,9 +3,13 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError } from '../../middlewares/errorHandler';
 import { isCoreSubjectCode } from '../../constants/subjects';
-import { PAGINATION } from '../../utils/constants';
+import { FILE_UPLOAD, PAGINATION } from '../../utils/constants';
 import { cacheGet, cacheSet, cacheInvalidate } from '../../utils/cache';
 import { buildPaginationResponse } from '../../utils/pagination';
+import {
+  objectNameFromQuestionImageSrc,
+  readQuestionImageAsDataUri,
+} from './question.media';
 import type {
   CreateQuestionInput,
   UpdateQuestionInput,
@@ -37,7 +41,71 @@ interface ImportError {
   message: string;
 }
 
+type SupportedQuestionKind =
+  | 'SINGLE_CHOICE'
+  | 'MULTIPLE_CHOICE'
+  | 'TRUE_FALSE'
+  | 'SHORT_ANSWER'
+  | 'MATCHING';
+
+type BulkQuestionPayload = {
+  content: string;
+  questionType: SupportedQuestionKind;
+  difficulty: number;
+  explanation: string | null;
+  options: Array<{ label: string; content: string; isCorrect: boolean }>;
+};
+
 const LIST_QUESTIONS_CACHE_TTL = 180; // 3 minutes
+
+const ALLOWED_IMAGE_SRC = /^(data:image\/(png|jpeg|jpg|webp);base64,|https?:\/\/|\/api\/questions\/images\/)/i;
+
+function sanitizeRichQuestionHtml(value: string | null | undefined): string {
+  if (!value) return '';
+  return String(value)
+    .replace(/<\s*(script|style|iframe|object|embed|link|meta)[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, '')
+    .replace(/<\s*(script|style|iframe|object|embed|link|meta)[^>]*\/?\s*>/gi, '')
+    .replace(/\s+on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(/\s+(src|href)\s*=\s*(['"])\s*(javascript:|vbscript:)[\s\S]*?\2/gi, '')
+    .replace(/<img\b([^>]*)>/gi, (_tag, attrs: string) => {
+      const srcMatch = String(attrs).match(/\ssrc\s*=\s*(['"])(.*?)\1/i);
+      if (!srcMatch || !ALLOWED_IMAGE_SRC.test(srcMatch[2])) return '';
+      const altMatch = String(attrs).match(/\salt\s*=\s*(['"])(.*?)\1/i);
+      const src = escapeHtmlAttribute(srcMatch[2]);
+      const alt = escapeHtmlAttribute(altMatch?.[2] ?? 'question image');
+      return `<img src="${src}" alt="${alt}" />`;
+    })
+    .trim();
+}
+
+function escapeHtmlAttribute(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function escapeGiftText(value: string): string {
+  return value
+    .replace(/\\/g, '\\\\')
+    .replace(/~/g, '\\~')
+    .replace(/=/g, '\\=')
+    .replace(/#/g, '\\#')
+    .replace(/{/g, '\\{')
+    .replace(/}/g, '\\}')
+    .replace(/:/g, '\\:');
+}
+
+function extractImageSources(html: string): string[] {
+  const sources: string[] = [];
+  const imgRegex = /<img\b[^>]*\ssrc\s*=\s*(['"])(.*?)\1[^>]*>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = imgRegex.exec(html)) !== null) {
+    sources.push(match[2]);
+  }
+  return sources;
+}
 
 export class QuestionService {
   private listQuestionsCacheKey(query: ListQuestionsQuery, page: number, limit: number): string {
@@ -187,15 +255,15 @@ export class QuestionService {
         subjectId: data.subjectId,
         chapterId: data.chapterId,
         topicId: data.topicId,
-        content: data.content,
+        content: sanitizeRichQuestionHtml(data.content),
         questionType: data.questionType,
         difficulty: data.difficulty,
-        explanation: data.explanation ?? null,
+        explanation: data.explanation ? sanitizeRichQuestionHtml(data.explanation) : null,
         createdBy: userId,
         options: {
           create: data.options.map((opt) => ({
             label: opt.label,
-            content: opt.content,
+            content: sanitizeRichQuestionHtml(opt.content),
             isCorrect: opt.isCorrect,
           })),
         },
@@ -243,7 +311,7 @@ export class QuestionService {
           data: data.options.map((opt) => ({
             questionId: id,
             label: opt.label,
-            content: opt.content,
+            content: sanitizeRichQuestionHtml(opt.content),
             isCorrect: opt.isCorrect,
           })),
         });
@@ -252,10 +320,12 @@ export class QuestionService {
       return tx.question.update({
         where: { id },
         data: {
-          ...(data.content !== undefined && { content: data.content }),
+          ...(data.content !== undefined && { content: sanitizeRichQuestionHtml(data.content) }),
           ...(data.questionType !== undefined && { questionType: data.questionType }),
           ...(data.difficulty !== undefined && { difficulty: data.difficulty }),
-          ...(data.explanation !== undefined && { explanation: data.explanation }),
+          ...(data.explanation !== undefined && {
+            explanation: data.explanation ? sanitizeRichQuestionHtml(data.explanation) : null,
+          }),
           ...(data.subjectId !== undefined && { subjectId: data.subjectId }),
           ...(data.chapterId !== undefined && { chapterId: data.chapterId }),
           ...(data.topicId !== undefined && { topicId: data.topicId }),
@@ -375,13 +445,7 @@ export class QuestionService {
   // ═══════════════════════════════════════════════
 
   async bulkCreate(
-    questions: Array<{
-      content: string;
-      questionType: 'SINGLE_CHOICE';
-      difficulty: number;
-      explanation: string | null;
-      options: Array<{ label: string; content: string; isCorrect: boolean }>;
-    }>,
+    questions: BulkQuestionPayload[],
     meta: { subjectId: number; chapterId: number; topicId: number },
     userId: number,
   ) {
@@ -392,7 +456,7 @@ export class QuestionService {
     }
 
     const errors: Array<{ index: number; message: string }> = [];
-    const valid: typeof questions = [];
+    const valid: BulkQuestionPayload[] = [];
 
     questions.forEach((q, idx) => {
       const stem = String(q.content || '').trim();
@@ -400,25 +464,55 @@ export class QuestionService {
         errors.push({ index: idx, message: 'Question content is empty' });
         return;
       }
-      if (!Array.isArray(q.options) || q.options.length !== 4) {
-        errors.push({ index: idx, message: 'Must have exactly 4 options' });
+      const questionType = this.normalizeQuestionType(q.questionType);
+      if (!Array.isArray(q.options) || q.options.length === 0) {
+        errors.push({ index: idx, message: 'At least one option/answer is required' });
+        return;
+      }
+      if (q.options.length > 26) {
+        errors.push({ index: idx, message: 'A question can have at most 26 options/answers' });
         return;
       }
       const labels = q.options.map((o) => String(o.label).toUpperCase());
-      if (!['A', 'B', 'C', 'D'].every((l) => labels.includes(l))) {
-        errors.push({ index: idx, message: 'Options must be labelled A, B, C, D' });
+      const duplicateLabel = labels.find((label, labelIndex) => labels.indexOf(label) !== labelIndex);
+      if (duplicateLabel) {
+        errors.push({ index: idx, message: `Duplicate option label ${duplicateLabel}` });
+        return;
+      }
+      if (labels.some((label) => !/^[A-Z]$/.test(label))) {
+        errors.push({ index: idx, message: 'Option labels must be A-Z' });
         return;
       }
       if (q.options.some((o) => !String(o.content || '').trim())) {
-        errors.push({ index: idx, message: 'All options must have content' });
+        errors.push({ index: idx, message: 'All options/answers must have content' });
         return;
       }
       const correctCount = q.options.filter((o) => o.isCorrect).length;
-      if (correctCount !== 1) {
+      if ((questionType === 'SINGLE_CHOICE' || questionType === 'TRUE_FALSE') && correctCount !== 1) {
         errors.push({
           index: idx,
-          message: 'Exactly one option must be marked correct',
+          message: `${questionType.replace('_', ' ')} requires exactly one correct answer`,
         });
+        return;
+      }
+      if (questionType === 'TRUE_FALSE' && q.options.length !== 2) {
+        errors.push({ index: idx, message: 'TRUE_FALSE requires exactly 2 options' });
+        return;
+      }
+      if (questionType === 'SINGLE_CHOICE' && q.options.length < 2) {
+        errors.push({ index: idx, message: 'SINGLE_CHOICE requires at least 2 options' });
+        return;
+      }
+      if (questionType === 'MULTIPLE_CHOICE' && correctCount < 1) {
+        errors.push({ index: idx, message: 'MULTIPLE_CHOICE requires at least one correct option' });
+        return;
+      }
+      if (questionType === 'SHORT_ANSWER' && correctCount < 1) {
+        errors.push({ index: idx, message: 'SHORT_ANSWER requires at least one accepted answer' });
+        return;
+      }
+      if (questionType === 'MATCHING' && q.options.length < 2) {
+        errors.push({ index: idx, message: 'MATCHING requires at least two pairs' });
         return;
       }
       const diff = Number(q.difficulty);
@@ -430,13 +524,13 @@ export class QuestionService {
         return;
       }
       valid.push({
-        content: stem,
-        questionType: 'SINGLE_CHOICE',
+        content: sanitizeRichQuestionHtml(stem),
+        questionType,
         difficulty: diff,
-        explanation: q.explanation ? String(q.explanation).trim() : null,
+        explanation: q.explanation ? sanitizeRichQuestionHtml(String(q.explanation).trim()) : null,
         options: q.options.map((o) => ({
           label: String(o.label).toUpperCase(),
-          content: String(o.content).trim(),
+          content: sanitizeRichQuestionHtml(String(o.content).trim()),
           isCorrect: Boolean(o.isCorrect),
         })),
       });
@@ -458,7 +552,7 @@ export class QuestionService {
             chapterId: meta.chapterId,
             topicId: meta.topicId,
             content: q.content,
-            questionType: 'SINGLE_CHOICE',
+            questionType: q.questionType,
             difficulty: q.difficulty,
             explanation: q.explanation,
             createdBy: userId,
@@ -571,14 +665,14 @@ export class QuestionService {
       const explanation = row.explanation ? String(row.explanation).trim() : null;
 
       validQuestions.push({
-        content,
+        content: sanitizeRichQuestionHtml(content),
         options: [
-          { label: 'A', content: optA, isCorrect: validCorrect.includes('A') },
-          { label: 'B', content: optB, isCorrect: validCorrect.includes('B') },
-          { label: 'C', content: optC, isCorrect: validCorrect.includes('C') },
-          { label: 'D', content: optD, isCorrect: validCorrect.includes('D') },
+          { label: 'A', content: sanitizeRichQuestionHtml(optA), isCorrect: validCorrect.includes('A') },
+          { label: 'B', content: sanitizeRichQuestionHtml(optB), isCorrect: validCorrect.includes('B') },
+          { label: 'C', content: sanitizeRichQuestionHtml(optC), isCorrect: validCorrect.includes('C') },
+          { label: 'D', content: sanitizeRichQuestionHtml(optD), isCorrect: validCorrect.includes('D') },
         ],
-        explanation,
+        explanation: explanation ? sanitizeRichQuestionHtml(explanation) : null,
         difficulty,
       });
     }
@@ -692,6 +786,79 @@ export class QuestionService {
   // ADD TAGS
   // ═══════════════════════════════════════════════
 
+  async generateGiftExport(questionIds: number[]): Promise<string> {
+    if (!Array.isArray(questionIds) || questionIds.length === 0) {
+      throw new AppError('No question IDs provided for export', 400);
+    }
+
+    const uniqueIds = [...new Set(questionIds.filter((id) => Number.isInteger(id) && id > 0))];
+    if (uniqueIds.length === 0) {
+      throw new AppError('No valid question IDs provided for export', 400);
+    }
+
+    const questions = await prisma.question.findMany({
+      where: { id: { in: uniqueIds } },
+      include: { options: { orderBy: { label: 'asc' } } },
+      orderBy: { id: 'asc' },
+    });
+
+    if (questions.length === 0) {
+      throw new AppError('No questions found to export', 404);
+    }
+
+    const blocks = await Promise.all(
+      questions.map(async (question) => {
+        const content = await this.prepareHtmlForGift(question.content);
+        const options = await Promise.all(
+          question.options.map(async (option) => ({
+            ...option,
+            content: await this.prepareHtmlForGift(option.content),
+          })),
+        );
+        const title = `Question ${question.id}`;
+
+        if (question.questionType === 'SHORT_ANSWER') {
+          const answers = options
+            .filter((option) => option.isCorrect)
+            .map((option) => `=${escapeGiftText(option.content)}`)
+            .join('\n');
+          return `::${escapeGiftText(title)}::${escapeGiftText(content)} {\n${answers}\n}`;
+        }
+
+        if (question.questionType === 'MATCHING') {
+          const pairs = options
+            .map((option) => {
+              const pair = this.splitMatchingPair(option.content);
+              return `=${escapeGiftText(pair.left)} -> ${escapeGiftText(pair.right)}`;
+            })
+            .join('\n');
+          return `::${escapeGiftText(title)}::${escapeGiftText(content)} {\n${pairs}\n}`;
+        }
+
+        if (question.questionType === 'MULTIPLE_CHOICE') {
+          const correctCount = options.filter((option) => option.isCorrect).length;
+          const fraction = correctCount > 0 ? 100 / correctCount : 0;
+          const answers = options
+            .map((option) => {
+              if (option.isCorrect) {
+                return `~%${fraction.toFixed(5).replace(/\.?0+$/, '')}%${escapeGiftText(option.content)}`;
+              }
+              return `~${escapeGiftText(option.content)}`;
+            })
+            .join('\n');
+          return `::${escapeGiftText(title)}::${escapeGiftText(content)} {\n${answers}\n}`;
+        }
+
+        const answers = options
+          .map((option) => `${option.isCorrect ? '=' : '~'}${escapeGiftText(option.content)}`)
+          .join('\n');
+        return `::${escapeGiftText(title)}::${escapeGiftText(content)} {\n${answers}\n}`;
+      }),
+    );
+
+    return `${blocks.join('\n\n')}\n`;
+  }
+
   async addTags(questionId: number, data: AddTagsInput) {
     const question = await prisma.question.findUnique({ where: { id: questionId } });
     if (!question) {
@@ -753,6 +920,61 @@ export class QuestionService {
   // ═══════════════════════════════════════════════
   // PRIVATE HELPERS
   // ═══════════════════════════════════════════════
+
+  private normalizeQuestionType(value: unknown): SupportedQuestionKind {
+    const questionType = String(value || 'SINGLE_CHOICE').toUpperCase();
+    if (
+      questionType === 'SINGLE_CHOICE' ||
+      questionType === 'MULTIPLE_CHOICE' ||
+      questionType === 'TRUE_FALSE' ||
+      questionType === 'SHORT_ANSWER' ||
+      questionType === 'MATCHING'
+    ) {
+      return questionType;
+    }
+    return 'SINGLE_CHOICE';
+  }
+
+  private splitMatchingPair(content: string): { left: string; right: string } {
+    const [left = '', ...rightParts] = content.split(/\s*(?:=>|->)\s*/);
+    return {
+      left: left.trim() || content,
+      right: rightParts.join(' -> ').trim() || content,
+    };
+  }
+
+  private async prepareHtmlForGift(html: string): Promise<string> {
+    let result = sanitizeRichQuestionHtml(html);
+    const sources = extractImageSources(result);
+    for (const src of sources) {
+      const dataUri = await this.imageSrcToDataUri(src);
+      result = result.replace(src, dataUri);
+    }
+    return result;
+  }
+
+  private async imageSrcToDataUri(src: string): Promise<string> {
+    if (src.startsWith('data:image/')) return src;
+
+    const objectName = objectNameFromQuestionImageSrc(src);
+    if (objectName) {
+      return readQuestionImageAsDataUri(objectName);
+    }
+
+    const response = await fetch(src);
+    if (!response.ok) {
+      throw new AppError(`Unable to download image for GIFT export: ${src}`, 400);
+    }
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.startsWith('image/')) {
+      throw new AppError(`Image URL did not return an image: ${src}`, 400);
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    if (arrayBuffer.byteLength > FILE_UPLOAD.MAX_QUESTION_IMAGE_SIZE) {
+      throw new AppError('Question image is too large to export to GIFT', 400);
+    }
+    return `data:${contentType};base64,${Buffer.from(arrayBuffer).toString('base64')}`;
+  }
 
   private async validateCurriculumRefs(
     subjectId: number,

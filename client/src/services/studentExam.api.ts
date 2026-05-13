@@ -5,6 +5,7 @@ import type {
   SaveAnswersResponse,
   SubmitExamResponse,
   AttemptResultData,
+  StudentAnswerValue,
 } from '@/types/exam';
 import { API_ENDPOINTS } from '@/utils/constants';
 
@@ -50,7 +51,7 @@ export async function startStudentExam(
 
 export async function saveStudentAnswers(
   attemptId: number,
-  answers: Record<string, number | null>,
+  answers: Record<string, StudentAnswerValue>,
 ): Promise<ServerResponse<SaveAnswersResponse>> {
   const { data } = await api.put<ServerResponse<SaveAnswersResponse>>(
     API_ENDPOINTS.STUDENT_EXAMS.SAVE(attemptId),
@@ -61,7 +62,7 @@ export async function saveStudentAnswers(
 
 export async function submitStudentExam(
   attemptId: number,
-  answers?: Record<string, number | null>,
+  answers?: Record<string, StudentAnswerValue>,
 ): Promise<ServerResponse<SubmitExamResponse>> {
   const { data } = await api.post<ServerResponse<SubmitExamResponse>>(
     API_ENDPOINTS.STUDENT_EXAMS.SUBMIT(attemptId),

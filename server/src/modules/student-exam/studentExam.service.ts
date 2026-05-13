@@ -17,6 +17,13 @@ import type {
 const REDIS_KEY_PREFIX = 'attempt';
 const BUFFER_MINUTES = 5;
 
+type StudentAnswerValue =
+  | number
+  | number[]
+  | string
+  | Record<string, string>
+  | null;
+
 function redisAnswerKey(attemptId: number): string {
   return `${REDIS_KEY_PREFIX}:${attemptId}:answers`;
 }
@@ -28,6 +35,78 @@ function shuffleArray<T>(arr: T[]): T[] {
     [a[i], a[j]] = [a[j], a[i]];
   }
   return a;
+}
+
+function normalizeTextAnswer(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function splitShortAnswerAlternatives(answer: string): string[] {
+  const alternatives: string[] = [];
+  let current = '';
+  const stack: string[] = [];
+  let quote: string | null = null;
+  const matchingClose: Record<string, string> = {
+    '[': ']',
+    '(': ')',
+    '{': '}',
+  };
+
+  for (const char of answer) {
+    if (quote) {
+      current += char;
+      if (char === quote) quote = null;
+      continue;
+    }
+
+    if (char === '"' || char === "'") {
+      current += char;
+      quote = char;
+      continue;
+    }
+
+    if (char === '[' || char === '(' || char === '{') {
+      stack.push(matchingClose[char]);
+      current += char;
+      continue;
+    }
+
+    if (stack.length > 0 && char === stack[stack.length - 1]) {
+      stack.pop();
+      current += char;
+      continue;
+    }
+
+    if (char === ';' && stack.length === 0) {
+      if (current.trim()) alternatives.push(current.trim());
+      current = '';
+      continue;
+    }
+
+    current += char;
+  }
+
+  if (current.trim()) alternatives.push(current.trim());
+  return alternatives;
+}
+
+function normalizeSelectedIds(value: StudentAnswerValue): number[] {
+  if (Array.isArray(value)) {
+    return [...new Set(value.map(Number).filter((id) => Number.isInteger(id) && id > 0))].sort(
+      (a, b) => a - b,
+    );
+  }
+  if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
+    return [value];
+  }
+  return [];
+}
+
+function splitMatchingPair(content: string): [string, string] | null {
+  const [left = '', ...rightParts] = content.split(/\s*=>\s*/);
+  const right = rightParts.join(' => ').trim();
+  if (!left.trim() || !right) return null;
+  return [left.trim(), right];
 }
 
 export class StudentExamService {
@@ -483,6 +562,16 @@ export class StudentExamService {
 
     const questionDetails = attempt.attemptAnswers.map((ans) => {
       const correctOptions = ans.question.options.filter((o) => o.isCorrect);
+      const selectedOptionIds = Array.isArray(ans.selectedOptionIds)
+        ? ans.selectedOptionIds.filter((id): id is number => typeof id === 'number')
+        : [];
+      const selectedOptions = ans.question.options
+        .filter((o) => selectedOptionIds.includes(o.id))
+        .map((o) => ({
+          id: o.id,
+          label: o.label,
+          content: o.content,
+        }));
       return {
         questionId: ans.questionId,
         content: ans.question.content,
@@ -491,6 +580,8 @@ export class StudentExamService {
         topic: ans.question.topic,
         explanation: ans.question.explanation,
         selectedOption: ans.selectedOption,
+        selectedOptions,
+        answerText: ans.answerText,
         correctOptions: correctOptions.map((o) => ({
           id: o.id,
           label: o.label,
@@ -608,13 +699,13 @@ export class StudentExamService {
 
   private async processSubmission(
     attempt: NonNullable<Awaited<ReturnType<typeof this.getAttemptWithExam>>>,
-    requestAnswers?: Record<string, number | null>,
+    requestAnswers?: Record<string, StudentAnswerValue>,
     isAuto = false,
   ) {
     const redis = getRedisClient();
     const key = redisAnswerKey(attempt.id);
 
-    let answers: Record<string, number | null> = {};
+    let answers: Record<string, StudentAnswerValue> = {};
     const redisData = await redis.get(key);
     if (redisData) {
       answers = JSON.parse(redisData);
@@ -637,6 +728,8 @@ export class StudentExamService {
       attemptId: number;
       questionId: number;
       selectedOptionId: number | null;
+      selectedOptionIds: Prisma.InputJsonValue | typeof Prisma.JsonNull;
+      answerText: string | null;
       isCorrect: boolean;
       timeSpentSec: number | null;
       answerChanges: number;
@@ -644,12 +737,56 @@ export class StudentExamService {
 
     for (const eq of examQuestions) {
       const questionIdStr = String(eq.questionId);
-      const selectedOptionId = answers[questionIdStr] ?? null;
+      const selectedAnswer = (answers[questionIdStr] ?? null) as StudentAnswerValue;
 
+      let selectedOptionId: number | null = null;
+      let selectedOptionIds: number[] | null = null;
+      let answerText: string | null = null;
       let isCorrect = false;
-      if (selectedOptionId !== null) {
-        const correctOption = eq.question.options.find((o) => o.isCorrect);
-        isCorrect = correctOption?.id === selectedOptionId;
+
+      if (eq.question.questionType === 'MULTIPLE_CHOICE') {
+        const selectedIds = normalizeSelectedIds(selectedAnswer);
+        const correctIds = eq.question.options
+          .filter((option) => option.isCorrect)
+          .map((option) => option.id)
+          .sort((a, b) => a - b);
+        selectedOptionIds = selectedIds.length > 0 ? selectedIds : null;
+        selectedOptionId = selectedIds[0] ?? null;
+        isCorrect =
+          selectedIds.length > 0 &&
+          selectedIds.length === correctIds.length &&
+          selectedIds.every((id, idx) => id === correctIds[idx]);
+      } else if (eq.question.questionType === 'SHORT_ANSWER') {
+        answerText = typeof selectedAnswer === 'string' ? selectedAnswer : null;
+        const normalized = answerText ? normalizeTextAnswer(answerText) : '';
+        const accepted = eq.question.options
+          .filter((option) => option.isCorrect)
+          .flatMap((option) => splitShortAnswerAlternatives(option.content))
+          .map(normalizeTextAnswer)
+          .filter(Boolean);
+        isCorrect = normalized.length > 0 && accepted.includes(normalized);
+      } else if (eq.question.questionType === 'MATCHING') {
+        const response =
+          selectedAnswer && typeof selectedAnswer === 'object' && !Array.isArray(selectedAnswer)
+            ? selectedAnswer
+            : {};
+        answerText = JSON.stringify(response);
+        const pairs = eq.question.options
+          .map((option) => {
+            const pair = splitMatchingPair(option.content);
+            return pair ? { label: option.label, right: normalizeTextAnswer(pair[1]) } : null;
+          })
+          .filter((pair): pair is { label: string; right: string } => pair !== null);
+        isCorrect =
+          pairs.length > 0 &&
+          pairs.every((pair) => normalizeTextAnswer(response[pair.label] || '') === pair.right);
+      } else {
+        const selectedIds = normalizeSelectedIds(selectedAnswer);
+        selectedOptionId = selectedIds[0] ?? null;
+        if (selectedOptionId !== null) {
+          const correctOption = eq.question.options.find((o) => o.isCorrect);
+          isCorrect = correctOption?.id === selectedOptionId;
+        }
       }
 
       if (isCorrect) {
@@ -660,6 +797,8 @@ export class StudentExamService {
         attemptId: attempt.id,
         questionId: eq.questionId,
         selectedOptionId,
+        selectedOptionIds: selectedOptionIds ?? Prisma.JsonNull,
+        answerText,
         isCorrect,
         timeSpentSec: null,
         answerChanges: 0,
@@ -819,7 +958,7 @@ export class StudentExamService {
   // INTERNAL: Get saved answers from Redis
   // ═══════════════════════════════════════════════
 
-  private async getSavedAnswers(attemptId: number): Promise<Record<string, number | null>> {
+  private async getSavedAnswers(attemptId: number): Promise<Record<string, StudentAnswerValue>> {
     try {
       const redis = getRedisClient();
       const data = await redis.get(redisAnswerKey(attemptId));

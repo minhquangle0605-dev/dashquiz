@@ -107,3 +107,19 @@ body {
   background-color: var(--color-bg-page);
   color: var(--color-text-primary);
 }
+
+.rich-text-editor:empty::before {
+  content: attr(data-placeholder);
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.rich-text-editor img {
+  display: block;
+  max-width: 100%;
+  max-height: 320px;
+  margin: 0.5rem 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  object-fit: contain;
+}

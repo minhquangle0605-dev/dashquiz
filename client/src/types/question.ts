@@ -12,7 +12,12 @@ export interface QuestionTag {
   tagName: string;
 }
 
-export type QuestionKind = 'SINGLE_CHOICE';
+export type QuestionKind =
+  | 'SINGLE_CHOICE'
+  | 'MULTIPLE_CHOICE'
+  | 'TRUE_FALSE'
+  | 'SHORT_ANSWER'
+  | 'MATCHING';
 
 export interface Question {
   id: number;
@@ -74,18 +79,21 @@ export interface ImportQuestionResult {
 // ── AI / Document extraction ──────────────────────
 
 export interface ExtractedOption {
-  label: 'A' | 'B' | 'C' | 'D';
+  label: string;
   content: string;
   isCorrect: boolean;
 }
 
 export interface ExtractedQuestion {
   content: string;
-  questionType: 'SINGLE_CHOICE';
+  questionType: QuestionKind;
   difficulty: number;
   explanation: string | null;
   options: ExtractedOption[];
   warnings: string[];
+  errors?: string[];
+  sourceLine?: number | null;
+  sourceText?: string;
 }
 
 export interface ExtractFromDocumentResult {
@@ -93,6 +101,7 @@ export interface ExtractFromDocumentResult {
   source: 'openai' | 'regex';
   questions: ExtractedQuestion[];
   warnings: string[];
+  templateRules?: string[];
 }
 
 export interface BulkCreateResult {
