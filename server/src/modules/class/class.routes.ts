@@ -40,6 +40,15 @@ router.get(
   classController.downloadImportTemplate,
 );
 
+// ── List my enrolled classes (GET /api/classes/my) ─
+// Returns the classes the authenticated student belongs to.
+router.get(
+  '/my',
+  authenticate,
+  authorize(ROLES.STUDENT),
+  classController.listMyClasses,
+);
+
 // ── List classes (GET /api/classes) ──────────────
 router.get(
   '/',

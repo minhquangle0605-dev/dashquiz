@@ -21,6 +21,7 @@ export const validate = (schema: z.ZodType, source: 'body' | 'query' = 'body') =
 
       if (source === 'query') {
         (req as Request & { validatedQuery: unknown }).validatedQuery = result.data;
+        req.query = result.data as any;
       } else {
         req.body = result.data;
       }

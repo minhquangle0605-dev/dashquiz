@@ -20,6 +20,7 @@ import {
   updateQuestion,
   addTags,
 } from '@/services/question.api';
+import { MathText } from './MathText';
 
 interface OptionField {
   label: string;
@@ -261,8 +262,9 @@ export function QuestionFormModal({
 
         {/* Question content */}
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-slate-700">
-            Question Content
+          <label className="mb-1.5 flex justify-between text-sm font-medium text-slate-700">
+            <span>Question Content</span>
+            <span className="text-xs font-normal text-slate-500">Supports LaTeX (e.g. $x^2$)</span>
           </label>
           <textarea
             rows={4}
@@ -271,6 +273,11 @@ export function QuestionFormModal({
             value={content}
             onChange={(e) => setContent(e.target.value)}
           />
+          {content.includes('$') && (
+            <div className="mt-2 rounded-lg border border-slate-100 bg-slate-50 p-3 text-sm text-slate-800">
+              <MathText>{content}</MathText>
+            </div>
+          )}
         </div>
 
         {/* Answer options */}
@@ -296,13 +303,20 @@ export function QuestionFormModal({
                 >
                   {opt.label}
                 </button>
-                <input
-                  type="text"
-                  className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                  placeholder={`Option ${opt.label}...`}
-                  value={opt.content}
-                  onChange={(e) => setOptionContent(idx, e.target.value)}
-                />
+                <div className="flex-1 flex flex-col gap-1">
+                  <input
+                    type="text"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                    placeholder={`Option ${opt.label}...`}
+                    value={opt.content}
+                    onChange={(e) => setOptionContent(idx, e.target.value)}
+                  />
+                  {opt.content.includes('$') && (
+                    <div className="rounded border border-slate-100 bg-slate-50 px-2 py-1 text-sm text-slate-700">
+                      <MathText>{opt.content}</MathText>
+                    </div>
+                  )}
+                </div>
                 {opt.isCorrect && (
                   <svg
                     className="h-5 w-5 shrink-0 text-emerald-500"

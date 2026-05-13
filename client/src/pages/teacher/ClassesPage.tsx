@@ -39,7 +39,7 @@ export default function ClassesPage() {
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [subjects, setSubjects] = useState<CurriculumSubject[]>([]);
-  const [semesters, setSemesters] = useState<SemesterOption[]>([]);
+  const [, setSemesters] = useState<SemesterOption[]>([]);
 
   const [selectedClass, setSelectedClass] = useState<ClassItem | null>(null);
   const [students, setStudents] = useState<ClassStudent[]>([]);
@@ -50,11 +50,11 @@ export default function ClassesPage() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [editingClass, setEditingClass] = useState<ClassItem | null>(null);
 
-  const [createForm, setCreateForm] = useState<CreateClassPayload>({
+  const [createForm, setCreateForm] = useState<CreateClassPayload & { academicYearString?: string }>({
     name: '',
     gradeLevel: 10,
-    semesterId: 0,
     subjectId: 0,
+    academicYearString: '',
   });
   const [createSaving, setCreateSaving] = useState(false);
 
@@ -110,7 +110,7 @@ export default function ClassesPage() {
   };
 
   const handleCreateClass = async () => {
-    if (!createForm.name.trim() || !createForm.subjectId || !createForm.semesterId) {
+    if (!createForm.name.trim() || !createForm.subjectId || !createForm.academicYearString) {
       toast.error('Please fill in all required fields.');
       return;
     }
@@ -119,7 +119,7 @@ export default function ClassesPage() {
       await createClass(createForm);
       toast.success('Class created successfully!');
       setShowCreateModal(false);
-      setCreateForm({ name: '', gradeLevel: 10, semesterId: 0, subjectId: 0 });
+      setCreateForm({ name: '', gradeLevel: 10, subjectId: 0, academicYearString: '' });
       fetchClasses();
     } catch {
       toast.error('Failed to create class.');
@@ -147,8 +147,8 @@ export default function ClassesPage() {
     setCreateForm({
       name: cls.name,
       gradeLevel: cls.gradeLevel,
-      semesterId: cls.semesterId,
       subjectId: cls.subjectId,
+      academicYearString: cls.semester?.academicYear?.name || '',
     });
     setEditingClass(cls);
   };
@@ -224,7 +224,7 @@ export default function ClassesPage() {
           <h1 className="text-2xl font-bold text-slate-900">Classes</h1>
           <p className="mt-0.5 text-sm text-slate-500">Manage your classes and students</p>
         </div>
-        <Button variant="primary" size="md" onClick={() => { setEditingClass(null); setCreateForm({ name: '', gradeLevel: 10, semesterId: 0, subjectId: 0 }); setShowCreateModal(true); }}>
+        <Button variant="primary" size="md" onClick={() => { setEditingClass(null); setCreateForm({ name: '', gradeLevel: 10, subjectId: 0, academicYearString: '' }); setShowCreateModal(true); }}>
           <svg className="mr-1.5 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
           </svg>
@@ -410,18 +410,21 @@ export default function ClassesPage() {
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Semester</label>
-            <select
+            <input
+              type="text"
+              placeholder="20xx - 20yy"
               className={selectBase}
-              value={createForm.semesterId || ''}
-              onChange={(e) => setCreateForm((p) => ({ ...p, semesterId: Number(e.target.value) }))}
-            >
-              <option value="">Select semester</option>
-              {semesters.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}{s.academicYear ? ` (${s.academicYear.name})` : ''}
-                </option>
-              ))}
-            </select>
+              value={createForm.academicYearString || ''}
+              onChange={(e) => {
+                let val = e.target.value;
+                // If user types exactly 4 digits, auto format to 20xx - 20yy
+                if (/^\d{4}$/.test(val)) {
+                  const startYear = parseInt(val, 10);
+                  val = `${startYear} - ${startYear + 1}`;
+                }
+                setCreateForm((p) => ({ ...p, academicYearString: val }));
+              }}
+            />
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => { setShowCreateModal(false); setEditingClass(null); }}>

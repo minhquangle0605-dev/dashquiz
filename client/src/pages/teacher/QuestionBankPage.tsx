@@ -10,10 +10,12 @@ import {
   emptyCurriculumSelection,
   type CurriculumSelection,
 } from '@/components/shared/SubjectChapterTopicSelect';
+import { MathText } from '@/components/shared/MathText';
 import { QuestionFormModal } from '@/components/shared/QuestionFormModal';
 import { ImportExcelModal } from '@/components/shared/ImportExcelModal';
+import { ImportDocumentModal } from '@/components/shared/ImportDocumentModal';
 import { useDebounce } from '@/hooks/useDebounce';
-import { listQuestions, deleteQuestion } from '@/services/question.api';
+import { listQuestions, deleteQuestion, bulkDeleteQuestions } from '@/services/question.api';
 import type { Question, QuestionFilter } from '@/types/question';
 import type { PaginatedResponse } from '@/types/api';
 
@@ -38,7 +40,10 @@ export default function QuestionBankPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editQuestion, setEditQuestion] = useState<Question | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showImportDocModal, setShowImportDocModal] = useState(false);
   const [deleting, setDeleting] = useState<number | null>(null);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   // ── Fetch questions ───────────────────────────────
@@ -73,6 +78,7 @@ export default function QuestionBankPage() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setPage(1);
+    setSelectedIds([]);
   }, [curriculum, difficultyFilter, debouncedSearch]);
 
   // ── Handlers ──────────────────────────────────────
@@ -88,6 +94,23 @@ export default function QuestionBankPage() {
       toast.error('Failed to delete question.');
     } finally {
       setDeleting(null);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    if (!window.confirm(`Delete ${selectedIds.length} selected question(s)? This action cannot be undone.`))
+      return;
+    setBulkDeleting(true);
+    try {
+      await bulkDeleteQuestions(selectedIds);
+      toast.success(`Deleted ${selectedIds.length} question(s).`);
+      setSelectedIds([]);
+      fetchQuestions();
+    } catch {
+      toast.error('Failed to delete questions.');
+    } finally {
+      setBulkDeleting(false);
     }
   };
 
@@ -251,6 +274,50 @@ export default function QuestionBankPage() {
             </div>
 
             <div className="flex items-center gap-2">
+              {selectedIds.length > 0 && (
+                <Button
+                  variant="danger"
+                  size="md"
+                  isLoading={bulkDeleting}
+                  onClick={handleBulkDelete}
+                >
+                  <svg
+                    className="mr-1.5 h-4 w-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                    />
+                  </svg>
+                  Delete Selected ({selectedIds.length})
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                size="md"
+                onClick={() => setShowImportDocModal(true)}
+                title="Extract questions from Word or PDF using AI"
+              >
+                <svg
+                  className="mr-1.5 h-4 w-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+                  />
+                </svg>
+                AI Import (Word/PDF)
+              </Button>
               <Button
                 variant="outline"
                 size="md"
@@ -377,6 +444,23 @@ export default function QuestionBankPage() {
           {/* Question list */}
           {!loading && questions.length > 0 && (
             <div className="space-y-3">
+              <div className="flex items-center px-1 mb-2">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600 cursor-pointer"
+                    checked={questions.length > 0 && selectedIds.length === questions.length}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedIds(questions.map((q) => q.id));
+                      } else {
+                        setSelectedIds([]);
+                      }
+                    }}
+                  />
+                  <span className="text-sm font-medium text-slate-600">Select All on Page</span>
+                </label>
+              </div>
               {questions.map((q) => {
                 const isExpanded = expandedId === q.id;
                 return (
@@ -386,14 +470,29 @@ export default function QuestionBankPage() {
                     className="overflow-hidden transition-shadow hover:shadow-md"
                   >
                     {/* Collapsed card */}
-                    <button
-                      type="button"
-                      className="flex w-full items-start gap-4 p-5 text-left"
-                      onClick={() =>
-                        setExpandedId(isExpanded ? null : q.id)
-                      }
-                    >
-                      <div className="flex-1 min-w-0">
+                    <div className="flex w-full items-start p-5">
+                      <div className="mr-4 mt-1">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600 cursor-pointer"
+                          checked={selectedIds.includes(q.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedIds((prev) => [...prev, q.id]);
+                            } else {
+                              setSelectedIds((prev) => prev.filter((id) => id !== q.id));
+                            }
+                          }}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        className="flex-1 flex items-start text-left min-w-0"
+                        onClick={() =>
+                          setExpandedId(isExpanded ? null : q.id)
+                        }
+                      >
+                        <div className="flex-1 min-w-0">
                         <div className="mb-2 flex flex-wrap items-center gap-2">
                           <DifficultyBadge level={q.difficulty} />
                           <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
@@ -412,9 +511,9 @@ export default function QuestionBankPage() {
                             </span>
                           )}
                         </div>
-                        <p className="text-sm font-medium text-slate-800 line-clamp-2">
-                          {q.content}
-                        </p>
+                        <div className="text-sm font-medium text-slate-800 line-clamp-2">
+                          <MathText>{q.content}</MathText>
+                        </div>
                         {q.tags.length > 0 && (
                           <div className="mt-2 flex flex-wrap gap-1.5">
                             {q.tags.map((tag) => (
@@ -443,14 +542,15 @@ export default function QuestionBankPage() {
                           d="M19 9l-7 7-7-7"
                         />
                       </svg>
-                    </button>
+                      </button>
+                    </div>
 
                     {/* Expanded details */}
                     {isExpanded && (
                       <div className="border-t border-slate-100 bg-slate-50/50 px-5 pb-5 pt-4">
-                        <p className="mb-4 whitespace-pre-wrap text-sm text-slate-800">
-                          {q.content}
-                        </p>
+                        <div className="mb-4 whitespace-pre-wrap text-sm text-slate-800">
+                          <MathText>{q.content}</MathText>
+                        </div>
 
                         {/* Options */}
                         <div className="mb-4 space-y-2">
@@ -472,7 +572,7 @@ export default function QuestionBankPage() {
                               >
                                 {opt.label}
                               </span>
-                              <span className="flex-1">{opt.content}</span>
+                              <div className="flex-1 overflow-hidden"><MathText>{opt.content}</MathText></div>
                               {opt.isCorrect && (
                                 <svg
                                   className="h-5 w-5 shrink-0 text-emerald-500"
@@ -496,9 +596,9 @@ export default function QuestionBankPage() {
                             <p className="text-xs font-semibold text-amber-800">
                               Explanation
                             </p>
-                            <p className="mt-1 text-sm text-amber-700">
-                              {q.explanation}
-                            </p>
+                            <div className="mt-1 text-sm text-amber-700">
+                              <MathText>{q.explanation}</MathText>
+                            </div>
                           </div>
                         )}
 
@@ -622,6 +722,12 @@ export default function QuestionBankPage() {
       <ImportExcelModal
         isOpen={showImportModal}
         onClose={() => setShowImportModal(false)}
+        onImported={fetchQuestions}
+      />
+
+      <ImportDocumentModal
+        isOpen={showImportDocModal}
+        onClose={() => setShowImportDocModal(false)}
         onImported={fetchQuestions}
       />
     </div>

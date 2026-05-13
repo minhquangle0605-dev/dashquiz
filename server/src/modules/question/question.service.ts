@@ -323,6 +323,166 @@ export class QuestionService {
   }
 
   // ═══════════════════════════════════════════════
+  // BULK DELETE QUESTIONS
+  // ═══════════════════════════════════════════════
+
+  async bulkDelete(ids: number[]) {
+    if (!Array.isArray(ids) || ids.length === 0) {
+      throw new AppError('No question IDs provided', 400);
+    }
+
+    const questions = await prisma.question.findMany({
+      where: { id: { in: ids } },
+      include: {
+        examQuestions: {
+          include: {
+            exam: { select: { id: true, title: true, status: true } },
+          },
+        },
+      },
+    });
+
+    if (questions.length === 0) {
+      throw new AppError('No questions found to delete', 404);
+    }
+
+    const activeExams = questions.flatMap(q => q.examQuestions)
+      .filter(eq => eq.exam.status === 'PUBLISHED' || eq.exam.status === 'SCHEDULED');
+
+    if (activeExams.length > 0) {
+      const examTitles = [...new Set(activeExams.map((eq) => eq.exam.title))].join(', ');
+      throw new AppError(
+        `Cannot delete: some questions are used in active exam(s): ${examTitles}`,
+        409,
+      );
+    }
+
+    const deleteResult = await prisma.question.deleteMany({
+      where: { id: { in: ids } },
+    });
+
+    await this.invalidateQuestionListCaches();
+
+    return {
+      success: true,
+      message: `Successfully deleted ${deleteResult.count} question(s)`,
+      data: null,
+    };
+  }
+
+  // ═══════════════════════════════════════════════
+  // BULK CREATE (for document-import preview confirmation)
+  // ═══════════════════════════════════════════════
+
+  async bulkCreate(
+    questions: Array<{
+      content: string;
+      questionType: 'SINGLE_CHOICE';
+      difficulty: number;
+      explanation: string | null;
+      options: Array<{ label: string; content: string; isCorrect: boolean }>;
+    }>,
+    meta: { subjectId: number; chapterId: number; topicId: number },
+    userId: number,
+  ) {
+    await this.validateCurriculumRefs(meta.subjectId, meta.chapterId, meta.topicId);
+
+    if (!Array.isArray(questions) || questions.length === 0) {
+      throw new AppError('No questions provided', 400);
+    }
+
+    const errors: Array<{ index: number; message: string }> = [];
+    const valid: typeof questions = [];
+
+    questions.forEach((q, idx) => {
+      const stem = String(q.content || '').trim();
+      if (!stem) {
+        errors.push({ index: idx, message: 'Question content is empty' });
+        return;
+      }
+      if (!Array.isArray(q.options) || q.options.length !== 4) {
+        errors.push({ index: idx, message: 'Must have exactly 4 options' });
+        return;
+      }
+      const labels = q.options.map((o) => String(o.label).toUpperCase());
+      if (!['A', 'B', 'C', 'D'].every((l) => labels.includes(l))) {
+        errors.push({ index: idx, message: 'Options must be labelled A, B, C, D' });
+        return;
+      }
+      if (q.options.some((o) => !String(o.content || '').trim())) {
+        errors.push({ index: idx, message: 'All options must have content' });
+        return;
+      }
+      const correctCount = q.options.filter((o) => o.isCorrect).length;
+      if (correctCount !== 1) {
+        errors.push({
+          index: idx,
+          message: 'Exactly one option must be marked correct',
+        });
+        return;
+      }
+      const diff = Number(q.difficulty);
+      if (!Number.isInteger(diff) || diff < 1 || diff > 5) {
+        errors.push({
+          index: idx,
+          message: 'Difficulty must be an integer between 1 and 5',
+        });
+        return;
+      }
+      valid.push({
+        content: stem,
+        questionType: 'SINGLE_CHOICE',
+        difficulty: diff,
+        explanation: q.explanation ? String(q.explanation).trim() : null,
+        options: q.options.map((o) => ({
+          label: String(o.label).toUpperCase(),
+          content: String(o.content).trim(),
+          isCorrect: Boolean(o.isCorrect),
+        })),
+      });
+    });
+
+    if (valid.length === 0) {
+      return {
+        success: false,
+        message: 'No valid questions to import',
+        data: { imported: 0, failed: questions.length, errors },
+      };
+    }
+
+    const created = await prisma.$transaction(
+      valid.map((q) =>
+        prisma.question.create({
+          data: {
+            subjectId: meta.subjectId,
+            chapterId: meta.chapterId,
+            topicId: meta.topicId,
+            content: q.content,
+            questionType: 'SINGLE_CHOICE',
+            difficulty: q.difficulty,
+            explanation: q.explanation,
+            createdBy: userId,
+            options: { create: q.options },
+          },
+        }),
+      ),
+    );
+
+    await this.invalidateQuestionListCaches();
+
+    return {
+      success: true,
+      message: `Imported ${created.length} question(s) successfully`,
+      data: {
+        imported: created.length,
+        failed: questions.length - valid.length,
+        total: questions.length,
+        errors: errors.length > 0 ? errors : null,
+      },
+    };
+  }
+
+  // ═══════════════════════════════════════════════
   // IMPORT FROM EXCEL
   // ═══════════════════════════════════════════════
 

@@ -71,6 +71,37 @@ export interface ImportQuestionResult {
   errors: Array<{ row: number; message: string }>;
 }
 
+// ── AI / Document extraction ──────────────────────
+
+export interface ExtractedOption {
+  label: 'A' | 'B' | 'C' | 'D';
+  content: string;
+  isCorrect: boolean;
+}
+
+export interface ExtractedQuestion {
+  content: string;
+  questionType: 'SINGLE_CHOICE';
+  difficulty: number;
+  explanation: string | null;
+  options: ExtractedOption[];
+  warnings: string[];
+}
+
+export interface ExtractFromDocumentResult {
+  rawTextPreview: string;
+  source: 'openai' | 'regex';
+  questions: ExtractedQuestion[];
+  warnings: string[];
+}
+
+export interface BulkCreateResult {
+  imported: number;
+  failed: number;
+  total: number;
+  errors?: Array<{ index: number; message: string }> | null;
+}
+
 export interface CurriculumSubject {
   id: number;
   name: string;

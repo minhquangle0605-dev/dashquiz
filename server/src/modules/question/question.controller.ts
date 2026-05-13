@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import { questionService } from './question.service';
+import { questionExtractService } from './question.extract.service';
 import { AppError } from '../../middlewares/errorHandler';
 import type { ListQuestionsQuery } from './question.validation';
 
@@ -97,6 +98,27 @@ export async function deleteQuestion(
 }
 
 // ═══════════════════════════════════════════════
+// BULK DELETE QUESTIONS (POST /api/questions/bulk-delete)
+// ═══════════════════════════════════════════════
+
+export async function bulkDeleteQuestions(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const ids = req.body.ids;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      throw new AppError('Question IDs are required', 400);
+    }
+    const result = await questionService.bulkDelete(ids);
+    res.json(result);
+  } catch (error: unknown) {
+    next(error instanceof Error ? error : new Error('Unexpected error'));
+  }
+}
+
+// ═══════════════════════════════════════════════
 // IMPORT FROM EXCEL (POST /api/questions/import)
 // ═══════════════════════════════════════════════
 
@@ -150,6 +172,77 @@ export async function downloadImportTemplate(
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     );
     res.send(buffer);
+  } catch (error: unknown) {
+    next(error instanceof Error ? error : new Error('Unexpected error'));
+  }
+}
+
+// ═══════════════════════════════════════════════
+// EXTRACT QUESTIONS FROM WORD/PDF (POST /api/questions/extract-from-document)
+// ═══════════════════════════════════════════════
+
+export async function extractFromDocument(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (!req.user) throw new AppError('Authentication required', 401);
+    if (!req.file) throw new AppError('Document file is required', 400);
+
+    const result = await questionExtractService.extractFromDocument(
+      req.file.buffer,
+      req.file.mimetype,
+      req.file.originalname || '',
+    );
+
+    res.json({
+      success: true,
+      message: `Detected ${result.questions.length} question(s)`,
+      data: result,
+    });
+  } catch (error: unknown) {
+    next(error instanceof Error ? error : new Error('Unexpected error'));
+  }
+}
+
+// ═══════════════════════════════════════════════
+// BULK CREATE QUESTIONS (POST /api/questions/bulk-create)
+// Used after the teacher confirms the extracted preview.
+// ═══════════════════════════════════════════════
+
+export async function bulkCreateQuestions(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (!req.user) throw new AppError('Authentication required', 401);
+
+    const meta = {
+      subjectId: Number(req.body?.subjectId),
+      chapterId: Number(req.body?.chapterId),
+      topicId: Number(req.body?.topicId),
+    };
+
+    if (!meta.subjectId || !meta.chapterId || !meta.topicId) {
+      throw new AppError(
+        'subjectId, chapterId, and topicId are required',
+        400,
+      );
+    }
+
+    const questions = Array.isArray(req.body?.questions) ? req.body.questions : [];
+    if (questions.length === 0) {
+      throw new AppError('No questions to create', 400);
+    }
+
+    const result = await questionService.bulkCreate(
+      questions,
+      meta,
+      req.user.id,
+    );
+    res.status(result.success ? 201 : 200).json(result);
   } catch (error: unknown) {
     next(error instanceof Error ? error : new Error('Unexpected error'));
   }

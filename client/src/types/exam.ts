@@ -229,6 +229,7 @@ export interface CreateExamPayload {
   title: string;
   subjectId: number;
   durationMin: number;
+  totalQuestions: number;
   passingScore?: number;
   shuffle?: boolean;
   showResult?: boolean;
@@ -238,11 +239,14 @@ export interface CreateExamPayload {
 export interface UpdateExamPayload extends Partial<CreateExamPayload> {}
 
 export interface AddExamQuestionsPayload {
-  questions: Array<{
-    questionId: number;
-    orderIndex: number;
-    points: number;
-  }>;
+  mode: 'manual' | 'random';
+  questionIds?: number[];
+  randomConfig?: {
+    subjectId: number;
+    chapterIds?: number[];
+    difficulty?: number;
+    count: number;
+  };
 }
 
 export interface ScheduleExamPayload {
@@ -287,8 +291,9 @@ export interface ClassStudent {
 export interface CreateClassPayload {
   name: string;
   gradeLevel: number;
-  semesterId: number;
+  semesterId?: number;
   subjectId: number;
+  academicYearString?: string;
 }
 
 export interface UpdateClassPayload extends Partial<CreateClassPayload> {}

@@ -47,6 +47,7 @@ export const FILE_UPLOAD = {
   MAX_AVATAR_SIZE: 2 * 1024 * 1024, // 2MB
   ALLOWED_IMAGE_TYPES: ['image/jpeg', 'image/png', 'image/webp'],
   MAX_EXCEL_SIZE: 10 * 1024 * 1024, // 10MB
+  MAX_DOCUMENT_SIZE: 15 * 1024 * 1024, // 15MB (Word / PDF question imports)
 } as const;
 
 export const TOKEN_BLACKLIST_PREFIX = 'bl:' as const;

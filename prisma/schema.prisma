@@ -8,9 +8,9 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ═══════════════════════════════════════════════
+
 // ENUM TYPES (6)
-// ═══════════════════════════════════════════════
+
 
 enum UserStatus {
   ACTIVE
@@ -49,9 +49,9 @@ enum BackupStatus {
   FAILED
 }
 
-// ═══════════════════════════════════════════════
+
 // USER MANAGEMENT (4 models)
-// ═══════════════════════════════════════════════
+
 
 model Role {
   id          Int     @id @default(autoincrement())
@@ -108,9 +108,9 @@ model ParentStudent {
   @@map("parent_student")
 }
 
-// ═══════════════════════════════════════════════
+
 // ACADEMIC STRUCTURE (4 models)
-// ═══════════════════════════════════════════════
+
 
 model AcademicYear {
   id        Int      @id @default(autoincrement())
@@ -167,9 +167,9 @@ model ClassStudent {
   @@map("class_students")
 }
 
-// ═══════════════════════════════════════════════
+
 // CURRICULUM (4 models)
-// ═══════════════════════════════════════════════
+
 
 model Subject {
   id          Int     @id @default(autoincrement())
@@ -226,9 +226,9 @@ model TopicRelation {
   @@map("topic_relations")
 }
 
-// ═══════════════════════════════════════════════
+
 // QUESTION BANK (3 models)
-// ═══════════════════════════════════════════════
+
 
 model Question {
   id           Int          @id @default(autoincrement())
@@ -277,9 +277,9 @@ model QuestionTag {
   @@map("question_tags")
 }
 
-// ═══════════════════════════════════════════════
+
 // EXAM & TESTING (4 models)
-// ═══════════════════════════════════════════════
+
 
 model Exam {
   id             Int        @id @default(autoincrement())
@@ -344,9 +344,9 @@ model ExamAssignment {
   @@map("exam_assignments")
 }
 
-// ═══════════════════════════════════════════════
+
 // RESULTS & ANALYTICS (2 models)
-// ═══════════════════════════════════════════════
+
 
 model ExamAttempt {
   id              Int           @id @default(autoincrement())
@@ -384,9 +384,9 @@ model AttemptAnswer {
   @@map("attempt_answers")
 }
 
-// ═══════════════════════════════════════════════
+
 // AI ADAPTIVE (2 models)
-// ═══════════════════════════════════════════════
+
 
 model AiPracticeSession {
   id              Int      @id @default(autoincrement())
@@ -420,9 +420,9 @@ model AiGeneratedQuestion {
   @@map("ai_generated_questions")
 }
 
-// ═══════════════════════════════════════════════
+
 // SYSTEM ADMIN (5 models)
-// ═══════════════════════════════════════════════
+
 
 model Notification {
   id        Int      @id @default(autoincrement())

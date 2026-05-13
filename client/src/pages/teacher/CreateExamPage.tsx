@@ -189,6 +189,7 @@ export default function CreateExamPage() {
         title: form.title.trim(),
         subjectId: Number(form.subjectId),
         durationMin: form.durationMin,
+        totalQuestions: form.selectedQuestionIds.length,
         passingScore: form.passingScore,
         shuffle: form.shuffle,
         showResult: form.showResult,
@@ -196,11 +197,8 @@ export default function CreateExamPage() {
       });
 
       await addExamQuestions(exam.id, {
-        questions: form.selectedQuestionIds.map((qid, idx) => ({
-          questionId: qid,
-          orderIndex: idx + 1,
-          points: form.pointsPerQuestion,
-        })),
+        mode: 'manual',
+        questionIds: form.selectedQuestionIds,
       });
 
       if (form.scheduleEnabled && form.startTime && form.endTime) {

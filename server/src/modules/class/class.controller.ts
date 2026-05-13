@@ -19,6 +19,20 @@ export async function listClasses(req: Request, res: Response, next: NextFunctio
 }
 
 // ═══════════════════════════════════════════════
+// LIST MY ENROLLED CLASSES (GET /api/classes/my)
+// ═══════════════════════════════════════════════
+
+export async function listMyClasses(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    if (!req.user) throw new AppError('Authentication required', 401);
+    const result = await classService.listMyEnrolledClasses(req.user.id);
+    res.json(result);
+  } catch (error: unknown) {
+    next(error instanceof Error ? error : new Error('Unexpected error'));
+  }
+}
+
+// ═══════════════════════════════════════════════
 // CREATE CLASS (POST /api/classes)
 // ═══════════════════════════════════════════════
 

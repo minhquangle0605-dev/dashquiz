@@ -7,8 +7,9 @@ import { z } from 'zod';
 export const createClassSchema = z.object({
   name: z.string().min(1, 'Class name is required').max(20),
   gradeLevel: z.coerce.number().int().min(10, 'Grade level 10-12').max(12, 'Grade level 10-12'),
-  semesterId: z.coerce.number().int().positive('Semester is required'),
+  semesterId: z.coerce.number().int().positive().optional(),
   subjectId: z.coerce.number().int().positive('Subject is required'),
+  academicYearString: z.string().optional(),
 });
 
 // ═══════════════════════════════════════════════
@@ -20,6 +21,7 @@ export const updateClassSchema = z.object({
   gradeLevel: z.coerce.number().int().min(10).max(12).optional(),
   semesterId: z.coerce.number().int().positive().optional(),
   subjectId: z.coerce.number().int().positive().optional(),
+  academicYearString: z.string().optional(),
 });
 
 // ═══════════════════════════════════════════════

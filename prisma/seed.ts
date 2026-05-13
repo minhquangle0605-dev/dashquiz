@@ -24,6 +24,9 @@ async function main() {
   console.log(`✓ ${roles.length} roles seeded`);
 
   const adminRole = roles.find((r) => r.name === 'admin')!;
+  const studentRole = roles.find((r) => r.name === 'student')!;
+  const teacherRole = roles.find((r) => r.name === 'teacher')!;
+  const parentRole = roles.find((r) => r.name === 'parent')!;
 
   // ── 2. Seed Admin Account (login: admin.web / 123456) ──
   const passwordHash = await bcrypt.hash('123456', 12);
@@ -49,6 +52,27 @@ async function main() {
     },
   });
   console.log(`✓ Admin account seeded: ${admin.username} (${admin.email})`);
+
+  const student = await prisma.user.upsert({
+    where: { username: 'student.demo' },
+    update: { email: 'student.demo@webquiz.local', passwordHash, roleId: studentRole.id, fullName: 'Demo Student', status: 'ACTIVE' },
+    create: { roleId: studentRole.id, username: 'student.demo', email: 'student.demo@webquiz.local', passwordHash, fullName: 'Demo Student', status: 'ACTIVE' },
+  });
+  console.log(`✓ Student account seeded: ${student.username}`);
+
+  const teacher = await prisma.user.upsert({
+    where: { username: 'teacher.demo' },
+    update: { email: 'teacher.demo@webquiz.local', passwordHash, roleId: teacherRole.id, fullName: 'Demo Teacher', status: 'ACTIVE' },
+    create: { roleId: teacherRole.id, username: 'teacher.demo', email: 'teacher.demo@webquiz.local', passwordHash, fullName: 'Demo Teacher', status: 'ACTIVE' },
+  });
+  console.log(`✓ Teacher account seeded: ${teacher.username}`);
+
+  const parent = await prisma.user.upsert({
+    where: { username: 'parent.demo' },
+    update: { email: 'parent.demo@webquiz.local', passwordHash, roleId: parentRole.id, fullName: 'Demo Parent', status: 'ACTIVE' },
+    create: { roleId: parentRole.id, username: 'parent.demo', email: 'parent.demo@webquiz.local', passwordHash, fullName: 'Demo Parent', status: 'ACTIVE' },
+  });
+  console.log(`✓ Parent account seeded: ${parent.username}`);
 
   // ── 3. Seed Subjects (Toán, Lý, Hóa — theo proposal) ──
   const subjectsData = [

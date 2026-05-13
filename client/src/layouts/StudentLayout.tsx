@@ -45,6 +45,15 @@ const iconProfile = (
     />
   </svg>
 );
+const iconClasses = (
+  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-2a4 4 0 100-8 4 4 0 000 8zm6 0a3 3 0 100-6 3 3 0 000 6zM7 12a3 3 0 100-6 3 3 0 000 6z"
+    />
+  </svg>
+);
 
 export default function StudentLayout() {
   return (
@@ -54,6 +63,7 @@ export default function StudentLayout() {
       activeNavClassName="bg-white text-indigo-900 shadow-sm"
       navItems={[
         { to: '/student/dashboard', label: 'Dashboard', end: true, icon: iconDashboard },
+        { to: '/student/classes', label: 'My Classes', icon: iconClasses },
         { to: '/student/knowledge-graph', label: 'Knowledge Graph', icon: iconGraph },
         { to: '/student/exams', label: 'Exams', icon: iconExam },
         { to: '/student/ai-practice', label: 'AI Practice', icon: iconAI },

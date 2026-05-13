@@ -81,12 +81,92 @@ export class ClassService {
   }
 
   // ═══════════════════════════════════════════════
+  // LIST CLASSES THE AUTHENTICATED STUDENT IS ENROLLED IN
+  // ═══════════════════════════════════════════════
+
+  async listMyEnrolledClasses(studentId: number) {
+    const enrollments = await prisma.classStudent.findMany({
+      where: { studentId },
+      include: {
+        class: {
+          include: {
+            teacher: { select: { id: true, fullName: true, email: true } },
+            subject: { select: { id: true, name: true, code: true } },
+            semester: {
+              select: {
+                id: true,
+                name: true,
+                academicYear: { select: { id: true, name: true } },
+              },
+            },
+            _count: { select: { classStudents: true, examAssignments: true } },
+          },
+        },
+      },
+      orderBy: { enrolledAt: 'desc' },
+    });
+
+    const classes = enrollments.map((e) => ({
+      ...e.class,
+      enrolledAt: e.enrolledAt,
+    }));
+
+    return {
+      success: true,
+      message: 'My classes retrieved successfully',
+      data: classes,
+    };
+  }
+
+  // ═══════════════════════════════════════════════
   // CREATE CLASS
   // ═══════════════════════════════════════════════
 
   async createClass(data: CreateClassInput, teacherId: number) {
+    let resolvedSemesterId = data.semesterId;
+
+    if (data.academicYearString) {
+      let academicYear = await prisma.academicYear.findFirst({
+        where: { name: data.academicYearString },
+      });
+
+      if (!academicYear) {
+        const startYearMatch = data.academicYearString.match(/(\d{4})/);
+        const startYear = startYearMatch ? parseInt(startYearMatch[1], 10) : new Date().getFullYear();
+        academicYear = await prisma.academicYear.create({
+          data: {
+            name: data.academicYearString,
+            startDate: new Date(`${startYear}-09-01`),
+            endDate: new Date(`${startYear + 1}-06-30`),
+            isCurrent: true,
+          },
+        });
+      }
+
+      let defaultSemester = await prisma.semester.findFirst({
+        where: { academicYearId: academicYear.id },
+      });
+
+      if (!defaultSemester) {
+        defaultSemester = await prisma.semester.create({
+          data: {
+            name: 'Học kỳ 1',
+            academicYearId: academicYear.id,
+            startDate: academicYear.startDate,
+            endDate: new Date(`${academicYear.startDate.getFullYear() + 1}-01-15`),
+          },
+        });
+      }
+
+      resolvedSemesterId = defaultSemester.id;
+    }
+
+    if (!resolvedSemesterId) {
+      throw new AppError('Semester is required', 400);
+    }
+
     const [semester, subject] = await Promise.all([
-      prisma.semester.findUnique({ where: { id: data.semesterId } }),
+      prisma.semester.findUnique({ where: { id: resolvedSemesterId } }),
       prisma.subject.findUnique({ where: { id: data.subjectId } }),
     ]);
 
@@ -97,7 +177,7 @@ export class ClassService {
       data: {
         name: data.name,
         gradeLevel: data.gradeLevel,
-        semesterId: data.semesterId,
+        semesterId: resolvedSemesterId,
         teacherId,
         subjectId: data.subjectId,
       },
@@ -133,8 +213,46 @@ export class ClassService {
       throw new AppError('You can only edit your own classes', 403);
     }
 
-    if (data.semesterId) {
-      const semester = await prisma.semester.findUnique({ where: { id: data.semesterId } });
+    let resolvedSemesterId = data.semesterId;
+
+    if (data.academicYearString) {
+      let academicYear = await prisma.academicYear.findFirst({
+        where: { name: data.academicYearString },
+      });
+
+      if (!academicYear) {
+        const startYearMatch = data.academicYearString.match(/(\d{4})/);
+        const startYear = startYearMatch ? parseInt(startYearMatch[1], 10) : new Date().getFullYear();
+        academicYear = await prisma.academicYear.create({
+          data: {
+            name: data.academicYearString,
+            startDate: new Date(`${startYear}-09-01`),
+            endDate: new Date(`${startYear + 1}-06-30`),
+            isCurrent: true,
+          },
+        });
+      }
+
+      let defaultSemester = await prisma.semester.findFirst({
+        where: { academicYearId: academicYear.id },
+      });
+
+      if (!defaultSemester) {
+        defaultSemester = await prisma.semester.create({
+          data: {
+            name: 'Học kỳ 1',
+            academicYearId: academicYear.id,
+            startDate: academicYear.startDate,
+            endDate: new Date(`${academicYear.startDate.getFullYear() + 1}-01-15`),
+          },
+        });
+      }
+
+      resolvedSemesterId = defaultSemester.id;
+    }
+
+    if (resolvedSemesterId) {
+      const semester = await prisma.semester.findUnique({ where: { id: resolvedSemesterId } });
       if (!semester) throw new AppError('Semester not found', 404);
     }
 
@@ -148,7 +266,7 @@ export class ClassService {
       data: {
         ...(data.name !== undefined && { name: data.name }),
         ...(data.gradeLevel !== undefined && { gradeLevel: data.gradeLevel }),
-        ...(data.semesterId !== undefined && { semesterId: data.semesterId }),
+        ...(resolvedSemesterId !== undefined && { semesterId: resolvedSemesterId }),
         ...(data.subjectId !== undefined && { subjectId: data.subjectId }),
       },
       include: {

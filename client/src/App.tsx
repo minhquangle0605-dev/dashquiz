@@ -18,6 +18,7 @@ const ExamListPage = lazy(() => import('./pages/student/ExamListPage'));
 const TakeExamPage = lazy(() => import('./pages/student/TakeExamPage'));
 const ExamResultPage = lazy(() => import('./pages/student/ExamResultPage'));
 const AIPracticePage = lazy(() => import('./pages/student/AIPracticePage'));
+const MyClassesPage = lazy(() => import('./pages/student/MyClassesPage'));
 
 const TeacherDashboard = lazy(() => import('./pages/teacher/DashboardPage'));
 const QuestionBankPage = lazy(() => import('./pages/teacher/QuestionBankPage'));
@@ -65,6 +66,7 @@ export default function App() {
           <Route path="/student" element={<StudentLayout />}>
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<StudentDashboard />} />
+            <Route path="classes" element={<MyClassesPage />} />
             <Route path="knowledge-graph" element={<KnowledgeGraphPage />} />
             <Route path="exams" element={<ExamListPage />} />
             <Route path="exams/:id/take" element={<TakeExamPage />} />

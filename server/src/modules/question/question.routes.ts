@@ -31,6 +31,30 @@ const upload = multer({
   },
 });
 
+// Multer instance for Word/PDF document extraction (separate from Excel filter)
+const documentUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: FILE_UPLOAD.MAX_DOCUMENT_SIZE },
+  fileFilter: (_req, file, cb) => {
+    const allowedMimes = [
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/msword',
+      'application/pdf',
+    ];
+    const name = (file.originalname || '').toLowerCase();
+    if (
+      allowedMimes.includes(file.mimetype) ||
+      name.endsWith('.docx') ||
+      name.endsWith('.doc') ||
+      name.endsWith('.pdf')
+    ) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only .docx, .doc, or .pdf files are allowed'));
+    }
+  },
+});
+
 // ── Public (authenticated) ──────────────────────
 router.get(
   '/',
@@ -55,6 +79,34 @@ router.post(
   upload.single('file'),
   activityLogger('IMPORT_QUESTIONS', 'question'),
   questionController.importQuestions,
+);
+
+// ── Extract questions from Word/PDF (teacher/admin) ──
+router.post(
+  '/extract-from-document',
+  authenticate,
+  authorize(ROLES.TEACHER, ROLES.ADMIN),
+  documentUpload.single('file'),
+  activityLogger('EXTRACT_QUESTIONS_FROM_DOCUMENT', 'question'),
+  questionController.extractFromDocument,
+);
+
+// ── Bulk create questions from preview (teacher/admin) ──
+router.post(
+  '/bulk-create',
+  authenticate,
+  authorize(ROLES.TEACHER, ROLES.ADMIN),
+  activityLogger('BULK_CREATE_QUESTIONS', 'question'),
+  questionController.bulkCreateQuestions,
+);
+
+// ── Bulk delete questions (teacher/admin) ──
+router.post(
+  '/bulk-delete',
+  authenticate,
+  authorize(ROLES.TEACHER, ROLES.ADMIN),
+  activityLogger('BULK_DELETE_QUESTIONS', 'question'),
+  questionController.bulkDeleteQuestions,
 );
 
 // ── Get single question ─────────────────────────

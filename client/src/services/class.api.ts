@@ -22,6 +22,15 @@ export async function listClasses(
   return data.data ?? data;
 }
 
+/**
+ * Fetch the list of classes the authenticated student is enrolled in.
+ * Used by the Student "My Classes" page.
+ */
+export async function listMyClasses(): Promise<ClassItem[]> {
+  const { data } = await api.get(API_ENDPOINTS.CLASSES.MY);
+  return data.data ?? data;
+}
+
 export async function createClass(
   payload: CreateClassPayload,
 ): Promise<ClassItem> {

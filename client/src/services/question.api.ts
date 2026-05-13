@@ -7,6 +7,9 @@ import type {
   CreateQuestionPayload,
   UpdateQuestionPayload,
   ImportQuestionResult,
+  ExtractFromDocumentResult,
+  ExtractedQuestion,
+  BulkCreateResult,
   CurriculumSubject,
   CurriculumChapter,
   CurriculumTopic,
@@ -18,7 +21,31 @@ export async function listQuestions(
   params: QuestionFilter = {},
 ): Promise<PaginatedResponse<Question>> {
   const { data } = await api.get(API_ENDPOINTS.QUESTIONS.BASE, { params });
-  return data.data ?? data;
+  
+  if (data.pagination) {
+    return {
+      items: data.data || [],
+      total: data.pagination.total || 0,
+      page: data.pagination.page || 1,
+      pageSize: data.pagination.limit || 12,
+      totalPages: data.pagination.totalPages || 1,
+      hasNextPage: data.pagination.hasNext || false,
+      hasPreviousPage: data.pagination.hasPrev || false,
+    };
+  }
+  
+  const resultData = data.data ?? data;
+  const items = Array.isArray(resultData) ? resultData : [];
+  
+  return {
+    items,
+    total: items.length,
+    page: 1,
+    pageSize: params.pageSize || 12,
+    totalPages: 1,
+    hasNextPage: false,
+    hasPreviousPage: false,
+  };
 }
 
 export async function getQuestionById(id: number): Promise<Question> {
@@ -43,6 +70,10 @@ export async function updateQuestion(
 
 export async function deleteQuestion(id: number): Promise<void> {
   await api.delete(API_ENDPOINTS.QUESTIONS.BY_ID(id));
+}
+
+export async function bulkDeleteQuestions(ids: number[]): Promise<void> {
+  await api.post(API_ENDPOINTS.QUESTIONS.BULK_DELETE, { ids });
 }
 
 // ── Tags ───────────────────────────────────────────
@@ -82,6 +113,35 @@ export function getImportTemplateUrl(): string {
   return API_ENDPOINTS.QUESTIONS.IMPORT_TEMPLATE;
 }
 
+// ── AI / Document extraction ──────────────────────
+
+export async function extractQuestionsFromDocument(
+  file: File,
+): Promise<ExtractFromDocumentResult> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const { data } = await api.post(
+    API_ENDPOINTS.QUESTIONS.EXTRACT_FROM_DOCUMENT,
+    formData,
+  );
+  return data.data ?? data;
+}
+
+export async function bulkCreateQuestions(
+  questions: ExtractedQuestion[],
+  subjectId: number,
+  chapterId: number,
+  topicId: number,
+): Promise<BulkCreateResult> {
+  const { data } = await api.post(API_ENDPOINTS.QUESTIONS.BULK_CREATE, {
+    subjectId,
+    chapterId,
+    topicId,
+    questions,
+  });
+  return data.data ?? data;
+}
+
 // ── Curriculum (Subject → Chapter → Topic) ────────
 
 export async function listSubjects(): Promise<CurriculumSubject[]> {
@@ -95,7 +155,8 @@ export async function getChaptersBySubject(
   const { data } = await api.get(
     API_ENDPOINTS.CURRICULUM.CHAPTERS_BY_SUBJECT(subjectId),
   );
-  return data.data ?? data;
+  const result = data.data ?? data;
+  return Array.isArray(result) ? result : (result?.chapters ?? result ?? []);
 }
 
 export async function getTopicsByChapter(
@@ -104,5 +165,6 @@ export async function getTopicsByChapter(
   const { data } = await api.get(
     API_ENDPOINTS.CURRICULUM.TOPICS_BY_CHAPTER(chapterId),
   );
-  return data.data ?? data;
+  const result = data.data ?? data;
+  return Array.isArray(result) ? result : (result?.topics ?? result ?? []);
 }
