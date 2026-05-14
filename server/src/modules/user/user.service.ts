@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import { Prisma } from '@prisma/client';
 import { randomInt } from 'crypto';
 import { Readable } from 'stream';
 import * as XLSX from 'xlsx';
@@ -158,13 +159,9 @@ export class UserService {
     const minioClient = getMinioClient();
     const stream = Readable.from(file.buffer);
 
-    await minioClient.putObject(
-      env.minio.bucket,
-      objectName,
-      stream,
-      file.size,
-      { 'Content-Type': file.mimetype },
-    );
+    await minioClient.putObject(env.minio.bucket, objectName, stream, file.size, {
+      'Content-Type': file.mimetype,
+    });
 
     if (user.avatar) {
       try {
@@ -226,7 +223,9 @@ export class UserService {
         where,
         include: {
           studentProfile: { select: { studentCode: true, parentCode: true, classId: true } },
-          parentProfile: { select: { parentCode: true, phoneNumber: true, _count: { select: { children: true } } } },
+          parentProfile: {
+            select: { parentCode: true, phoneNumber: true, _count: { select: { children: true } } },
+          },
         },
         orderBy: { [sortField]: sortOrder },
         skip,
@@ -405,6 +404,7 @@ export class UserService {
             parentCode: linkedParentCode,
             fullName: data.fullName,
             classId: data.classId || null,
+            homeroomClassName: data.className?.trim() || null,
           },
         });
 
@@ -438,7 +438,9 @@ export class UserService {
         where: { id: user.id },
         include: {
           studentProfile: { select: { studentCode: true, parentCode: true, classId: true } },
-          parentProfile: { select: { parentCode: true, phoneNumber: true, _count: { select: { children: true } } } },
+          parentProfile: {
+            select: { parentCode: true, phoneNumber: true, _count: { select: { children: true } } },
+          },
         },
       });
     });
@@ -581,13 +583,29 @@ export class UserService {
     const roleSet = new Set<string>(validRoles);
 
     const existingUsernames = new Set(
-      (await prisma.user.findMany({ select: { username: true } })).map((u: { username: string }) => u.username.toLowerCase()),
+      (await prisma.user.findMany({ select: { username: true } })).map((u: { username: string }) =>
+        u.username.toLowerCase(),
+      ),
     );
     const existingStudentCodes = new Set(
-      (await prisma.studentProfile.findMany({ select: { studentCode: true } })).map((s) => s.studentCode.toUpperCase()),
+      (await prisma.studentProfile.findMany({ select: { studentCode: true } })).map((s) =>
+        s.studentCode.toUpperCase(),
+      ),
     );
     const existingParentCodes = new Set(
-      (await prisma.parentProfile.findMany({ select: { parentCode: true } })).map((p) => p.parentCode.toUpperCase()),
+      (await prisma.parentProfile.findMany({ select: { parentCode: true } })).map((p) =>
+        p.parentCode.toUpperCase(),
+      ),
+    );
+    const existingParentPhones = new Set(
+      (
+        await prisma.parentProfile.findMany({
+          where: { phoneNumber: { not: null } },
+          select: { phoneNumber: true },
+        })
+      )
+        .map((p) => p.phoneNumber?.trim())
+        .filter((phone): phone is string => Boolean(phone)),
     );
     const importedClassIds = [
       ...new Set(
@@ -619,12 +637,14 @@ export class UserService {
       parentStudentCode: string | null;
       parentCode: string | null;
       classId: number | null;
+      homeroomClassName: string | null;
     }> = [];
 
     const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
     const newUsernames = new Set<string>();
     const newStudentCodes = new Set<string>();
     const newParentCodes = new Set<string>();
+    const newParentPhones = new Set<string>();
     const importedStudentCodes = new Set<string>();
 
     const generateRandomPassword = (length = 10): string => {
@@ -643,16 +663,31 @@ export class UserService {
     };
 
     for (const row of rows) {
-      const roleName = String(row.role ?? row.Role ?? '').trim().toUpperCase();
+      const roleName = String(row.role ?? row.Role ?? '')
+        .trim()
+        .toUpperCase();
       if (roleName !== 'STUDENT') continue;
 
-      const accountCode = String(row.accountCode ?? row.account_code ?? row.code ?? row.Code ?? row.ID ?? row.id ?? row.Id ?? '').trim();
+      const accountCode = String(
+        row.accountCode ??
+          row.account_code ??
+          row.code ??
+          row.Code ??
+          row.ID ??
+          row.id ??
+          row.Id ??
+          '',
+      ).trim();
       if (!accountCode) continue;
 
-      const className = String(row.className ?? row.class_name ?? row.class ?? row.Class ?? '').trim();
+      const className = String(
+        row.className ?? row.class_name ?? row.class ?? row.Class ?? '',
+      ).trim();
       const classIdRaw = String(row.classId ?? row.class_id ?? row.ClassId ?? '').trim();
       const classId = classIdRaw ? Number(classIdRaw) : null;
-      const gradeLevel = classId ? classGradeById.get(classId) : inferGradeLevelFromClassName(className);
+      const gradeLevel = classId
+        ? classGradeById.get(classId)
+        : inferGradeLevelFromClassName(className);
       if (!gradeLevel) continue;
 
       try {
@@ -669,11 +704,26 @@ export class UserService {
       const password = String(row.password ?? row.Password ?? '').trim();
       const fullName = String(row.fullName ?? row.full_name ?? row.FullName ?? '').trim() || null;
       const phone = String(row.phone ?? row.Phone ?? '').trim() || null;
-      const roleName = String(row.role ?? row.Role ?? '').trim().toUpperCase();
-      const accountCode = String(row.accountCode ?? row.account_code ?? row.code ?? row.Code ?? row.ID ?? row.id ?? row.Id ?? '').trim() || null;
+      const roleName = String(row.role ?? row.Role ?? '')
+        .trim()
+        .toUpperCase();
+      const accountCode =
+        String(
+          row.accountCode ??
+            row.account_code ??
+            row.code ??
+            row.Code ??
+            row.ID ??
+            row.id ??
+            row.Id ??
+            '',
+        ).trim() || null;
       const school = String(row.school ?? row.School ?? '').trim();
-      const className = String(row.className ?? row.class_name ?? row.class ?? row.Class ?? '').trim();
-      const parentCode = String(row.parentCode ?? row.parent_code ?? row.ParentCode ?? '').trim() || null;
+      const className = String(
+        row.className ?? row.class_name ?? row.class ?? row.Class ?? '',
+      ).trim();
+      const parentCode =
+        String(row.parentCode ?? row.parent_code ?? row.ParentCode ?? '').trim() || null;
       const classIdRaw = String(row.classId ?? row.class_id ?? row.ClassId ?? '').trim();
       const classId = classIdRaw ? Number(classIdRaw) : null;
 
@@ -684,25 +734,46 @@ export class UserService {
 
       if (roleName === 'STUDENT') {
         if (!accountCode) {
-          errors.push({ row: rowNum, field: 'accountCode', message: 'accountCode is required for STUDENT IDs' });
+          errors.push({
+            row: rowNum,
+            field: 'accountCode',
+            message: 'accountCode is required for STUDENT IDs',
+          });
           hasError = true;
         } else {
-          const gradeLevel = classId ? classGradeById.get(classId) : inferGradeLevelFromClassName(className);
+          const gradeLevel = classId
+            ? classGradeById.get(classId)
+            : inferGradeLevelFromClassName(className);
           if (!gradeLevel) {
-            errors.push({ row: rowNum, field: 'className', message: 'Student class must indicate grade 10, 11, or 12' });
+            errors.push({
+              row: rowNum,
+              field: 'className',
+              message: 'Student class must indicate grade 10, 11, or 12',
+            });
             hasError = true;
           } else {
             try {
               studentCode = formatStudentAccountId(accountCode, gradeLevel);
               resolvedAccountCode = studentCode;
               const normalizedStudentCode = studentCode.toUpperCase();
-              if (existingStudentCodes.has(normalizedStudentCode) || newStudentCodes.has(normalizedStudentCode)) {
-                errors.push({ row: rowNum, field: 'accountCode', message: `Student ID "${studentCode}" already exists` });
+              if (
+                existingStudentCodes.has(normalizedStudentCode) ||
+                newStudentCodes.has(normalizedStudentCode)
+              ) {
+                errors.push({
+                  row: rowNum,
+                  field: 'accountCode',
+                  message: `Student ID "${studentCode}" already exists`,
+                });
                 hasError = true;
               }
               if (!username) username = studentCode;
             } catch (error) {
-              errors.push({ row: rowNum, field: 'accountCode', message: error instanceof Error ? error.message : 'Invalid accountCode' });
+              errors.push({
+                row: rowNum,
+                field: 'accountCode',
+                message: error instanceof Error ? error.message : 'Invalid accountCode',
+              });
               hasError = true;
             }
           }
@@ -711,7 +782,11 @@ export class UserService {
 
       if (roleName === 'TEACHER') {
         if (!accountCode) {
-          errors.push({ row: rowNum, field: 'accountCode', message: 'accountCode is required for TEACHER IDs' });
+          errors.push({
+            row: rowNum,
+            field: 'accountCode',
+            message: 'accountCode is required for TEACHER IDs',
+          });
           hasError = true;
         } else {
           try {
@@ -719,7 +794,11 @@ export class UserService {
             resolvedAccountCode = teacherCode;
             if (!username) username = teacherCode;
           } catch (error) {
-            errors.push({ row: rowNum, field: 'accountCode', message: error instanceof Error ? error.message : 'Invalid accountCode' });
+            errors.push({
+              row: rowNum,
+              field: 'accountCode',
+              message: error instanceof Error ? error.message : 'Invalid accountCode',
+            });
             hasError = true;
           }
         }
@@ -727,7 +806,11 @@ export class UserService {
 
       if (roleName === 'PARENT') {
         if (!accountCode) {
-          errors.push({ row: rowNum, field: 'accountCode', message: 'Student ID is required for PARENT IDs' });
+          errors.push({
+            row: rowNum,
+            field: 'accountCode',
+            message: 'Student ID is required for PARENT IDs',
+          });
           hasError = true;
         } else {
           try {
@@ -736,32 +819,59 @@ export class UserService {
             resolvedAccountCode = parentAccount.parentCode;
 
             const normalizedParentCode = parentAccount.parentCode.toUpperCase();
-            if (existingParentCodes.has(normalizedParentCode) || newParentCodes.has(normalizedParentCode)) {
-              errors.push({ row: rowNum, field: 'accountCode', message: `Parent ID "${parentAccount.parentCode}" already exists` });
+            if (
+              existingParentCodes.has(normalizedParentCode) ||
+              newParentCodes.has(normalizedParentCode)
+            ) {
+              errors.push({
+                row: rowNum,
+                field: 'accountCode',
+                message: `Parent ID "${parentAccount.parentCode}" already exists`,
+              });
               hasError = true;
             }
 
-            if (!existingStudentCodes.has(parentStudentCode.toUpperCase()) && !importedStudentCodes.has(parentStudentCode.toUpperCase())) {
-              errors.push({ row: rowNum, field: 'accountCode', message: `Student ID "${parentStudentCode}" not found for parent account` });
+            if (
+              !existingStudentCodes.has(parentStudentCode.toUpperCase()) &&
+              !importedStudentCodes.has(parentStudentCode.toUpperCase())
+            ) {
+              errors.push({
+                row: rowNum,
+                field: 'accountCode',
+                message: `Student ID "${parentStudentCode}" not found for parent account`,
+              });
               hasError = true;
             }
 
             if (!username) username = parentAccount.parentCode;
           } catch (error) {
-            errors.push({ row: rowNum, field: 'accountCode', message: error instanceof Error ? error.message : 'Invalid parent ID' });
+            errors.push({
+              row: rowNum,
+              field: 'accountCode',
+              message: error instanceof Error ? error.message : 'Invalid parent ID',
+            });
             hasError = true;
           }
         }
       }
 
       if (roleName === 'ADMIN' && !username) {
-        errors.push({ row: rowNum, field: 'username', message: 'Username is required for ADMIN accounts' });
+        errors.push({
+          row: rowNum,
+          field: 'username',
+          message: 'Username is required for ADMIN accounts',
+        });
         hasError = true;
       }
 
       if (!username && roleSet.has(roleName)) {
         if (!fullName || !accountCode || !school || (roleName !== 'PARENT' && !className)) {
-          errors.push({ row: rowNum, field: 'username', message: 'Username is required unless fullName, accountCode, school, and className are provided for generation' });
+          errors.push({
+            row: rowNum,
+            field: 'username',
+            message:
+              'Username is required unless fullName, accountCode, school, and className are provided for generation',
+          });
           hasError = true;
         } else {
           username = buildAccountUsername({
@@ -775,10 +885,59 @@ export class UserService {
       }
 
       if (!username || username.length < 3 || username.length > 191) {
-        errors.push({ row: rowNum, field: 'username', message: 'Username must be 3–50 characters' });
+        errors.push({
+          row: rowNum,
+          field: 'username',
+          message: 'Username must be 3-191 characters',
+        });
         hasError = true;
-      } else if (existingUsernames.has(username.toLowerCase()) || newUsernames.has(username.toLowerCase())) {
-        errors.push({ row: rowNum, field: 'username', message: `Username "${username}" already exists` });
+      } else if (
+        existingUsernames.has(username.toLowerCase()) ||
+        newUsernames.has(username.toLowerCase())
+      ) {
+        errors.push({
+          row: rowNum,
+          field: 'username',
+          message: `Username "${username}" already exists`,
+        });
+        hasError = true;
+      }
+
+      if (fullName && fullName.length > 100) {
+        errors.push({
+          row: rowNum,
+          field: 'fullName',
+          message: 'Full name must be 100 characters or fewer',
+        });
+        hasError = true;
+      }
+
+      if (phone && phone.length > 20) {
+        errors.push({
+          row: rowNum,
+          field: 'phone',
+          message: 'Phone must be 20 characters or fewer',
+        });
+        hasError = true;
+      }
+
+      if (roleName === 'PARENT' && phone) {
+        if (existingParentPhones.has(phone) || newParentPhones.has(phone)) {
+          errors.push({
+            row: rowNum,
+            field: 'phone',
+            message: `Parent phone "${phone}" already exists`,
+          });
+          hasError = true;
+        }
+      }
+
+      if (roleName === 'STUDENT' && className && className.length > 20) {
+        errors.push({
+          row: rowNum,
+          field: 'className',
+          message: 'Class name must be 20 characters or fewer',
+        });
         hasError = true;
       }
 
@@ -788,12 +947,20 @@ export class UserService {
         effectivePassword = generateRandomPassword(10);
         passwordGenerated = true;
       } else if (!passwordRegex.test(password)) {
-        errors.push({ row: rowNum, field: 'password', message: 'Password must be 8+ chars with upper, lower, and number' });
+        errors.push({
+          row: rowNum,
+          field: 'password',
+          message: 'Password must be 8+ chars with upper, lower, and number',
+        });
         hasError = true;
       }
 
       if (!roleSet.has(roleName)) {
-        errors.push({ row: rowNum, field: 'role', message: `Invalid role "${roleName}". Valid: ${validRoles.join(', ')}` });
+        errors.push({
+          row: rowNum,
+          field: 'role',
+          message: `Invalid role "${roleName}". Valid: ${validRoles.join(', ')}`,
+        });
         hasError = true;
       }
 
@@ -803,7 +970,11 @@ export class UserService {
       }
 
       if (classIdRaw && (!Number.isInteger(classId) || Number(classId) <= 0)) {
-        errors.push({ row: rowNum, field: 'classId', message: 'classId must be a positive integer' });
+        errors.push({
+          row: rowNum,
+          field: 'classId',
+          message: 'classId must be a positive integer',
+        });
         hasError = true;
       }
 
@@ -827,10 +998,13 @@ export class UserService {
           parentStudentCode,
           parentCode,
           classId,
+          homeroomClassName: roleName === 'STUDENT' && className ? className : null,
         });
         newUsernames.add(username.toLowerCase());
         if (studentCode) newStudentCodes.add(studentCode.toUpperCase());
-        if (roleName === 'PARENT' && resolvedAccountCode) newParentCodes.add(resolvedAccountCode.toUpperCase());
+        if (roleName === 'PARENT' && resolvedAccountCode)
+          newParentCodes.add(resolvedAccountCode.toUpperCase());
+        if (roleName === 'PARENT' && phone) newParentPhones.add(phone);
       }
     }
 
@@ -844,73 +1018,103 @@ export class UserService {
       passwordGenerated: boolean;
     }> = [];
     if (validUsers.length > 0) {
-      await prisma.$transaction(async (tx) => {
-        const usersToCreate = [...validUsers].sort((a, b) => {
-          if (a.role === 'STUDENT' && b.role === 'PARENT') return -1;
-          if (a.role === 'PARENT' && b.role === 'STUDENT') return 1;
-          return 0;
-        });
+      try {
+        await prisma.$transaction(async (tx) => {
+          const usersToCreate = [...validUsers].sort((a, b) => {
+            if (a.role === 'STUDENT' && b.role === 'PARENT') return -1;
+            if (a.role === 'PARENT' && b.role === 'STUDENT') return 1;
+            return 0;
+          });
 
-        for (const row of usersToCreate) {
-          const user = await tx.user.create({
-            data: {
+          for (const row of usersToCreate) {
+            const user = await tx.user.create({
+              data: {
+                username: row.username,
+                passwordHash: row.passwordHash,
+                fullName: row.fullName,
+                phone: row.phone,
+                role: row.role,
+                status: 'ACTIVE',
+              },
+            });
+
+            if (row.role === 'STUDENT') {
+              await tx.studentProfile.create({
+                data: {
+                  studentCode: row.studentCode || `student-${user.id}`,
+                  userId: user.id,
+                  parentCode: row.parentCode,
+                  fullName: row.fullName || row.username,
+                  classId: row.classId,
+                  homeroomClassName: row.homeroomClassName,
+                },
+              });
+              if (row.classId) {
+                await tx.classStudent.createMany({
+                  data: [{ classId: row.classId, studentId: user.id }],
+                  skipDuplicates: true,
+                });
+              }
+            } else if (row.role === 'PARENT') {
+              await tx.parentProfile.create({
+                data: {
+                  parentCode: row.accountCode || `parent-${user.id}`,
+                  userId: user.id,
+                  phoneNumber: row.phone,
+                  fullName: row.fullName || row.username,
+                },
+              });
+
+              if (row.parentStudentCode && row.accountCode) {
+                await tx.studentProfile.update({
+                  where: { studentCode: row.parentStudentCode },
+                  data: { parentCode: row.accountCode },
+                });
+              }
+            }
+
+            credentials.push({
               username: row.username,
-              passwordHash: row.passwordHash,
+              password: row.plainPassword,
               fullName: row.fullName,
-              phone: row.phone,
               role: row.role,
-              status: 'ACTIVE',
-            },
-          });
-
-          if (row.role === 'STUDENT') {
-            await tx.studentProfile.create({
-              data: {
-                studentCode: row.studentCode || `student-${user.id}`,
-                userId: user.id,
-                parentCode: row.parentCode,
-                fullName: row.fullName || row.username,
-                classId: row.classId,
-              },
+              accountCode: row.accountCode,
+              passwordGenerated: row.passwordGenerated,
             });
-            if (row.classId) {
-              await tx.classStudent.createMany({
-                data: [{ classId: row.classId, studentId: user.id }],
-                skipDuplicates: true,
-              });
-            }
-          } else if (row.role === 'PARENT') {
-            await tx.parentProfile.create({
-              data: {
-                parentCode: row.accountCode || `parent-${user.id}`,
-                userId: user.id,
-                phoneNumber: row.phone,
-                fullName: row.fullName || row.username,
-              },
-            });
-
-            if (row.parentStudentCode && row.accountCode) {
-              await tx.studentProfile.update({
-                where: { studentCode: row.parentStudentCode },
-                data: { parentCode: row.accountCode },
-              });
-            }
+            createdCount++;
           }
-
-          credentials.push({
-            username: row.username,
-            password: row.plainPassword,
-            fullName: row.fullName,
-            role: row.role,
-            accountCode: row.accountCode,
-            passwordGenerated: row.passwordGenerated,
-          });
-          createdCount++;
+        });
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError) {
+          if (error.code === 'P2002') {
+            const target = Array.isArray(error.meta?.target)
+              ? error.meta.target.join(', ')
+              : 'a unique field';
+            throw new AppError(`Import failed: duplicate value for ${target}`, 409);
+          }
+          if (error.code === 'P2000') {
+            throw new AppError(
+              'Import failed: one or more values exceed the database length limit',
+              400,
+            );
+          }
+          if (error.code === 'P2003') {
+            throw new AppError('Import failed: one or more referenced records do not exist', 400);
+          }
+          if (error.code === 'P2025') {
+            throw new AppError(
+              'Import failed: a parent row references a student that was not imported or does not exist',
+              400,
+            );
+          }
         }
-      });
+        throw error;
+      }
     }
 
-    logger.info(`User import: ${createdCount} created, ${errors.length} errors from ${rows.length} rows`);
+    logger.info(
+      `User import: ${createdCount} created, ${errors.length} errors from ${rows.length} rows`,
+    );
 
     return {
       success: true,
@@ -928,10 +1132,38 @@ export class UserService {
 
   getImportTemplate() {
     const templateData = [
-      { fullName: 'Nguyen Van A', phone: '0901234567', role: 'STUDENT', ID: '001', className: '10A1', school: 'webquiz' },
-      { fullName: 'Tran Thi B', phone: '0912345678', role: 'TEACHER', ID: '001', className: '', school: 'webquiz' },
-      { fullName: 'Pham Van D', phone: '0923456789', role: 'STUDENT', ID: '002', className: '11A1', school: 'webquiz' },
-      { fullName: 'Le Thi C', phone: '0934567890', role: 'PARENT', ID: 'C10001', className: '', school: 'webquiz' },
+      {
+        fullName: 'Nguyen Van A',
+        phone: '0901234567',
+        role: 'STUDENT',
+        ID: '001',
+        className: '10A1',
+        school: 'webquiz',
+      },
+      {
+        fullName: 'Tran Thi B',
+        phone: '0912345678',
+        role: 'TEACHER',
+        ID: '001',
+        className: '',
+        school: 'webquiz',
+      },
+      {
+        fullName: 'Pham Van D',
+        phone: '0923456789',
+        role: 'STUDENT',
+        ID: '002',
+        className: '11A1',
+        school: 'webquiz',
+      },
+      {
+        fullName: 'Le Thi C',
+        phone: '0934567890',
+        role: 'PARENT',
+        ID: 'C10001',
+        className: '',
+        school: 'webquiz',
+      },
     ];
 
     const worksheet = XLSX.utils.json_to_sheet(templateData, {

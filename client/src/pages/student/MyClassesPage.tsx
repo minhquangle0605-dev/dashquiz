@@ -4,14 +4,25 @@ import toast from 'react-hot-toast';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Spinner } from '@/components/ui/Spinner';
-import { listMyClasses } from '@/services/class.api';
-import type { ClassItem } from '@/types/exam';
+import { Button } from '@/components/ui/Button';
+import {
+  getClassCourse,
+  getResourceDownloadUrl,
+  listMyClasses,
+  markCompletion,
+  submitActivity,
+} from '@/services/class.api';
+import type { ClassActivity, ClassCourseOverview, ClassItem, ClassResource } from '@/types/exam';
 
 type EnrolledClass = ClassItem & { enrolledAt?: string };
 
 export default function MyClassesPage() {
   const [classes, setClasses] = useState<EnrolledClass[]>([]);
   const [loading, setLoading] = useState(true);
+  const [course, setCourse] = useState<ClassCourseOverview | null>(null);
+  const [courseLoading, setCourseLoading] = useState(false);
+  const [submissionText, setSubmissionText] = useState<Record<number, string>>({});
+  const [savingId, setSavingId] = useState<number | null>(null);
 
   const fetchClasses = useCallback(async () => {
     setLoading(true);
@@ -28,6 +39,56 @@ export default function MyClassesPage() {
   useEffect(() => {
     fetchClasses();
   }, [fetchClasses]);
+
+  const openCourse = async (classId: number) => {
+    setCourseLoading(true);
+    try {
+      const data = await getClassCourse(classId);
+      setCourse(data);
+    } catch {
+      toast.error('Failed to load class content.');
+    } finally {
+      setCourseLoading(false);
+    }
+  };
+
+  const handleResourceOpen = async (resource: ClassResource) => {
+    try {
+      if (resource.type === 'FILE') {
+        const url = await getResourceDownloadUrl(resource.id);
+        window.open(url, '_blank', 'noopener,noreferrer');
+      } else if (resource.url) {
+        window.open(resource.url, '_blank', 'noopener,noreferrer');
+      }
+      if (course?.class.id) {
+        await markCompletion(course.class.id, { resourceId: resource.id });
+        openCourse(course.class.id);
+      }
+    } catch {
+      toast.error('Could not open this resource.');
+    }
+  };
+
+  const handleSubmitActivity = async (activity: ClassActivity) => {
+    if (!course) return;
+    const content = submissionText[activity.id]?.trim();
+    if (!content) {
+      toast.error('Please enter your submission.');
+      return;
+    }
+    setSavingId(activity.id);
+    try {
+      await submitActivity(activity.id, { content });
+      await markCompletion(course.class.id, { activityId: activity.id });
+      toast.success('Submission saved.');
+      setSubmissionText((prev) => ({ ...prev, [activity.id]: '' }));
+      openCourse(course.class.id);
+    } catch {
+      toast.error('Failed to submit activity.');
+    } finally {
+      setSavingId(null);
+    }
+  };
 
   if (loading) {
     return (
@@ -76,15 +137,36 @@ export default function MyClassesPage() {
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {classes.map((cls) => (
-            <ClassCard key={cls.id} cls={cls} />
+            <ClassCard key={cls.id} cls={cls} onOpen={() => openCourse(cls.id)} />
           ))}
         </div>
+      )}
+
+      {courseLoading && (
+        <Card padding="lg">
+          <div className="flex justify-center py-10">
+            <Spinner size="md" label="Loading class content" />
+          </div>
+        </Card>
+      )}
+
+      {course && !courseLoading && (
+        <StudentCoursePanel
+          course={course}
+          submissionText={submissionText}
+          savingId={savingId}
+          onResourceOpen={handleResourceOpen}
+          onSubmissionChange={(activityId, value) =>
+            setSubmissionText((prev) => ({ ...prev, [activityId]: value }))
+          }
+          onSubmitActivity={handleSubmitActivity}
+        />
       )}
     </div>
   );
 }
 
-function ClassCard({ cls }: { cls: EnrolledClass }) {
+function ClassCard({ cls, onOpen }: { cls: EnrolledClass; onOpen: () => void }) {
   const enrolledLabel = cls.enrolledAt
     ? new Date(cls.enrolledAt).toLocaleDateString()
     : null;
@@ -137,6 +219,9 @@ function ClassCard({ cls }: { cls: EnrolledClass }) {
             <InfoRow icon={iconClock} label="Joined" value={enrolledLabel} />
           )}
         </div>
+        <Button variant="primary" size="sm" onClick={onOpen}>
+          Open Class
+        </Button>
       </div>
     </Card>
   );
@@ -165,6 +250,196 @@ function InfoRow({
 }
 
 // ── Icons ─────────────────────────────────────────────
+
+type StudentSubmission = NonNullable<ClassCourseOverview['mySubmissions']>[number];
+
+function StudentCoursePanel({
+  course,
+  submissionText,
+  savingId,
+  onResourceOpen,
+  onSubmissionChange,
+  onSubmitActivity,
+}: {
+  course: ClassCourseOverview;
+  submissionText: Record<number, string>;
+  savingId: number | null;
+  onResourceOpen: (resource: ClassResource) => void;
+  onSubmissionChange: (activityId: number, value: string) => void;
+  onSubmitActivity: (activity: ClassActivity) => void;
+}) {
+  const completedResources = new Set(
+    course.myCompletions?.filter((c) => c.resourceId).map((c) => c.resourceId) ?? [],
+  );
+  const submissions = new Map<number, StudentSubmission>(
+    course.mySubmissions?.map((s) => [s.activityId, s]) ?? [],
+  );
+
+  return (
+    <Card padding="lg">
+      <div className="mb-4">
+        <h2 className="text-lg font-bold text-slate-900">{course.class.name}</h2>
+        <p className="text-sm text-slate-500">Materials, activities, submissions, and feedback</p>
+      </div>
+      <div className="space-y-4">
+        {course.standaloneResources.length > 0 || course.standaloneActivities.length > 0 ? (
+          <StudentCourseBlock
+            title="General"
+            resources={course.standaloneResources}
+            activities={course.standaloneActivities}
+            completedResources={completedResources}
+            submissions={submissions}
+            submissionText={submissionText}
+            savingId={savingId}
+            onResourceOpen={onResourceOpen}
+            onSubmissionChange={onSubmissionChange}
+            onSubmitActivity={onSubmitActivity}
+          />
+        ) : null}
+        {course.sections.length === 0 &&
+        course.standaloneResources.length === 0 &&
+        course.standaloneActivities.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-slate-200 py-8 text-center text-sm text-slate-500">
+            No published materials yet.
+          </p>
+        ) : (
+          course.sections.map((section) => (
+            <StudentCourseBlock
+              key={section.id}
+              title={section.title}
+              subtitle={section.description}
+              resources={section.resources}
+              activities={section.activities}
+              completedResources={completedResources}
+              submissions={submissions}
+              submissionText={submissionText}
+              savingId={savingId}
+              onResourceOpen={onResourceOpen}
+              onSubmissionChange={onSubmissionChange}
+              onSubmitActivity={onSubmitActivity}
+            />
+          ))
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function StudentCourseBlock({
+  title,
+  subtitle,
+  resources,
+  activities,
+  completedResources,
+  submissions,
+  submissionText,
+  savingId,
+  onResourceOpen,
+  onSubmissionChange,
+  onSubmitActivity,
+}: {
+  title: string;
+  subtitle?: string | null;
+  resources: ClassResource[];
+  activities: ClassActivity[];
+  completedResources: Set<number | null>;
+  submissions: Map<number, StudentSubmission>;
+  submissionText: Record<number, string>;
+  savingId: number | null;
+  onResourceOpen: (resource: ClassResource) => void;
+  onSubmissionChange: (activityId: number, value: string) => void;
+  onSubmitActivity: (activity: ClassActivity) => void;
+}) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4">
+      <div className="mb-3">
+        <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
+        {subtitle && <p className="mt-0.5 text-xs text-slate-500">{subtitle}</p>}
+      </div>
+      <div className="space-y-4">
+        {resources.length > 0 && (
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase text-slate-400">Materials</p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {resources.map((resource) => (
+                <button
+                  key={resource.id}
+                  type="button"
+                  className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-left transition-colors hover:bg-slate-100"
+                  onClick={() => onResourceOpen(resource)}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate text-sm font-medium text-slate-800">{resource.title}</span>
+                    <Badge variant={completedResources.has(resource.id) ? 'success' : 'info'}>
+                      {completedResources.has(resource.id) ? 'Done' : resource.type}
+                    </Badge>
+                  </div>
+                  {resource.description && (
+                    <p className="mt-1 line-clamp-2 text-xs text-slate-500">{resource.description}</p>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {activities.length > 0 && (
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase text-slate-400">Activities</p>
+            <div className="space-y-3">
+              {activities.map((activity) => {
+                const submission = submissions.get(activity.id);
+                const canSubmit = !['FORUM', 'ATTENDANCE'].includes(activity.type);
+                return (
+                  <div key={activity.id} className="rounded-md border border-slate-100 bg-slate-50 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-medium text-slate-800">{activity.title}</p>
+                        <p className="text-xs text-slate-500">
+                          {activity.dueAt ? `Due ${new Date(activity.dueAt).toLocaleString()}` : 'No deadline'}
+                        </p>
+                      </div>
+                      <Badge variant={submission ? 'success' : 'info'}>
+                        {submission ? submission.status : activity.type}
+                      </Badge>
+                    </div>
+                    {activity.instructions && (
+                      <p className="mt-2 text-sm text-slate-600">{activity.instructions}</p>
+                    )}
+                    {submission?.score !== null && submission?.score !== undefined && activity.showGrades && (
+                      <p className="mt-2 text-sm font-medium text-slate-700">
+                        Score: {submission.score}
+                        {submission.feedback ? ` - ${submission.feedback}` : ''}
+                      </p>
+                    )}
+                    {canSubmit && (
+                      <div className="mt-3 space-y-2">
+                        <textarea
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                          rows={3}
+                          placeholder="Your submission"
+                          value={submissionText[activity.id] ?? ''}
+                          onChange={(e) => onSubmissionChange(activity.id, e.target.value)}
+                        />
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          isLoading={savingId === activity.id}
+                          onClick={() => onSubmitActivity(activity)}
+                        >
+                          Submit
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 const iconUser = (
   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>

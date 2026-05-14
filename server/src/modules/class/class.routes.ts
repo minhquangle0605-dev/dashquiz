@@ -10,6 +10,20 @@ import {
   addStudentsSchema,
   listClassesQuerySchema,
   listStudentsQuerySchema,
+  availableStudentsQuerySchema,
+  listClassNamesQuerySchema,
+  createSectionSchema,
+  updateSectionSchema,
+  createResourceSchema,
+  updateResourceSchema,
+  createActivitySchema,
+  updateActivitySchema,
+  submitActivitySchema,
+  gradeSubmissionSchema,
+  createForumPostSchema,
+  recordAttendanceSchema,
+  markCompletionSchema,
+  assignClassRoleSchema,
 } from './class.validation';
 import { ROLES } from '../../utils/constants';
 import { FILE_UPLOAD } from '../../utils/constants';
@@ -32,12 +46,46 @@ const upload = multer({
   },
 });
 
+const resourceUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: FILE_UPLOAD.MAX_CLASS_RESOURCE_SIZE },
+  fileFilter: (_req, file, cb) => {
+    const allowed = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-powerpoint',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'video/mp4',
+      'video/webm',
+      'video/quicktime',
+      'text/plain',
+    ];
+    if (allowed.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Unsupported class resource file type'));
+    }
+  },
+});
+
 // ── Download import template (GET /api/classes/import-template) ──
 router.get(
   '/import-template',
   authenticate,
   authorize(ROLES.TEACHER, ROLES.ADMIN),
   classController.downloadImportTemplate,
+);
+
+// ── List distinct homeroom class names (GET /api/classes/class-names) ─
+router.get(
+  '/class-names',
+  authenticate,
+  authorize(ROLES.TEACHER, ROLES.ADMIN),
+  validate(listClassNamesQuerySchema, 'query'),
+  classController.listClassNames,
 );
 
 // ── List my enrolled classes (GET /api/classes/my) ─
@@ -77,12 +125,189 @@ router.put(
   classController.updateClass,
 );
 
+router.get(
+  '/resources/:resourceId/download',
+  authenticate,
+  classController.getResourceDownloadUrl,
+);
+
+router.get('/:id/course', authenticate, classController.getCourse);
+
+router.post(
+  '/:id/sections',
+  authenticate,
+  authorize(ROLES.TEACHER, ROLES.ADMIN),
+  validate(createSectionSchema),
+  activityLogger('CREATE_CLASS_SECTION', 'class_section'),
+  classController.createSection,
+);
+
+router.put(
+  '/:id/sections/:sectionId',
+  authenticate,
+  authorize(ROLES.TEACHER, ROLES.ADMIN),
+  validate(updateSectionSchema),
+  activityLogger('UPDATE_CLASS_SECTION', 'class_section'),
+  classController.updateSection,
+);
+
+router.delete(
+  '/:id/sections/:sectionId',
+  authenticate,
+  authorize(ROLES.TEACHER, ROLES.ADMIN),
+  activityLogger('DELETE_CLASS_SECTION', 'class_section'),
+  classController.deleteSection,
+);
+
+router.post(
+  '/:id/resources',
+  authenticate,
+  authorize(ROLES.TEACHER, ROLES.ADMIN),
+  validate(createResourceSchema),
+  activityLogger('CREATE_CLASS_RESOURCE', 'class_resource'),
+  classController.createResource,
+);
+
+router.post(
+  '/:id/resources/upload',
+  authenticate,
+  authorize(ROLES.TEACHER, ROLES.ADMIN),
+  resourceUpload.single('file'),
+  activityLogger('UPLOAD_CLASS_RESOURCE', 'class_resource'),
+  classController.uploadResource,
+);
+
+router.put(
+  '/:id/resources/:resourceId',
+  authenticate,
+  authorize(ROLES.TEACHER, ROLES.ADMIN),
+  validate(updateResourceSchema),
+  activityLogger('UPDATE_CLASS_RESOURCE', 'class_resource'),
+  classController.updateResource,
+);
+
+router.delete(
+  '/:id/resources/:resourceId',
+  authenticate,
+  authorize(ROLES.TEACHER, ROLES.ADMIN),
+  activityLogger('DELETE_CLASS_RESOURCE', 'class_resource'),
+  classController.deleteResource,
+);
+
+router.post(
+  '/:id/activities',
+  authenticate,
+  authorize(ROLES.TEACHER, ROLES.ADMIN),
+  validate(createActivitySchema),
+  activityLogger('CREATE_CLASS_ACTIVITY', 'class_activity'),
+  classController.createActivity,
+);
+
+router.put(
+  '/:id/activities/:activityId',
+  authenticate,
+  authorize(ROLES.TEACHER, ROLES.ADMIN),
+  validate(updateActivitySchema),
+  activityLogger('UPDATE_CLASS_ACTIVITY', 'class_activity'),
+  classController.updateActivity,
+);
+
+router.delete(
+  '/:id/activities/:activityId',
+  authenticate,
+  authorize(ROLES.TEACHER, ROLES.ADMIN),
+  activityLogger('DELETE_CLASS_ACTIVITY', 'class_activity'),
+  classController.deleteActivity,
+);
+
+router.post(
+  '/activities/:activityId/submissions',
+  authenticate,
+  authorize(ROLES.STUDENT),
+  validate(submitActivitySchema),
+  activityLogger('SUBMIT_CLASS_ACTIVITY', 'class_submission'),
+  classController.submitActivity,
+);
+
+router.get(
+  '/activities/:activityId/submissions',
+  authenticate,
+  authorize(ROLES.TEACHER, ROLES.ADMIN),
+  classController.listSubmissions,
+);
+
+router.put(
+  '/submissions/:submissionId/grade',
+  authenticate,
+  authorize(ROLES.TEACHER, ROLES.ADMIN),
+  validate(gradeSubmissionSchema),
+  activityLogger('GRADE_CLASS_SUBMISSION', 'class_submission'),
+  classController.gradeSubmission,
+);
+
+router.get(
+  '/activities/:activityId/forum-posts',
+  authenticate,
+  classController.listForumPosts,
+);
+
+router.post(
+  '/activities/:activityId/forum-posts',
+  authenticate,
+  validate(createForumPostSchema),
+  activityLogger('CREATE_CLASS_FORUM_POST', 'class_forum_post'),
+  classController.createForumPost,
+);
+
+router.put(
+  '/activities/:activityId/attendance',
+  authenticate,
+  authorize(ROLES.TEACHER, ROLES.ADMIN),
+  validate(recordAttendanceSchema),
+  activityLogger('RECORD_CLASS_ATTENDANCE', 'class_attendance_record'),
+  classController.recordAttendance,
+);
+
+router.post(
+  '/:id/completions',
+  authenticate,
+  authorize(ROLES.STUDENT),
+  validate(markCompletionSchema),
+  activityLogger('MARK_CLASS_COMPLETION', 'class_completion'),
+  classController.markCompletion,
+);
+
+router.put(
+  '/:id/roles',
+  authenticate,
+  authorize(ROLES.TEACHER, ROLES.ADMIN),
+  validate(assignClassRoleSchema),
+  activityLogger('ASSIGN_CLASS_ROLE', 'class_member_role'),
+  classController.assignClassRole,
+);
+
+router.get(
+  '/:id/logs',
+  authenticate,
+  authorize(ROLES.TEACHER, ROLES.ADMIN),
+  classController.listLogs,
+);
+
 // ── List students (GET /api/classes/:id/students) ─
 router.get(
   '/:id/students',
   authenticate,
   validate(listStudentsQuerySchema, 'query'),
   classController.listStudents,
+);
+
+// ── List available students for adding (GET /api/classes/:id/available-students) ─
+router.get(
+  '/:id/available-students',
+  authenticate,
+  authorize(ROLES.TEACHER, ROLES.ADMIN),
+  validate(availableStudentsQuerySchema, 'query'),
+  classController.listAvailableStudents,
 );
 
 // ── Add students (POST /api/classes/:id/students) ─

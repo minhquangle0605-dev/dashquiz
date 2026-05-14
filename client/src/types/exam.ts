@@ -312,3 +312,74 @@ export interface ImportStudentsResult {
   failed: number;
   errors: Array<{ row: number; message: string }>;
 }
+
+export type ClassResourceType = 'FILE' | 'VIDEO' | 'LINK' | 'LESSON';
+export type ClassActivityType =
+  | 'QUIZ'
+  | 'ASSIGNMENT'
+  | 'FORUM'
+  | 'WORKSHOP'
+  | 'ATTENDANCE'
+  | 'SURVEY';
+export type ClassPublishStatus = 'DRAFT' | 'PUBLISHED' | 'CLOSED';
+
+export interface ClassSection {
+  id: number;
+  classId: number;
+  title: string;
+  description: string | null;
+  orderIndex: number;
+  isPublished: boolean;
+  resources: ClassResource[];
+  activities: ClassActivity[];
+}
+
+export interface ClassResource {
+  id: number;
+  classId: number;
+  sectionId: number | null;
+  type: ClassResourceType;
+  title: string;
+  description: string | null;
+  content: string | null;
+  url: string | null;
+  fileName: string | null;
+  mimeType: string | null;
+  fileSizeBytes: number | null;
+  isPublished: boolean;
+  orderIndex: number;
+}
+
+export interface ClassActivity {
+  id: number;
+  classId: number;
+  sectionId: number | null;
+  type: ClassActivityType;
+  title: string;
+  instructions: string | null;
+  content: string | null;
+  status: ClassPublishStatus;
+  dueAt: string | null;
+  maxScore: number | null;
+  allowLate: boolean;
+  showGrades: boolean;
+  allowStudentPosts: boolean;
+}
+
+export interface ClassCourseOverview {
+  class: ClassItem;
+  role: string;
+  capabilities: Record<string, boolean>;
+  sections: ClassSection[];
+  standaloneResources: ClassResource[];
+  standaloneActivities: ClassActivity[];
+  myCompletions?: Array<{ resourceId: number | null; activityId: number | null; completedAt: string }>;
+  mySubmissions?: Array<{
+    id: number;
+    activityId: number;
+    status: string;
+    score: number | null;
+    feedback: string | null;
+    submittedAt: string;
+  }>;
+}

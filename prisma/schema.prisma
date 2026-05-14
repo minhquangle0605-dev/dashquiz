@@ -59,6 +59,49 @@ enum BackupStatus {
   FAILED
 }
 
+enum ClassMemberRole {
+  STUDENT
+  TA
+  NON_EDITING_TEACHER
+  TEACHER
+}
+
+enum ClassResourceType {
+  FILE
+  VIDEO
+  LINK
+  LESSON
+}
+
+enum ClassActivityType {
+  QUIZ
+  ASSIGNMENT
+  FORUM
+  WORKSHOP
+  ATTENDANCE
+  SURVEY
+}
+
+enum ClassPublishStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+}
+
+enum ClassSubmissionStatus {
+  DRAFT
+  SUBMITTED
+  GRADED
+  RETURNED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
 
 // USER MANAGEMENT
 
@@ -88,18 +131,30 @@ model User {
   webPushSubscriptions WebPushSubscription[]
   studentProfile       StudentProfile?
   parentProfile        ParentProfile?
+  classMemberRoles     ClassMemberRoleAssignment[]
+  createdClassSections ClassSection[]             @relation("ClassSectionCreator")
+  createdClassResources ClassResource[]           @relation("ClassResourceCreator")
+  createdClassActivities ClassActivity[]          @relation("ClassActivityCreator")
+  classSubmissions     ClassSubmission[]          @relation("ClassSubmissionStudent")
+  gradedClassSubmissions ClassSubmission[]        @relation("ClassSubmissionGrader")
+  classForumPosts      ClassForumPost[]
+  attendanceRecords    ClassAttendanceRecord[]
+  recordedAttendance   ClassAttendanceRecord[]    @relation("AttendanceRecorder")
+  classCompletions     ClassCompletion[]
+  classActivityLogs    ClassActivityLog[]
 
   @@index([username, role])
   @@map("users")
 }
 
 model StudentProfile {
-  studentCode String   @id @map("student_id") @db.VarChar(50)
-  userId      Int      @unique @map("user_id")
-  parentCode  String?  @map("parent_id") @db.VarChar(50)
-  fullName    String   @map("full_name") @db.VarChar(100)
-  classId     Int?     @map("class_id")
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  studentCode        String   @id @map("student_id") @db.VarChar(50)
+  userId             Int      @unique @map("user_id")
+  parentCode         String?  @map("parent_id") @db.VarChar(50)
+  fullName           String   @map("full_name") @db.VarChar(100)
+  classId            Int?     @map("class_id")
+  homeroomClassName  String?  @map("homeroom_class_name") @db.VarChar(20)
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
   user   User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   parent ParentProfile? @relation(fields: [parentCode], references: [parentCode], onDelete: SetNull)
@@ -107,6 +162,7 @@ model StudentProfile {
 
   @@index([parentCode])
   @@index([classId])
+  @@index([homeroomClassName])
   @@map("students")
 }
 
@@ -167,6 +223,12 @@ model Class {
   classStudents   ClassStudent[]
   studentProfiles StudentProfile[]
   examAssignments ExamAssignment[]
+  memberRoles     ClassMemberRoleAssignment[]
+  sections        ClassSection[]
+  resources       ClassResource[]
+  activities      ClassActivity[]
+  completions     ClassCompletion[]
+  courseLogs      ClassActivityLog[]
 
   @@map("classes")
 }
@@ -181,6 +243,196 @@ model ClassStudent {
 
   @@id([classId, studentId])
   @@map("class_students")
+}
+
+model ClassMemberRoleAssignment {
+  classId   Int             @map("class_id")
+  userId    Int             @map("user_id")
+  role      ClassMemberRole
+  createdAt DateTime        @default(now()) @map("created_at") @db.Timestamptz()
+
+  class Class @relation(fields: [classId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([classId, userId])
+  @@index([userId, role])
+  @@map("class_member_roles")
+}
+
+model ClassSection {
+  id          Int      @id @default(autoincrement())
+  classId     Int      @map("class_id")
+  title       String   @db.VarChar(120)
+  description String?  @db.Text
+  orderIndex  Int      @default(0) @map("order_index")
+  isPublished Boolean  @default(true) @map("is_published")
+  createdBy   Int      @map("created_by")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  class      Class           @relation(fields: [classId], references: [id], onDelete: Cascade)
+  creator    User            @relation("ClassSectionCreator", fields: [createdBy], references: [id], onDelete: Restrict)
+  resources  ClassResource[]
+  activities ClassActivity[]
+
+  @@index([classId, orderIndex])
+  @@map("class_sections")
+}
+
+model ClassResource {
+  id            Int               @id @default(autoincrement())
+  classId       Int               @map("class_id")
+  sectionId     Int?              @map("section_id")
+  type          ClassResourceType
+  title         String            @db.VarChar(200)
+  description   String?           @db.Text
+  content       String?           @db.Text
+  url           String?           @db.Text
+  fileName      String?           @map("file_name") @db.VarChar(255)
+  mimeType      String?           @map("mime_type") @db.VarChar(120)
+  fileSizeBytes Int?              @map("file_size_bytes")
+  isPublished   Boolean           @default(true) @map("is_published")
+  orderIndex    Int               @default(0) @map("order_index")
+  createdBy     Int               @map("created_by")
+  createdAt     DateTime          @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt     DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  class       Class             @relation(fields: [classId], references: [id], onDelete: Cascade)
+  section     ClassSection?     @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  creator     User              @relation("ClassResourceCreator", fields: [createdBy], references: [id], onDelete: Restrict)
+  completions ClassCompletion[]
+
+  @@index([classId, sectionId, orderIndex])
+  @@index([type])
+  @@map("class_resources")
+}
+
+model ClassActivity {
+  id                Int                @id @default(autoincrement())
+  classId           Int                @map("class_id")
+  sectionId         Int?               @map("section_id")
+  type              ClassActivityType
+  title             String             @db.VarChar(200)
+  instructions      String?            @db.Text
+  content           String?            @db.Text
+  status            ClassPublishStatus @default(DRAFT)
+  dueAt             DateTime?          @map("due_at") @db.Timestamptz()
+  maxScore          Float?             @map("max_score") @db.DoublePrecision
+  allowLate         Boolean            @default(false) @map("allow_late")
+  showGrades        Boolean            @default(true) @map("show_grades")
+  allowStudentPosts Boolean            @default(true) @map("allow_student_posts")
+  createdBy         Int                @map("created_by")
+  createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt         DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  class             Class                   @relation(fields: [classId], references: [id], onDelete: Cascade)
+  section           ClassSection?           @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  creator           User                    @relation("ClassActivityCreator", fields: [createdBy], references: [id], onDelete: Restrict)
+  submissions       ClassSubmission[]
+  forumPosts        ClassForumPost[]
+  attendanceRecords ClassAttendanceRecord[]
+  completions       ClassCompletion[]
+
+  @@index([classId, sectionId, status])
+  @@index([type])
+  @@map("class_activities")
+}
+
+model ClassSubmission {
+  id          Int                   @id @default(autoincrement())
+  activityId  Int                   @map("activity_id")
+  studentId   Int                   @map("student_id")
+  content     String?               @db.Text
+  fileUrl     String?               @map("file_url") @db.Text
+  fileName    String?               @map("file_name") @db.VarChar(255)
+  status      ClassSubmissionStatus @default(SUBMITTED)
+  score       Float?                @db.DoublePrecision
+  feedback    String?               @db.Text
+  submittedAt DateTime              @default(now()) @map("submitted_at") @db.Timestamptz()
+  updatedAt   DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+  gradedAt    DateTime?             @map("graded_at") @db.Timestamptz()
+  gradedBy    Int?                  @map("graded_by")
+
+  activity ClassActivity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  student  User          @relation("ClassSubmissionStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  grader   User?         @relation("ClassSubmissionGrader", fields: [gradedBy], references: [id], onDelete: SetNull)
+
+  @@unique([activityId, studentId])
+  @@index([studentId, status])
+  @@map("class_submissions")
+}
+
+model ClassForumPost {
+  id         Int      @id @default(autoincrement())
+  activityId Int      @map("activity_id")
+  authorId   Int      @map("author_id")
+  parentId   Int?     @map("parent_id")
+  content    String   @db.Text
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  activity ClassActivity    @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  author   User             @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  parent   ClassForumPost?  @relation("ForumPostReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies  ClassForumPost[] @relation("ForumPostReplies")
+
+  @@index([activityId, createdAt])
+  @@index([authorId])
+  @@map("class_forum_posts")
+}
+
+model ClassAttendanceRecord {
+  activityId Int              @map("activity_id")
+  studentId  Int              @map("student_id")
+  status     AttendanceStatus
+  note       String?          @db.VarChar(255)
+  recordedBy Int              @map("recorded_by")
+  recordedAt DateTime         @default(now()) @map("recorded_at") @db.Timestamptz()
+
+  activity ClassActivity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  student  User          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  recorder User          @relation("AttendanceRecorder", fields: [recordedBy], references: [id], onDelete: Restrict)
+
+  @@id([activityId, studentId])
+  @@index([studentId, status])
+  @@map("class_attendance_records")
+}
+
+model ClassCompletion {
+  id          Int       @id @default(autoincrement())
+  classId     Int       @map("class_id")
+  studentId   Int       @map("student_id")
+  resourceId  Int?      @map("resource_id")
+  activityId  Int?      @map("activity_id")
+  completedAt DateTime  @default(now()) @map("completed_at") @db.Timestamptz()
+
+  class    Class          @relation(fields: [classId], references: [id], onDelete: Cascade)
+  student  User           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  resource ClassResource? @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  activity ClassActivity? @relation(fields: [activityId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, resourceId])
+  @@unique([studentId, activityId])
+  @@index([classId, studentId])
+  @@map("class_completions")
+}
+
+model ClassActivityLog {
+  id         Int      @id @default(autoincrement())
+  classId    Int      @map("class_id")
+  actorId    Int?     @map("actor_id")
+  action     String   @db.VarChar(80)
+  targetType String?  @map("target_type") @db.VarChar(50)
+  targetId   Int?     @map("target_id")
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  class Class @relation(fields: [classId], references: [id], onDelete: Cascade)
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([classId, createdAt])
+  @@index([actorId])
+  @@map("class_activity_logs")
 }
 
 

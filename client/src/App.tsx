@@ -107,6 +107,7 @@ export default function App() {
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<AdminDashboard />} />
             <Route path="users" element={<UsersPage />} />
+            <Route path="questions" element={<QuestionBankPage />} />
             <Route path="academic" element={<AcademicPage />} />
             <Route path="system" element={<SystemPage />} />
             <Route path="notifications" element={<NotificationsPage />} />

@@ -96,7 +96,32 @@ export const API_ENDPOINTS = {
     BASE: '/api/classes',
     MY: '/api/classes/my',
     BY_ID: (id: number) => `/api/classes/${id}`,
+    COURSE: (id: number) => `/api/classes/${id}/course`,
+    SECTIONS: (id: number) => `/api/classes/${id}/sections`,
+    SECTION_BY_ID: (classId: number, sectionId: number) =>
+      `/api/classes/${classId}/sections/${sectionId}`,
+    RESOURCES: (id: number) => `/api/classes/${id}/resources`,
+    RESOURCE_BY_ID: (classId: number, resourceId: number) =>
+      `/api/classes/${classId}/resources/${resourceId}`,
+    RESOURCE_UPLOAD: (id: number) => `/api/classes/${id}/resources/upload`,
+    RESOURCE_DOWNLOAD: (resourceId: number) => `/api/classes/resources/${resourceId}/download`,
+    ACTIVITIES: (id: number) => `/api/classes/${id}/activities`,
+    ACTIVITY_BY_ID: (classId: number, activityId: number) =>
+      `/api/classes/${classId}/activities/${activityId}`,
+    ACTIVITY_SUBMISSIONS: (activityId: number) =>
+      `/api/classes/activities/${activityId}/submissions`,
+    SUBMISSION_GRADE: (submissionId: number) =>
+      `/api/classes/submissions/${submissionId}/grade`,
+    FORUM_POSTS: (activityId: number) =>
+      `/api/classes/activities/${activityId}/forum-posts`,
+    ATTENDANCE: (activityId: number) =>
+      `/api/classes/activities/${activityId}/attendance`,
+    COMPLETIONS: (id: number) => `/api/classes/${id}/completions`,
+    ROLES: (id: number) => `/api/classes/${id}/roles`,
+    LOGS: (id: number) => `/api/classes/${id}/logs`,
     STUDENTS: (id: number) => `/api/classes/${id}/students`,
+    AVAILABLE_STUDENTS: (id: number) => `/api/classes/${id}/available-students`,
+    CLASS_NAMES: '/api/classes/class-names',
     REMOVE_STUDENT: (classId: number, studentId: number) =>
       `/api/classes/${classId}/students/${studentId}`,
     IMPORT_STUDENTS: (id: number) => `/api/classes/${id}/students/import`,

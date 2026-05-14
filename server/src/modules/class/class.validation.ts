@@ -28,10 +28,33 @@ export const updateClassSchema = z.object({
 // ADD STUDENTS
 // ═══════════════════════════════════════════════
 
-export const addStudentsSchema = z.object({
-  userIds: z
-    .array(z.coerce.number().int().positive())
-    .min(1, 'At least one student ID is required'),
+export const addStudentsSchema = z
+  .object({
+    userIds: z.array(z.coerce.number().int().positive()).optional(),
+    studentIds: z.array(z.coerce.number().int().positive()).optional(),
+  })
+  .refine(
+    (val) => (val.userIds && val.userIds.length > 0) || (val.studentIds && val.studentIds.length > 0),
+    { message: 'At least one student ID is required', path: ['userIds'] },
+  );
+
+// ═══════════════════════════════════════════════
+// AVAILABLE STUDENTS QUERY
+// ═══════════════════════════════════════════════
+
+export const availableStudentsQuerySchema = z.object({
+  search: z.string().max(100).optional(),
+  gradeLevel: z.coerce.number().int().min(10).max(12).optional(),
+  homeroomClassName: z.string().max(50).optional(),
+  limit: z.coerce.number().int().positive().max(500).default(100),
+});
+
+// ═══════════════════════════════════════════════
+// LIST DISTINCT CLASS NAMES QUERY
+// ═══════════════════════════════════════════════
+
+export const listClassNamesQuerySchema = z.object({
+  gradeLevel: z.coerce.number().int().min(10).max(12).optional(),
 });
 
 // ═══════════════════════════════════════════════
@@ -57,6 +80,100 @@ export const listStudentsQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(100).default(50),
 });
 
+const resourceTypeSchema = z.enum(['FILE', 'VIDEO', 'LINK', 'LESSON']);
+const activityTypeSchema = z.enum([
+  'QUIZ',
+  'ASSIGNMENT',
+  'FORUM',
+  'WORKSHOP',
+  'ATTENDANCE',
+  'SURVEY',
+]);
+const publishStatusSchema = z.enum(['DRAFT', 'PUBLISHED', 'CLOSED']);
+const classMemberRoleSchema = z.enum(['STUDENT', 'TA', 'NON_EDITING_TEACHER', 'TEACHER']);
+const attendanceStatusSchema = z.enum(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED']);
+
+export const createSectionSchema = z.object({
+  title: z.string().min(1).max(120),
+  description: z.string().max(5000).optional(),
+  orderIndex: z.coerce.number().int().min(0).optional(),
+  isPublished: z.coerce.boolean().optional(),
+});
+
+export const updateSectionSchema = createSectionSchema.partial();
+
+export const createResourceSchema = z.object({
+  sectionId: z.coerce.number().int().positive().nullable().optional(),
+  type: resourceTypeSchema,
+  title: z.string().min(1).max(200),
+  description: z.string().max(5000).optional(),
+  content: z.string().max(50000).optional(),
+  url: z.string().max(2000).optional(),
+  fileName: z.string().max(255).optional(),
+  mimeType: z.string().max(120).optional(),
+  fileSizeBytes: z.coerce.number().int().positive().optional(),
+  isPublished: z.coerce.boolean().optional(),
+  orderIndex: z.coerce.number().int().min(0).optional(),
+});
+
+export const updateResourceSchema = createResourceSchema.partial();
+
+export const createActivitySchema = z.object({
+  sectionId: z.coerce.number().int().positive().nullable().optional(),
+  type: activityTypeSchema,
+  title: z.string().min(1).max(200),
+  instructions: z.string().max(50000).optional(),
+  content: z.string().max(50000).optional(),
+  status: publishStatusSchema.optional(),
+  dueAt: z.coerce.date().optional(),
+  maxScore: z.coerce.number().min(0).optional(),
+  allowLate: z.coerce.boolean().optional(),
+  showGrades: z.coerce.boolean().optional(),
+  allowStudentPosts: z.coerce.boolean().optional(),
+});
+
+export const updateActivitySchema = createActivitySchema.partial();
+
+export const submitActivitySchema = z.object({
+  content: z.string().max(50000).optional(),
+  fileUrl: z.string().max(2000).optional(),
+  fileName: z.string().max(255).optional(),
+});
+
+export const gradeSubmissionSchema = z.object({
+  score: z.coerce.number().min(0).optional(),
+  feedback: z.string().max(20000).optional(),
+});
+
+export const createForumPostSchema = z.object({
+  content: z.string().min(1).max(20000),
+  parentId: z.coerce.number().int().positive().optional(),
+});
+
+export const recordAttendanceSchema = z.object({
+  records: z.array(
+    z.object({
+      studentId: z.coerce.number().int().positive(),
+      status: attendanceStatusSchema,
+      note: z.string().max(255).optional(),
+    }),
+  ).min(1),
+});
+
+export const markCompletionSchema = z
+  .object({
+    resourceId: z.coerce.number().int().positive().optional(),
+    activityId: z.coerce.number().int().positive().optional(),
+  })
+  .refine((val) => Boolean(val.resourceId) !== Boolean(val.activityId), {
+    message: 'Provide exactly one of resourceId or activityId',
+  });
+
+export const assignClassRoleSchema = z.object({
+  userId: z.coerce.number().int().positive(),
+  role: classMemberRoleSchema,
+});
+
 // ═══════════════════════════════════════════════
 // TYPE EXPORTS
 // ═══════════════════════════════════════════════
@@ -66,3 +183,17 @@ export type UpdateClassInput = z.infer<typeof updateClassSchema>;
 export type AddStudentsInput = z.infer<typeof addStudentsSchema>;
 export type ListClassesQuery = z.infer<typeof listClassesQuerySchema>;
 export type ListStudentsQuery = z.infer<typeof listStudentsQuerySchema>;
+export type AvailableStudentsQuery = z.infer<typeof availableStudentsQuerySchema>;
+export type ListClassNamesQuery = z.infer<typeof listClassNamesQuerySchema>;
+export type CreateSectionInput = z.infer<typeof createSectionSchema>;
+export type UpdateSectionInput = z.infer<typeof updateSectionSchema>;
+export type CreateResourceInput = z.infer<typeof createResourceSchema>;
+export type UpdateResourceInput = z.infer<typeof updateResourceSchema>;
+export type CreateActivityInput = z.infer<typeof createActivitySchema>;
+export type UpdateActivityInput = z.infer<typeof updateActivitySchema>;
+export type SubmitActivityInput = z.infer<typeof submitActivitySchema>;
+export type GradeSubmissionInput = z.infer<typeof gradeSubmissionSchema>;
+export type CreateForumPostInput = z.infer<typeof createForumPostSchema>;
+export type RecordAttendanceInput = z.infer<typeof recordAttendanceSchema>;
+export type MarkCompletionInput = z.infer<typeof markCompletionSchema>;
+export type AssignClassRoleInput = z.infer<typeof assignClassRoleSchema>;
