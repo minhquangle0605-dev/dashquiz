@@ -1,22 +1,21 @@
 /**
- * Username helpers for role-based identifiers like:
- * name.code.school.teacher | .student | .parent
+ * Username helpers for school account identifiers:
+ * student/teacher: givenNameMiddleInitials.code.class.school
+ * parent: givenNameInitials.parentCode.school
  *
- * Normalization approach aligns with common slug patterns (ASCII, separators).
  * References:
+ * - Unicode NFD normalization: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/normalize
  * - Prisma case-insensitive lookup: https://www.prisma.io/docs/orm/prisma-client/queries/filtering-and-sorting#case-insensitive-filtering
- * - Unicode NFD normalization (remove diacritics): https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/normalize
  */
 
-const ROLE_SUFFIXES = ['teacher', 'student', 'parent'] as const;
-export type RoleUsernameSuffix = (typeof ROLE_SUFFIXES)[number];
+type AccountRole = 'STUDENT' | 'TEACHER' | 'PARENT';
 
 function stripDiacritics(input: string): string {
   return input
     .normalize('NFD')
     .replace(/\p{M}/gu, '')
-    .replace(/đ/g, 'd')
-    .replace(/Đ/g, 'D');
+    .replace(/\u0111/g, 'd')
+    .replace(/\u0110/g, 'D');
 }
 
 /** Lowercase segment: letters, digits, dot and underscore allowed inside segments (dots separate segments). */
@@ -27,26 +26,54 @@ export function slugifySegment(raw: string): string {
   return ascii.replace(/^\.+|\.+$/g, '');
 }
 
-export function assertValidRoleSuffix(suffix: string): asserts suffix is RoleUsernameSuffix {
-  if (!ROLE_SUFFIXES.includes(suffix as RoleUsernameSuffix)) {
-    throw new Error(`Invalid role suffix: ${suffix}. Expected one of: ${ROLE_SUFFIXES.join(', ')}`);
-  }
+function nameParts(fullName: string): string[] {
+  return stripDiacritics(fullName)
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .map((part) => part.replace(/[^a-z0-9]/g, ''))
+    .filter(Boolean);
 }
 
 /**
- * Build a login username from display parts. Does not check DB uniqueness — caller must ensure uniqueness (e.g. suffix with -2).
+ * Vietnamese names are commonly ordered family + middle + given. The requested
+ * format uses the given name followed by initials from the middle names.
+ * For two-part names we still include the first-part initial to avoid weak ids.
  */
-export function buildRoleUsername(
-  displayName: string,
-  code: string,
-  schoolSlug: string,
-  roleSuffix: RoleUsernameSuffix,
-): string {
-  const a = slugifySegment(displayName);
-  const b = slugifySegment(code);
-  const c = slugifySegment(schoolSlug);
-  if (!a || !b || !c) {
-    throw new Error('Each of name, code, and school must contain at least one letter or digit after normalization');
+export function compactVietnameseName(fullName: string): string {
+  const parts = nameParts(fullName);
+  if (parts.length === 0) return '';
+  if (parts.length === 1) return parts[0];
+
+  const givenName = parts[parts.length - 1];
+  const middleStart = parts.length > 2 ? 1 : 0;
+  const middle = parts.slice(middleStart, -1).map((part) => part[0]).join('');
+  return `${givenName}${middle}`;
+}
+
+export function buildAccountUsername(input: {
+  role: AccountRole;
+  fullName: string;
+  code: string;
+  school: string;
+  className?: string | null;
+}): string {
+  const name = compactVietnameseName(input.fullName);
+  const code = slugifySegment(input.code);
+  const school = slugifySegment(input.school);
+  const className = input.className ? slugifySegment(input.className) : '';
+
+  if (!name || !code || !school) {
+    throw new Error('Name, code, and school must contain at least one letter or digit after normalization');
   }
-  return `${a}.${b}.${c}.${roleSuffix}`;
+
+  if ((input.role === 'STUDENT' || input.role === 'TEACHER') && !className) {
+    throw new Error('className is required to generate student or teacher usernames');
+  }
+
+  if (input.role === 'PARENT') {
+    return `${name}.${code}.${school}`;
+  }
+
+  return `${name}.${code}.${className}.${school}`;
 }

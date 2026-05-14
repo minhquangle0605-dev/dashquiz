@@ -129,19 +129,6 @@ export async function adminChangeRole(req: Request, res: Response, next: NextFun
   }
 }
 
-export async function adminSetParentPassword(req: Request, res: Response, next: NextFunction): Promise<void> {
-  try {
-    const userId = parseInt(req.params.id, 10);
-    if (isNaN(userId)) {
-      throw new AppError('Invalid user ID', 400);
-    }
-    const result = await userService.adminSetParentPassword(userId, req.body);
-    res.json(result);
-  } catch (error: unknown) {
-    next(error instanceof Error ? error : new Error('Unexpected error'));
-  }
-}
-
 export async function adminImportUsers(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const result = await userService.importUsersFromExcel(req.file as Express.Multer.File);

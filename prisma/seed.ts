@@ -9,8 +9,6 @@ async function main() {
   // ── 1. Seed Admin Account (login: admin.web / 123456) ──
   // Admin is the bootstrap account — created via upsert so re-running seed is safe.
   const passwordHash = await bcrypt.hash('123456', 12);
-  const parentPasswordHash = await bcrypt.hash('parent123', 12);
-
   const admin = await prisma.user.upsert({
     where: { username: 'admin.web' },
     update: {
@@ -31,10 +29,48 @@ async function main() {
 
   const student = await prisma.user.upsert({
     where: { username: 'student.demo' },
-    update: { passwordHash, parentPasswordHash, role: 'STUDENT', fullName: 'Demo Student', status: 'ACTIVE' },
-    create: { role: 'STUDENT', username: 'student.demo', passwordHash, parentPasswordHash, fullName: 'Demo Student', status: 'ACTIVE' },
+    update: { passwordHash, role: 'STUDENT', fullName: 'Demo Student', status: 'ACTIVE' },
+    create: { role: 'STUDENT', username: 'student.demo', passwordHash, fullName: 'Demo Student', status: 'ACTIVE' },
   });
-  console.log(`✓ Student account seeded: ${student.username} (parent login: same username, password parent123)`);
+  console.log(`✓ Student account seeded: ${student.username}`);
+
+  const existingStudentProfile = await prisma.studentProfile.findUnique({
+    where: { userId: student.id },
+  });
+  if (existingStudentProfile) {
+    await prisma.studentProfile.update({
+      where: { userId: student.id },
+      data: { studentCode: 'HS-DEMO', fullName: 'Demo Student' },
+    });
+  } else {
+    await prisma.studentProfile.create({
+      data: { studentCode: 'HS-DEMO', userId: student.id, fullName: 'Demo Student' },
+    });
+  }
+
+  const parent = await prisma.user.upsert({
+    where: { username: 'parent.demo' },
+    update: { passwordHash, role: 'PARENT', fullName: 'Demo Parent', status: 'ACTIVE' },
+    create: { role: 'PARENT', username: 'parent.demo', passwordHash, fullName: 'Demo Parent', status: 'ACTIVE' },
+  });
+  const existingParentProfile = await prisma.parentProfile.findUnique({
+    where: { userId: parent.id },
+  });
+  if (existingParentProfile) {
+    await prisma.parentProfile.update({
+      where: { userId: parent.id },
+      data: { parentCode: 'PH-DEMO', fullName: 'Demo Parent' },
+    });
+  } else {
+    await prisma.parentProfile.create({
+      data: { parentCode: 'PH-DEMO', userId: parent.id, fullName: 'Demo Parent' },
+    });
+  }
+  await prisma.studentProfile.update({
+    where: { studentCode: 'HS-DEMO' },
+    data: { parentCode: 'PH-DEMO' },
+  });
+  console.log(`✓ Parent account seeded: ${parent.username}`);
 
   const teacher = await prisma.user.upsert({
     where: { username: 'teacher.demo' },

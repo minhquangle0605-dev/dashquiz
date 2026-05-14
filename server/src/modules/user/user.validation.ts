@@ -31,13 +31,9 @@ export const changePasswordSchema = z.object({
   path: ['newPassword'],
 });
 
-// ═══════════════════════════════════════════════
-// ADMIN — User Management Schemas (UC37–39)
-// ═══════════════════════════════════════════════
-
 const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
 
-export const userRoleSchema = z.enum(['ADMIN', 'TEACHER', 'STUDENT']);
+export const userRoleSchema = z.enum(['ADMIN', 'TEACHER', 'STUDENT', 'PARENT']);
 
 export const listUsersQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1).optional(),
@@ -57,24 +53,49 @@ export const createUserSchema = z.object({
     .regex(
       /^[a-zA-Z0-9._-]+$/,
       'Username can only contain letters, numbers, dots, underscores, and hyphens',
-    ),
+    )
+    .optional(),
+  accountCode: z
+    .string()
+    .min(1, 'Account code is required')
+    .max(50, 'Account code must not exceed 50 characters')
+    .optional(),
+  school: z
+    .string()
+    .min(1, 'School is required')
+    .max(100, 'School must not exceed 100 characters')
+    .optional(),
+  className: z
+    .string()
+    .min(1, 'Class is required')
+    .max(50, 'Class must not exceed 50 characters')
+    .optional(),
+  classId: z.coerce.number().int().positive().optional(),
+  parentCode: z
+    .string()
+    .min(1, 'Parent code cannot be empty')
+    .max(50, 'Parent code must not exceed 50 characters')
+    .optional(),
   password: z
     .string()
     .min(8, 'Password must be at least 8 characters')
     .regex(passwordRegex, 'Password must contain at least one uppercase letter, one lowercase letter, and one number'),
-  // Optional parent password — only meaningful when role === 'STUDENT'.
-  // Same username + this password lets the parent log in to the parent view.
-  parentPassword: z
-    .string()
-    .min(6, 'Parent password must be at least 6 characters')
-    .max(100, 'Parent password must not exceed 100 characters')
-    .optional(),
   fullName: z
     .string()
     .min(2, 'Full name must be at least 2 characters')
-    .max(100, 'Full name must not exceed 100 characters')
-    .optional(),
+    .max(100, 'Full name must not exceed 100 characters'),
+  phone: z
+    .string()
+    .max(20, 'Phone must not exceed 20 characters')
+    .optional()
+    .nullable(),
   role: userRoleSchema,
+}).refine((data) => data.username || (data.accountCode && data.school), {
+  message: 'Provide username, or provide accountCode and school to generate one',
+  path: ['username'],
+}).refine((data) => data.username || data.role === 'PARENT' || data.className, {
+  message: 'className is required when auto-generating STUDENT or TEACHER usernames',
+  path: ['className'],
 });
 
 export const updateUserSchema = z.object({
@@ -95,19 +116,10 @@ export const changeRoleSchema = z.object({
   role: userRoleSchema,
 });
 
-export const setParentPasswordSchema = z.object({
-  parentPassword: z
-    .string()
-    .min(6, 'Parent password must be at least 6 characters')
-    .max(100, 'Parent password must not exceed 100 characters')
-    .nullable(),
-});
-
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 export type ListUsersQuery = z.infer<typeof listUsersQuerySchema>;
 export type CreateUserInput = z.infer<typeof createUserSchema>;
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
 export type ChangeRoleInput = z.infer<typeof changeRoleSchema>;
-export type SetParentPasswordInput = z.infer<typeof setParentPasswordSchema>;
 export type UserRoleValue = z.infer<typeof userRoleSchema>;

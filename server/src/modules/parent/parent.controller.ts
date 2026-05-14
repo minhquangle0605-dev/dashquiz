@@ -4,23 +4,18 @@ import { parentService } from './parent.service';
 import { AppError } from '../../middlewares/errorHandler';
 import type { ChildResultsQuery, ChildAnalyticsQuery } from './parent.validation';
 
-/**
- * In dual-login mode the parent's session is scoped to a single student.
- * The JWT carries `studentId` (and `id` is the same value); we always use it
- * instead of trusting an arbitrary id from the URL/body.
- */
-function getSessionStudentId(req: Request): number {
-  const id = req.user?.studentId ?? req.user?.id;
+function getParentUserId(req: Request): number {
+  const id = req.user?.id;
   if (id === undefined) {
-    throw new AppError('Parent session is missing student context', 401);
+    throw new AppError('Parent session is missing user context', 401);
   }
   return id;
 }
 
 export async function getChildren(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const studentId = getSessionStudentId(req);
-    const data = await parentService.getChildren(studentId);
+    const parentUserId = getParentUserId(req);
+    const data = await parentService.getChildren(parentUserId);
 
     res.json({
       success: true,
@@ -35,7 +30,7 @@ export async function getChildren(req: Request, res: Response, next: NextFunctio
 
 export async function getChildResults(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const sessionStudentId = getSessionStudentId(req);
+    const parentUserId = getParentUserId(req);
     const childId = parseInt(req.params.id, 10);
     if (isNaN(childId)) throw new AppError('Invalid child ID', 400);
 
@@ -46,7 +41,7 @@ export async function getChildResults(req: Request, res: Response, next: NextFun
       order: 'desc' as const,
     };
 
-    const result = await parentService.getChildResults(sessionStudentId, childId, query);
+    const result = await parentService.getChildResults(parentUserId, childId, query);
 
     res.json({
       success: true,
@@ -62,13 +57,13 @@ export async function getChildResults(req: Request, res: Response, next: NextFun
 
 export async function getChildDashboard(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const sessionStudentId = getSessionStudentId(req);
+    const parentUserId = getParentUserId(req);
     const childId = parseInt(req.params.id, 10);
     if (isNaN(childId)) throw new AppError('Invalid child ID', 400);
 
     const { subjectId } = (req as Request & { validatedQuery?: ChildAnalyticsQuery }).validatedQuery ?? {};
 
-    const data = await parentService.getChildDashboard(sessionStudentId, childId, subjectId);
+    const data = await parentService.getChildDashboard(parentUserId, childId, subjectId);
 
     res.json({
       success: true,
@@ -83,13 +78,13 @@ export async function getChildDashboard(req: Request, res: Response, next: NextF
 
 export async function getChildStrengths(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const sessionStudentId = getSessionStudentId(req);
+    const parentUserId = getParentUserId(req);
     const childId = parseInt(req.params.id, 10);
     if (isNaN(childId)) throw new AppError('Invalid child ID', 400);
 
     const { subjectId } = (req as Request & { validatedQuery?: ChildAnalyticsQuery }).validatedQuery ?? {};
 
-    const data = await parentService.getChildStrengths(sessionStudentId, childId, subjectId);
+    const data = await parentService.getChildStrengths(parentUserId, childId, subjectId);
 
     res.json({
       success: true,

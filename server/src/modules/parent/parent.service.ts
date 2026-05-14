@@ -3,36 +3,33 @@ import { AppError } from '../../middlewares/errorHandler';
 import { studentAnalyticsService } from '../analytics/analytics.service';
 import type { ChildResultsQuery } from './parent.validation';
 
-/**
- * Dual-login parent module.
- *
- * After the schema refactor there is no separate parent record: a parent logs in
- * with the student's username + the parent password stored on the student row.
- * The auth service emits a JWT with role='parent' and studentId=<student id>,
- * so every endpoint here operates on that one student — no link table, no
- * cross-student access. Routes pull the id from req.user.studentId (or .id,
- * which is the same in dual-login) and pass it in.
- */
 export class ParentService {
-  private async loadChild(studentId: number) {
-    const student = await prisma.user.findUnique({
-      where: { id: studentId },
-      select: {
-        id: true,
-        username: true,
-        fullName: true,
-        avatar: true,
-        status: true,
-        lastLoginAt: true,
-        role: true,
-        enrolledClasses: {
+  private async loadParent(parentUserId: number) {
+    const parent = await prisma.parentProfile.findUnique({
+      where: { userId: parentUserId },
+      include: {
+        children: {
           include: {
-            class: {
+            user: {
               select: {
                 id: true,
-                name: true,
-                gradeLevel: true,
-                subject: { select: { name: true } },
+                username: true,
+                fullName: true,
+                avatar: true,
+                status: true,
+                lastLoginAt: true,
+                enrolledClasses: {
+                  include: {
+                    class: {
+                      select: {
+                        id: true,
+                        name: true,
+                        gradeLevel: true,
+                        subject: { select: { name: true } },
+                      },
+                    },
+                  },
+                },
               },
             },
           },
@@ -40,49 +37,50 @@ export class ParentService {
       },
     });
 
-    if (!student || student.role !== 'STUDENT') {
-      throw new AppError('Student record not found', 404);
+    if (!parent) {
+      throw new AppError('Parent profile not found', 404);
     }
 
-    return student;
+    return parent;
   }
 
-  /**
-   * The dual-login parent always has exactly one "child" — the underlying
-   * student account. Returned as a single-item list to keep the frontend
-   * contract stable.
-   */
-  async getChildren(studentId: number) {
-    const student = await this.loadChild(studentId);
+  async getChildren(parentUserId: number) {
+    const parent = await this.loadParent(parentUserId);
 
-    return [
-      {
-        student: {
-          id: student.id,
-          username: student.username,
-          fullName: student.fullName,
-          avatar: student.avatar,
-          status: student.status,
-          lastLoginAt: student.lastLoginAt,
-          classes: student.enrolledClasses.map((cs) => ({
-            id: cs.class.id,
-            name: cs.class.name,
-            gradeLevel: cs.class.gradeLevel,
-            subjectName: cs.class.subject.name,
-          })),
-        },
+    return parent.children.map((child) => ({
+      student: {
+        id: child.user.id,
+        username: child.user.username,
+        fullName: child.user.fullName ?? child.fullName,
+        avatar: child.user.avatar,
+        status: child.user.status,
+        lastLoginAt: child.user.lastLoginAt,
+        classes: child.user.enrolledClasses.map((cs) => ({
+          id: cs.class.id,
+          name: cs.class.name,
+          gradeLevel: cs.class.gradeLevel,
+          subjectName: cs.class.subject.name,
+        })),
       },
-    ];
+    }));
   }
 
-  private assertOwnChild(sessionStudentId: number, requestedChildId: number): void {
-    if (sessionStudentId !== requestedChildId) {
+  private async assertOwnChild(parentUserId: number, requestedChildUserId: number): Promise<void> {
+    const child = await prisma.studentProfile.findFirst({
+      where: {
+        userId: requestedChildUserId,
+        parent: { userId: parentUserId },
+      },
+      select: { userId: true },
+    });
+
+    if (!child) {
       throw new AppError('This student is not linked to your account', 403);
     }
   }
 
-  async getChildResults(sessionStudentId: number, childId: number, query: ChildResultsQuery) {
-    this.assertOwnChild(sessionStudentId, childId);
+  async getChildResults(parentUserId: number, childId: number, query: ChildResultsQuery) {
+    await this.assertOwnChild(parentUserId, childId);
     return studentAnalyticsService.getAttempts(childId, {
       page: query.page,
       limit: query.limit,
@@ -94,13 +92,13 @@ export class ParentService {
     });
   }
 
-  async getChildDashboard(sessionStudentId: number, childId: number, subjectId?: number) {
-    this.assertOwnChild(sessionStudentId, childId);
+  async getChildDashboard(parentUserId: number, childId: number, subjectId?: number) {
+    await this.assertOwnChild(parentUserId, childId);
     return studentAnalyticsService.getDashboard(childId, subjectId);
   }
 
-  async getChildStrengths(sessionStudentId: number, childId: number, subjectId?: number) {
-    this.assertOwnChild(sessionStudentId, childId);
+  async getChildStrengths(parentUserId: number, childId: number, subjectId?: number) {
+    await this.assertOwnChild(parentUserId, childId);
     return studentAnalyticsService.getStrengths(childId, subjectId);
   }
 }

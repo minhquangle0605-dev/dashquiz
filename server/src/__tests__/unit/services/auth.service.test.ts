@@ -16,7 +16,6 @@ const mockUser = {
   id: 1,
   username: 'teststudent',
   passwordHash: '',
-  parentPasswordHash: null,
   fullName: 'Test Student',
   phone: null,
   avatar: null,

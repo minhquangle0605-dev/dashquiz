@@ -29,7 +29,6 @@ export class AuthService {
       role: payload.role,
       jti,
     };
-    if (payload.studentId !== undefined) body.studentId = payload.studentId;
     return jwt.sign(body, env.jwt.secret, {
       expiresIn: env.jwt.accessExpiry as StringValue,
     });
@@ -41,8 +40,6 @@ export class AuthService {
 
   private async storeRefreshToken(userId: number, token: string, role: string): Promise<void> {
     const redis = getRedisClient();
-    // Store "<userId>:<role>" so refresh can re-issue a parent-scoped token without
-    // a second DB roundtrip and without losing the dual-login distinction.
     await redis.set(`${REFRESH_PREFIX}${token}`, `${userId}:${role}`, 'EX', REFRESH_TTL);
   }
 
@@ -112,35 +109,19 @@ export class AuthService {
       throw new AppError('Account is disabled or suspended', 403);
     }
 
-    // Dual-login: STUDENT records may carry a parent password. Try the student's
-    // own password first; if it matches, role from DB. Otherwise (and only for
-    // students) try the parent password and grant the virtual PARENT role.
-    let resolvedRole: string;
-    let studentId: number | undefined;
-
-    const studentMatch = await bcrypt.compare(data.password, user.passwordHash);
-    if (studentMatch) {
-      resolvedRole = user.role.toLowerCase();
-    } else if (user.role === 'STUDENT' && user.parentPasswordHash) {
-      const parentMatch = await bcrypt.compare(data.password, user.parentPasswordHash);
-      if (!parentMatch) {
-        await recordLoginFailure(clientIp, userKey);
-        throw new AppError('Invalid username or password', 401);
-      }
-      resolvedRole = 'parent';
-      studentId = user.id;
-    } else {
+    const passwordMatch = await bcrypt.compare(data.password, user.passwordHash);
+    if (!passwordMatch) {
       await recordLoginFailure(clientIp, userKey);
       throw new AppError('Invalid username or password', 401);
     }
 
+    const resolvedRole = user.role.toLowerCase();
     await clearLoginFailureState(clientIp, userKey);
 
     const jwtPayload: JwtPayload = {
       id: user.id,
       username: user.username,
       role: resolvedRole,
-      studentId,
     };
 
     const accessToken = this.generateAccessToken(jwtPayload);
@@ -195,13 +176,10 @@ export class AuthService {
     await this.deleteRefreshToken(refreshToken);
 
     const resolvedRole = session.role || user.role.toLowerCase();
-    const studentId = resolvedRole === 'parent' ? user.id : undefined;
-
     const jwtPayload: JwtPayload = {
       id: user.id,
       username: user.username,
       role: resolvedRole,
-      studentId,
     };
 
     const newAccessToken = this.generateAccessToken(jwtPayload);

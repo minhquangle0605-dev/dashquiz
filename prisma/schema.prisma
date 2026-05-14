@@ -16,6 +16,7 @@ enum UserRole {
   ADMIN
   TEACHER
   STUDENT
+  PARENT
 }
 
 enum UserStatus {
@@ -59,7 +60,7 @@ enum BackupStatus {
 }
 
 
-// USER MANAGEMENT (1 model — dual-login: student record carries parent password)
+// USER MANAGEMENT
 
 
 model User {
@@ -67,7 +68,6 @@ model User {
   role               UserRole   @default(STUDENT)
   username           String     @unique @db.VarChar(191)
   passwordHash       String     @map("password_hash") @db.VarChar(255)
-  parentPasswordHash String?    @map("parent_password_hash") @db.VarChar(255)
   fullName           String?    @map("full_name") @db.VarChar(100)
   phone              String?    @db.VarChar(20)
   avatar             String?    @db.VarChar(255)
@@ -86,9 +86,41 @@ model User {
   activityLogs         ActivityLog[]
   backups              Backup[]
   webPushSubscriptions WebPushSubscription[]
+  studentProfile       StudentProfile?
+  parentProfile        ParentProfile?
 
   @@index([username, role])
   @@map("users")
+}
+
+model StudentProfile {
+  studentCode String   @id @map("student_id") @db.VarChar(50)
+  userId      Int      @unique @map("user_id")
+  parentCode  String?  @map("parent_id") @db.VarChar(50)
+  fullName    String   @map("full_name") @db.VarChar(100)
+  classId     Int?     @map("class_id")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  user   User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent ParentProfile? @relation(fields: [parentCode], references: [parentCode], onDelete: SetNull)
+  class  Class?         @relation(fields: [classId], references: [id], onDelete: SetNull)
+
+  @@index([parentCode])
+  @@index([classId])
+  @@map("students")
+}
+
+model ParentProfile {
+  parentCode String   @id @map("parent_id") @db.VarChar(50)
+  userId     Int      @unique @map("user_id")
+  phoneNumber String? @unique @map("phone_number") @db.VarChar(20)
+  fullName   String   @map("full_name") @db.VarChar(100)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  children StudentProfile[]
+
+  @@map("parents")
 }
 
 
@@ -133,6 +165,7 @@ model Class {
   teacher         User             @relation("TeacherClasses", fields: [teacherId], references: [id], onDelete: Restrict)
   subject         Subject          @relation(fields: [subjectId], references: [id], onDelete: Restrict)
   classStudents   ClassStudent[]
+  studentProfiles StudentProfile[]
   examAssignments ExamAssignment[]
 
   @@map("classes")

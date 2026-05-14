@@ -266,22 +266,34 @@ export class NotificationService {
     try {
       const student = await prisma.user.findUnique({
         where: { id: studentId },
-        select: { fullName: true, username: true, parentPasswordHash: true },
+        select: {
+          fullName: true,
+          username: true,
+          studentProfile: {
+            select: {
+              parent: { select: { userId: true } },
+            },
+          },
+        },
       });
       if (!student) return;
 
       const studentName = student.fullName || student.username || 'Học sinh';
 
-      if (student.parentPasswordHash) {
+      const parentUserId = student.studentProfile?.parent?.userId;
+
+      if (parentUserId) {
         const title = `Kết quả bài KT: ${examTitle}`;
         const message = `Con bạn ${studentName} đã hoàn thành bài kiểm tra "${examTitle}", điểm: ${score}/10 (${correctCount}/${totalQuestions} câu đúng).`;
 
-        emitDashboardUpdate(studentId, {
+        await this.createNotification(parentUserId, title, message, 'child_exam_submitted');
+
+        emitDashboardUpdate(parentUserId, {
           reason: 'child_exam_submitted',
           entityType: 'exam_attempt',
         });
 
-        this.sendWebPush(studentId, {
+        this.sendWebPush(parentUserId, {
           title,
           body: message,
           url: `/parent/children/${studentId}/results`,
@@ -336,16 +348,25 @@ export class NotificationService {
       // the parent. We don't insert duplicate parent rows; just send an extra
       // web-push framed for the parent device when one is configured.
       if (studentIds.size > 0) {
-        const studentsWithParent = await prisma.user.findMany({
-          where: { id: { in: Array.from(studentIds) }, parentPasswordHash: { not: null } },
-          select: { id: true },
+        const studentsWithParent = await prisma.studentProfile.findMany({
+          where: {
+            userId: { in: Array.from(studentIds) },
+            parentCode: { not: null },
+          },
+          select: {
+            userId: true,
+            parent: { select: { userId: true } },
+          },
         });
 
-        for (const { id: studentId } of studentsWithParent) {
+        for (const { userId: studentId, parent } of studentsWithParent) {
+          if (!parent) continue;
           const title = `Kết quả bài KT đã công bố: ${examTitle}`;
           const message = `Giáo viên đã công bố kết quả bài kiểm tra "${examTitle}" cho con bạn.`;
 
-          this.sendWebPush(studentId, {
+          await this.createNotification(parent.userId, title, message, 'child_results_published');
+
+          this.sendWebPush(parent.userId, {
             title,
             body: message,
             url: `/parent/children/${studentId}/results`,

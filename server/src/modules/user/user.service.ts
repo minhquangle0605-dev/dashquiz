@@ -7,6 +7,7 @@ import { env } from '../../config/env';
 import { AppError } from '../../middlewares/errorHandler';
 import { FILE_UPLOAD, PAGINATION } from '../../utils/constants';
 import { logger } from '../../utils/logger';
+import { buildAccountUsername } from '../../utils/username';
 import type {
   UpdateProfileInput,
   ChangePasswordInput,
@@ -14,7 +15,6 @@ import type {
   CreateUserInput,
   UpdateUserInput,
   ChangeRoleInput,
-  SetParentPasswordInput,
 } from './user.validation';
 
 export class UserService {
@@ -22,7 +22,7 @@ export class UserService {
   // USER SELF-SERVICE
   // ═══════════════════════════════════════════════
 
-  async getProfile(userId: number, sessionRole?: string) {
+  async getProfile(userId: number, _sessionRole?: string) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
     });
@@ -33,7 +33,7 @@ export class UserService {
 
     // When a parent is logged in, the underlying record is a STUDENT — report
     // the session's virtual role instead of the DB role.
-    const reportedRole = sessionRole === 'parent' ? 'parent' : user.role.toLowerCase();
+    const reportedRole = user.role.toLowerCase();
 
     return {
       success: true,
@@ -66,6 +66,26 @@ export class UserService {
       where: { id: userId },
       data: updateData,
     });
+
+    if (data.fullName !== undefined) {
+      await Promise.all([
+        prisma.studentProfile.updateMany({
+          where: { userId },
+          data: { fullName: data.fullName },
+        }),
+        prisma.parentProfile.updateMany({
+          where: { userId },
+          data: { fullName: data.fullName },
+        }),
+      ]);
+    }
+
+    if (data.phone !== undefined) {
+      await prisma.parentProfile.updateMany({
+        where: { userId },
+        data: { phoneNumber: data.phone || null },
+      });
+    }
 
     return {
       success: true,
@@ -197,6 +217,10 @@ export class UserService {
     const [users, total] = await Promise.all([
       prisma.user.findMany({
         where,
+        include: {
+          studentProfile: { select: { studentCode: true, parentCode: true, classId: true } },
+          parentProfile: { select: { parentCode: true, phoneNumber: true, _count: { select: { children: true } } } },
+        },
         orderBy: { [sortField]: sortOrder },
         skip,
         take: limit,
@@ -216,7 +240,8 @@ export class UserService {
         phone: u.phone,
         avatar: u.avatar,
         role: u.role,
-        hasParentLogin: u.parentPasswordHash !== null,
+        studentProfile: u.studentProfile,
+        parentProfile: u.parentProfile,
         status: u.status,
         lastLoginAt: u.lastLoginAt,
         createdAt: u.createdAt,
@@ -243,51 +268,122 @@ export class UserService {
       data: [
         { value: 'ADMIN', label: 'Quản trị viên' },
         { value: 'TEACHER', label: 'Giáo viên' },
-        { value: 'STUDENT', label: 'Học sinh (dual-login: kèm mật khẩu phụ huynh)' },
+        { value: 'STUDENT', label: 'Học sinh' },
+        { value: 'PARENT', label: 'Phụ huynh' },
       ],
     };
   }
 
   async adminCreateUser(data: CreateUserInput) {
-    const existingUsername = await prisma.user.findUnique({ where: { username: data.username } });
+    if (data.role === 'ADMIN') {
+      const existingAdmin = await prisma.user.findFirst({ where: { role: 'ADMIN' } });
+      if (existingAdmin) {
+        throw new AppError('Only one ADMIN account is allowed', 409);
+      }
+    }
+
+    if (data.role === 'ADMIN' && !data.username) {
+      throw new AppError('Username is required for ADMIN accounts', 400);
+    }
+
+    const username = data.username?.trim() || buildAccountUsername({
+      role: data.role as 'STUDENT' | 'TEACHER' | 'PARENT',
+      fullName: data.fullName,
+      code: data.accountCode || '',
+      className: data.className,
+      school: data.school || '',
+    });
+
+    const existingUsername = await prisma.user.findFirst({
+      where: { username: { equals: username, mode: 'insensitive' } },
+    });
     if (existingUsername) {
       throw new AppError('Username already exists', 409);
     }
 
-    if (data.parentPassword && data.role !== 'STUDENT') {
-      throw new AppError('parentPassword is only valid for STUDENT role', 400);
+    if (data.classId) {
+      const classEntity = await prisma.class.findUnique({ where: { id: data.classId } });
+      if (!classEntity) throw new AppError('Class not found', 404);
     }
 
-    const salt = await bcrypt.genSalt(12);
-    const passwordHash = await bcrypt.hash(data.password, salt);
-    const parentPasswordHash = data.parentPassword
-      ? await bcrypt.hash(data.parentPassword, salt)
-      : null;
+    if (data.parentCode) {
+      const parentProfile = await prisma.parentProfile.findUnique({
+        where: { parentCode: data.parentCode },
+      });
+      if (!parentProfile) throw new AppError('Parent profile not found', 404);
+    }
 
-    const user = await prisma.user.create({
-      data: {
-        username: data.username,
-        passwordHash,
-        parentPasswordHash,
-        fullName: data.fullName || null,
-        phone: null,
-        role: data.role,
-        status: 'ACTIVE',
-      },
+    const passwordHash = await bcrypt.hash(data.password, 12);
+
+    const result = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          username,
+          passwordHash,
+          fullName: data.fullName,
+          phone: data.phone || null,
+          role: data.role,
+          status: 'ACTIVE',
+        },
+      });
+
+      if (data.role === 'STUDENT') {
+        const studentCode = data.accountCode || `student-${user.id}`;
+        await tx.studentProfile.create({
+          data: {
+            studentCode,
+            userId: user.id,
+            parentCode: data.parentCode || null,
+            fullName: data.fullName,
+            classId: data.classId || null,
+          },
+        });
+
+        if (data.classId) {
+          await tx.classStudent.createMany({
+            data: [{ classId: data.classId, studentId: user.id }],
+            skipDuplicates: true,
+          });
+        }
+      }
+
+      if (data.role === 'PARENT') {
+        await tx.parentProfile.create({
+          data: {
+            parentCode: data.accountCode || `parent-${user.id}`,
+            userId: user.id,
+            phoneNumber: data.phone || null,
+            fullName: data.fullName,
+          },
+        });
+      }
+
+      return tx.user.findUnique({
+        where: { id: user.id },
+        include: {
+          studentProfile: { select: { studentCode: true, parentCode: true, classId: true } },
+          parentProfile: { select: { parentCode: true, phoneNumber: true, _count: { select: { children: true } } } },
+        },
+      });
     });
+
+    if (!result) {
+      throw new AppError('Failed to create user', 500);
+    }
 
     return {
       success: true,
       message: 'User created successfully',
       data: {
-        id: user.id,
-        username: user.username,
-        fullName: user.fullName,
-        phone: user.phone,
-        role: user.role,
-        hasParentLogin: user.parentPasswordHash !== null,
-        status: user.status,
-        createdAt: user.createdAt,
+        id: result.id,
+        username: result.username,
+        fullName: result.fullName,
+        phone: result.phone,
+        role: result.role,
+        studentProfile: result.studentProfile,
+        parentProfile: result.parentProfile,
+        status: result.status,
+        createdAt: result.createdAt,
       },
     };
   }
@@ -323,35 +419,6 @@ export class UserService {
     };
   }
 
-  /**
-   * Set or clear the parent password on a STUDENT account.
-   * Passing parentPassword: null clears the parent login entirely.
-   */
-  async adminSetParentPassword(userId: number, data: SetParentPasswordInput) {
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user) {
-      throw new AppError('User not found', 404);
-    }
-    if (user.role !== 'STUDENT') {
-      throw new AppError('Parent password is only valid for STUDENT accounts', 400);
-    }
-
-    const parentPasswordHash = data.parentPassword
-      ? await bcrypt.hash(data.parentPassword, 12)
-      : null;
-
-    await prisma.user.update({
-      where: { id: userId },
-      data: { parentPasswordHash },
-    });
-
-    return {
-      success: true,
-      message: data.parentPassword ? 'Parent password set' : 'Parent password cleared',
-      data: { hasParentLogin: parentPasswordHash !== null },
-    };
-  }
-
   async adminSoftDeleteUser(userId: number) {
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
@@ -380,15 +447,17 @@ export class UserService {
       throw new AppError('User not found', 404);
     }
 
-    // Switching away from STUDENT clears any leftover parent password so
-    // a non-student can't accidentally retain a parent login.
-    const clearParent = user.role === 'STUDENT' && data.role !== 'STUDENT';
+    if (data.role === 'ADMIN') {
+      const existingAdmin = await prisma.user.findFirst({
+        where: { role: 'ADMIN', id: { not: userId } },
+      });
+      if (existingAdmin) throw new AppError('Only one ADMIN account is allowed', 409);
+    }
 
     const updated = await prisma.user.update({
       where: { id: userId },
       data: {
         role: data.role,
-        ...(clearParent ? { parentPasswordHash: null } : {}),
       },
     });
 
@@ -427,7 +496,7 @@ export class UserService {
       throw new AppError('Excel file is empty', 400);
     }
 
-    const validRoles = ['ADMIN', 'TEACHER', 'STUDENT'] as const;
+    const validRoles = ['ADMIN', 'TEACHER', 'STUDENT', 'PARENT'] as const;
     type ImportRole = (typeof validRoles)[number];
     const roleSet = new Set<string>(validRoles);
 
@@ -439,10 +508,12 @@ export class UserService {
     const validUsers: Array<{
       username: string;
       passwordHash: string;
-      parentPasswordHash: string | null;
       fullName: string | null;
       phone: string | null;
       role: ImportRole;
+      accountCode: string | null;
+      parentCode: string | null;
+      classId: number | null;
     }> = [];
 
     const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
@@ -451,16 +522,36 @@ export class UserService {
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       const rowNum = i + 2; // row 1 is header
-      const username = String(row.username ?? row.Username ?? '').trim();
+      let username = String(row.username ?? row.Username ?? '').trim();
       const password = String(row.password ?? row.Password ?? '').trim();
-      const parentPassword = String(row.parentPassword ?? row.parent_password ?? row.ParentPassword ?? '').trim();
       const fullName = String(row.fullName ?? row.full_name ?? row.FullName ?? '').trim() || null;
       const phone = String(row.phone ?? row.Phone ?? '').trim() || null;
       const roleName = String(row.role ?? row.Role ?? '').trim().toUpperCase();
+      const accountCode = String(row.accountCode ?? row.account_code ?? row.code ?? row.Code ?? '').trim() || null;
+      const school = String(row.school ?? row.School ?? '').trim();
+      const className = String(row.className ?? row.class_name ?? row.class ?? row.Class ?? '').trim();
+      const parentCode = String(row.parentCode ?? row.parent_code ?? row.ParentCode ?? '').trim() || null;
+      const classIdRaw = String(row.classId ?? row.class_id ?? row.ClassId ?? '').trim();
+      const classId = classIdRaw ? Number(classIdRaw) : null;
 
       let hasError = false;
 
-      if (!username || username.length < 3 || username.length > 50) {
+      if (!username && roleSet.has(roleName)) {
+        if (!fullName || !accountCode || !school || (roleName !== 'PARENT' && !className)) {
+          errors.push({ row: rowNum, field: 'username', message: 'Username is required unless fullName, accountCode, school, and className are provided for generation' });
+          hasError = true;
+        } else {
+          username = buildAccountUsername({
+            role: roleName as 'STUDENT' | 'TEACHER' | 'PARENT',
+            fullName,
+            code: accountCode,
+            school,
+            className,
+          });
+        }
+      }
+
+      if (!username || username.length < 3 || username.length > 191) {
         errors.push({ row: rowNum, field: 'username', message: 'Username must be 3–50 characters' });
         hasError = true;
       } else if (existingUsernames.has(username.toLowerCase()) || newUsernames.has(username.toLowerCase())) {
@@ -478,22 +569,27 @@ export class UserService {
         hasError = true;
       }
 
-      if (parentPassword && roleName !== 'STUDENT') {
-        errors.push({ row: rowNum, field: 'parentPassword', message: 'parentPassword is only valid when role=STUDENT' });
+      if (!fullName) {
+        errors.push({ row: rowNum, field: 'fullName', message: 'Full name is required' });
+        hasError = true;
+      }
+
+      if (classIdRaw && (!Number.isInteger(classId) || Number(classId) <= 0)) {
+        errors.push({ row: rowNum, field: 'classId', message: 'classId must be a positive integer' });
         hasError = true;
       }
 
       if (!hasError) {
-        const salt = await bcrypt.genSalt(12);
-        const passwordHash = await bcrypt.hash(password, salt);
-        const parentPasswordHash = parentPassword ? await bcrypt.hash(parentPassword, salt) : null;
+        const passwordHash = await bcrypt.hash(password, 12);
         validUsers.push({
           username,
           passwordHash,
-          parentPasswordHash,
           fullName,
           phone,
           role: roleName as ImportRole,
+          accountCode,
+          parentCode,
+          classId,
         });
         newUsernames.add(username.toLowerCase());
       }
@@ -501,11 +597,49 @@ export class UserService {
 
     let createdCount = 0;
     if (validUsers.length > 0) {
-      const result = await prisma.user.createMany({
-        data: validUsers,
-        skipDuplicates: true,
+      await prisma.$transaction(async (tx) => {
+        for (const row of validUsers) {
+          const user = await tx.user.create({
+            data: {
+              username: row.username,
+              passwordHash: row.passwordHash,
+              fullName: row.fullName,
+              phone: row.phone,
+              role: row.role,
+              status: 'ACTIVE',
+            },
+          });
+
+          if (row.role === 'STUDENT') {
+            await tx.studentProfile.create({
+              data: {
+                studentCode: row.accountCode || `student-${user.id}`,
+                userId: user.id,
+                parentCode: row.parentCode,
+                fullName: row.fullName || row.username,
+                classId: row.classId,
+              },
+            });
+            if (row.classId) {
+              await tx.classStudent.createMany({
+                data: [{ classId: row.classId, studentId: user.id }],
+                skipDuplicates: true,
+              });
+            }
+          } else if (row.role === 'PARENT') {
+            await tx.parentProfile.create({
+              data: {
+                parentCode: row.accountCode || `parent-${user.id}`,
+                userId: user.id,
+                phoneNumber: row.phone,
+                fullName: row.fullName || row.username,
+              },
+            });
+          }
+
+          createdCount++;
+        }
       });
-      createdCount = result.count;
     }
 
     logger.info(`User import: ${createdCount} created, ${errors.length} errors from ${rows.length} rows`);
@@ -516,6 +650,7 @@ export class UserService {
       data: {
         totalRows: rows.length,
         created: createdCount,
+        imported: createdCount,
         errorCount: errors.length,
         errors: errors.slice(0, 100),
       },
@@ -524,9 +659,9 @@ export class UserService {
 
   getImportTemplate() {
     const templateData = [
-      { username: 'student01', password: 'Pass1234', parentPassword: 'Parent1234', fullName: 'Nguyen Van A', phone: '0901234567', role: 'STUDENT' },
-      { username: 'student02', password: 'Pass1234', parentPassword: '', fullName: 'Pham Thi D', phone: '0934567890', role: 'STUDENT' },
-      { username: 'teacher01', password: 'Pass1234', parentPassword: '', fullName: 'Tran Thi B', phone: '0912345678', role: 'TEACHER' },
+      { username: '', password: 'Pass1234', fullName: 'Nguyen Van A', phone: '0901234567', role: 'STUDENT', accountCode: 'HS001', className: '10A1', school: 'webquiz', parentCode: 'PH001', classId: '' },
+      { username: '', password: 'Pass1234', fullName: 'Tran Thi B', phone: '0912345678', role: 'TEACHER', accountCode: 'GV001', className: '10A1', school: 'webquiz', parentCode: '', classId: '' },
+      { username: '', password: 'Pass1234', fullName: 'Le Thi C', phone: '0934567890', role: 'PARENT', accountCode: 'PH001', className: '', school: 'webquiz', parentCode: '', classId: '' },
     ];
 
     const worksheet = XLSX.utils.json_to_sheet(templateData);
@@ -534,10 +669,14 @@ export class UserService {
     const colWidths = [
       { wch: 15 }, // username
       { wch: 15 }, // password
-      { wch: 17 }, // parentPassword
       { wch: 25 }, // fullName
       { wch: 15 }, // phone
       { wch: 10 }, // role
+      { wch: 15 }, // accountCode
+      { wch: 12 }, // className
+      { wch: 15 }, // school
+      { wch: 15 }, // parentCode
+      { wch: 10 }, // classId
     ];
     worksheet['!cols'] = colWidths;
 

@@ -9,7 +9,6 @@ import {
   createUserSchema,
   updateUserSchema,
   changeRoleSchema,
-  setParentPasswordSchema,
 } from './user.validation';
 import { ROLES, FILE_UPLOAD } from '../../utils/constants';
 
@@ -55,13 +54,6 @@ router.put(
   validate(changeRoleSchema),
   activityLogger('CHANGE_ROLE', 'user'),
   userController.adminChangeRole,
-);
-
-router.put(
-  '/:id/parent-password',
-  validate(setParentPasswordSchema),
-  activityLogger('SET_PARENT_PASSWORD', 'user'),
-  userController.adminSetParentPassword,
 );
 
 router.post(

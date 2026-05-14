@@ -48,7 +48,15 @@ const createUserSchema = z
       .regex(
         /^[a-zA-Z0-9._-]+$/,
         'Username can only contain letters, numbers, dots, underscores, and hyphens',
-      ),
+      )
+      .optional()
+      .or(z.literal('')),
+    accountCode: z.string().max(50).optional().or(z.literal('')),
+    school: z.string().max(100).optional().or(z.literal('')),
+    className: z.string().max(50).optional().or(z.literal('')),
+    classId: z.string().optional().or(z.literal('')),
+    parentCode: z.string().max(50).optional().or(z.literal('')),
+    phone: z.string().max(20).optional().or(z.literal('')),
     password: z
       .string()
       .min(8, 'Password must be at least 8 characters')
@@ -57,17 +65,15 @@ const createUserSchema = z
         'Password must contain at least one uppercase letter, one lowercase letter, and one number',
       ),
     fullName: z.string().min(2, 'Full name must be at least 2 characters').max(100),
-    role: z.enum(['ADMIN', 'TEACHER', 'STUDENT'], { message: 'Please select a role' }),
-    parentPassword: z
-      .string()
-      .min(6, 'Parent password must be at least 6 characters')
-      .max(100)
-      .optional()
-      .or(z.literal('')),
+    role: z.enum(['ADMIN', 'TEACHER', 'STUDENT', 'PARENT'], { message: 'Please select a role' }),
   })
   .refine(
-    (d) => !d.parentPassword || d.role === 'STUDENT',
-    { message: 'Parent password is only valid when role is STUDENT', path: ['parentPassword'] },
+    (d) => d.username || (d.accountCode && d.school),
+    { message: 'Enter a username, or provide code and school for auto-generation', path: ['username'] },
+  )
+  .refine(
+    (d) => d.username || d.role === 'PARENT' || d.className,
+    { message: 'Class is required for generated student/teacher usernames', path: ['className'] },
   );
 
 const editUserSchema = z.object({
@@ -88,6 +94,7 @@ const ROLE_FILTER_OPTIONS: { value: AdminUserRole; label: string }[] = [
   { value: 'ADMIN', label: 'Admin' },
   { value: 'TEACHER', label: 'Teacher' },
   { value: 'STUDENT', label: 'Student' },
+  { value: 'PARENT', label: 'Parent' },
 ];
 
 export default function UsersPage() {
@@ -314,8 +321,13 @@ export default function UsersPage() {
                     </TableCell>
                     <TableCell>
                       <Badge variant="info">{formatRoleLabel(user.role)}</Badge>
-                      {user.role === 'STUDENT' && user.hasParentLogin && (
-                        <Badge variant="warning" className="ml-1.5">Parent login</Badge>
+                      {user.role === 'STUDENT' && user.studentProfile?.parentCode && (
+                        <Badge variant="warning" className="ml-1.5">Linked parent</Badge>
+                      )}
+                      {user.role === 'PARENT' && (
+                        <Badge variant="warning" className="ml-1.5">
+                          {user.parentProfile?._count?.children ?? 0} child
+                        </Badge>
                       )}
                     </TableCell>
                     <TableCell>
@@ -466,7 +478,18 @@ function CreateUserModal({
     formState: { errors, isSubmitting },
   } = useForm<CreateFormData>({
     resolver: zodResolver(createUserSchema),
-    defaultValues: { username: '', password: '', fullName: '', role: 'STUDENT', parentPassword: '' },
+    defaultValues: {
+      username: '',
+      password: '',
+      fullName: '',
+      role: 'STUDENT',
+      accountCode: '',
+      school: '',
+      className: '',
+      classId: '',
+      parentCode: '',
+      phone: '',
+    },
   });
 
   const selectedRole = watch('role');
@@ -480,7 +503,18 @@ function CreateUserModal({
         if (cancelled) return;
         setRoleOptions(opts);
         const defaultRole: AdminUserRole = opts.find((r) => r.value === 'TEACHER')?.value ?? opts[0]?.value ?? 'STUDENT';
-        reset({ username: '', password: '', fullName: '', role: defaultRole, parentPassword: '' });
+        reset({
+          username: '',
+          password: '',
+          fullName: '',
+          role: defaultRole,
+          accountCode: '',
+          school: '',
+          className: '',
+          classId: '',
+          parentCode: '',
+          phone: '',
+        });
       })
       .catch(() => {
         if (!cancelled) toast.error('Failed to load roles');
@@ -496,11 +530,16 @@ function CreateUserModal({
   async function onSubmit(data: CreateFormData) {
     try {
       const payload: CreateUserPayload = {
-        username: data.username,
+        ...(data.username ? { username: data.username } : {}),
         password: data.password,
         fullName: data.fullName,
         role: data.role,
-        ...(data.parentPassword ? { parentPassword: data.parentPassword } : {}),
+        ...(data.phone ? { phone: data.phone } : {}),
+        ...(data.accountCode ? { accountCode: data.accountCode } : {}),
+        ...(data.school ? { school: data.school } : {}),
+        ...(data.className ? { className: data.className } : {}),
+        ...(data.classId ? { classId: Number(data.classId) } : {}),
+        ...(data.parentCode ? { parentCode: data.parentCode } : {}),
       };
       await createUser(payload);
       toast.success('User created successfully');
@@ -532,18 +571,21 @@ function CreateUserModal({
           </div>
         </div>
         <Input label="Password" type="password" error={errors.password?.message} {...register('password')} />
-        <Input label="Full Name" error={errors.fullName?.message} {...register('fullName')} />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Input label="Full Name" error={errors.fullName?.message} {...register('fullName')} />
+          <Input label="Phone" error={errors.phone?.message} {...register('phone')} />
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <Input label={selectedRole === 'PARENT' ? 'Parent ID' : 'Account ID'} error={errors.accountCode?.message} {...register('accountCode')} />
+          <Input label="School" error={errors.school?.message} {...register('school')} />
+          {selectedRole !== 'PARENT' && (
+            <Input label="Class" error={errors.className?.message} {...register('className')} />
+          )}
+        </div>
         {selectedRole === 'STUDENT' && (
-          <div>
-            <Input
-              label="Parent Password (optional — dual-login)"
-              type="password"
-              error={errors.parentPassword?.message}
-              {...register('parentPassword')}
-            />
-            <p className="mt-1 text-xs text-slate-500">
-              Phụ huynh sẽ đăng nhập bằng cùng username + mật khẩu này. Để trống nếu chưa cần.
-            </p>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Input label="Parent ID (optional)" error={errors.parentCode?.message} {...register('parentCode')} />
+            <Input label="Class ID (optional)" error={errors.classId?.message} {...register('classId')} />
           </div>
         )}
         <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
