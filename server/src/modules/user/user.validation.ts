@@ -90,12 +90,24 @@ export const createUserSchema = z.object({
     .optional()
     .nullable(),
   role: userRoleSchema,
-}).refine((data) => data.username || (data.accountCode && data.school), {
-  message: 'Provide username, or provide accountCode and school to generate one',
+}).refine((data) => data.role !== 'ADMIN' || data.username, {
+  message: 'Username is required for ADMIN accounts',
   path: ['username'],
-}).refine((data) => data.username || data.role === 'PARENT' || data.className, {
-  message: 'className is required when auto-generating STUDENT or TEACHER usernames',
+}).refine((data) => data.role === 'ADMIN' || data.username || data.accountCode, {
+  message: 'Provide username, or provide accountCode to generate an account ID',
+  path: ['username'],
+}).refine((data) => data.role !== 'STUDENT' || data.accountCode, {
+  message: 'accountCode is required for STUDENT IDs',
+  path: ['accountCode'],
+}).refine((data) => data.role !== 'STUDENT' || data.classId || data.className, {
+  message: 'className or classId is required to generate STUDENT IDs',
   path: ['className'],
+}).refine((data) => data.role !== 'TEACHER' || data.accountCode, {
+  message: 'accountCode is required for TEACHER IDs',
+  path: ['accountCode'],
+}).refine((data) => data.role !== 'PARENT' || data.accountCode, {
+  message: 'Student ID is required for PARENT IDs',
+  path: ['accountCode'],
 });
 
 export const updateUserSchema = z.object({

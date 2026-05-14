@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import { randomInt } from 'crypto';
 import { Readable } from 'stream';
 import * as XLSX from 'xlsx';
 import { prisma } from '../../config/database';
@@ -8,6 +9,12 @@ import { AppError } from '../../middlewares/errorHandler';
 import { FILE_UPLOAD, PAGINATION } from '../../utils/constants';
 import { logger } from '../../utils/logger';
 import { buildAccountUsername } from '../../utils/username';
+import {
+  formatParentAccountId,
+  formatStudentAccountId,
+  formatTeacherAccountId,
+  inferGradeLevelFromClassName,
+} from '../../utils/accountId';
 import type {
   UpdateProfileInput,
   ChangePasswordInput,
@@ -286,31 +293,94 @@ export class UserService {
       throw new AppError('Username is required for ADMIN accounts', 400);
     }
 
-    const username = data.username?.trim() || buildAccountUsername({
-      role: data.role as 'STUDENT' | 'TEACHER' | 'PARENT',
-      fullName: data.fullName,
-      code: data.accountCode || '',
-      className: data.className,
-      school: data.school || '',
-    });
+    let classEntity: { id: number; gradeLevel: number } | null = null;
+    if (data.classId) {
+      classEntity = await prisma.class.findUnique({
+        where: { id: data.classId },
+        select: { id: true, gradeLevel: true },
+      });
+      if (!classEntity) throw new AppError('Class not found', 404);
+    }
+
+    let studentCode: string | null = null;
+    let parentCode: string | null = null;
+    let parentStudentCode: string | null = null;
+
+    if (data.role === 'STUDENT') {
+      const gradeLevel = classEntity?.gradeLevel ?? inferGradeLevelFromClassName(data.className);
+      if (!gradeLevel) {
+        throw new AppError('Student class must indicate grade 10, 11, or 12', 400);
+      }
+      studentCode = formatStudentAccountId(data.accountCode || '', gradeLevel);
+
+      const existingStudentCode = await prisma.studentProfile.findUnique({
+        where: { studentCode },
+      });
+      if (existingStudentCode) {
+        throw new AppError(`Student ID "${studentCode}" already exists`, 409);
+      }
+    }
+
+    if (data.role === 'PARENT') {
+      try {
+        const parentAccount = formatParentAccountId(data.accountCode || '');
+        parentCode = parentAccount.parentCode;
+        parentStudentCode = parentAccount.studentCode;
+      } catch (error) {
+        throw new AppError(error instanceof Error ? error.message : 'Invalid parent ID', 400);
+      }
+
+      const existingParentCode = await prisma.parentProfile.findUnique({
+        where: { parentCode },
+      });
+      if (existingParentCode) {
+        throw new AppError(`Parent ID "${parentCode}" already exists`, 409);
+      }
+
+      const studentProfile = await prisma.studentProfile.findUnique({
+        where: { studentCode: parentStudentCode },
+      });
+      if (!studentProfile) {
+        throw new AppError(`Student ID "${parentStudentCode}" not found for parent account`, 404);
+      }
+    }
+
+    let linkedParentCode: string | null = null;
+    if (data.parentCode) {
+      try {
+        linkedParentCode = formatParentAccountId(data.parentCode).parentCode;
+      } catch (error) {
+        throw new AppError(error instanceof Error ? error.message : 'Invalid parent ID', 400);
+      }
+    }
+
+    if (linkedParentCode) {
+      const parentProfile = await prisma.parentProfile.findUnique({
+        where: { parentCode: linkedParentCode },
+      });
+      if (!parentProfile) throw new AppError('Parent profile not found', 404);
+    }
+
+    let username = data.username?.trim();
+    if (!username) {
+      if (data.role === 'STUDENT') {
+        username = studentCode || undefined;
+      } else if (data.role === 'TEACHER') {
+        username = formatTeacherAccountId(data.accountCode || '');
+      } else if (data.role === 'PARENT') {
+        username = parentCode || undefined;
+      }
+    }
+
+    if (!username) {
+      throw new AppError('Username or accountCode is required', 400);
+    }
 
     const existingUsername = await prisma.user.findFirst({
       where: { username: { equals: username, mode: 'insensitive' } },
     });
     if (existingUsername) {
       throw new AppError('Username already exists', 409);
-    }
-
-    if (data.classId) {
-      const classEntity = await prisma.class.findUnique({ where: { id: data.classId } });
-      if (!classEntity) throw new AppError('Class not found', 404);
-    }
-
-    if (data.parentCode) {
-      const parentProfile = await prisma.parentProfile.findUnique({
-        where: { parentCode: data.parentCode },
-      });
-      if (!parentProfile) throw new AppError('Parent profile not found', 404);
     }
 
     const passwordHash = await bcrypt.hash(data.password, 12);
@@ -328,12 +398,11 @@ export class UserService {
       });
 
       if (data.role === 'STUDENT') {
-        const studentCode = data.accountCode || `student-${user.id}`;
         await tx.studentProfile.create({
           data: {
-            studentCode,
+            studentCode: studentCode || `student-${user.id}`,
             userId: user.id,
-            parentCode: data.parentCode || null,
+            parentCode: linkedParentCode,
             fullName: data.fullName,
             classId: data.classId || null,
           },
@@ -350,12 +419,19 @@ export class UserService {
       if (data.role === 'PARENT') {
         await tx.parentProfile.create({
           data: {
-            parentCode: data.accountCode || `parent-${user.id}`,
+            parentCode: parentCode || `parent-${user.id}`,
             userId: user.id,
             phoneNumber: data.phone || null,
             fullName: data.fullName,
           },
         });
+
+        if (parentStudentCode && parentCode) {
+          await tx.studentProfile.update({
+            where: { studentCode: parentStudentCode },
+            data: { parentCode },
+          });
+        }
       }
 
       return tx.user.findUnique({
@@ -425,18 +501,22 @@ export class UserService {
       throw new AppError('User not found', 404);
     }
 
-    if (user.status === 'SUSPENDED') {
-      throw new AppError('User is already suspended', 400);
+    try {
+      await prisma.user.delete({ where: { id: userId } });
+    } catch (error: unknown) {
+      const code = (error as { code?: string })?.code;
+      if (code === 'P2003' || code === 'P2014') {
+        throw new AppError(
+          'Cannot delete user because they own classes, questions, or exams. Reassign or remove those records first.',
+          409,
+        );
+      }
+      throw error;
     }
-
-    await prisma.user.update({
-      where: { id: userId },
-      data: { status: 'SUSPENDED' },
-    });
 
     return {
       success: true,
-      message: 'User suspended successfully',
+      message: 'User deleted successfully',
       data: null,
     };
   }
@@ -503,21 +583,84 @@ export class UserService {
     const existingUsernames = new Set(
       (await prisma.user.findMany({ select: { username: true } })).map((u: { username: string }) => u.username.toLowerCase()),
     );
+    const existingStudentCodes = new Set(
+      (await prisma.studentProfile.findMany({ select: { studentCode: true } })).map((s) => s.studentCode.toUpperCase()),
+    );
+    const existingParentCodes = new Set(
+      (await prisma.parentProfile.findMany({ select: { parentCode: true } })).map((p) => p.parentCode.toUpperCase()),
+    );
+    const importedClassIds = [
+      ...new Set(
+        rows
+          .map((row) => Number(String(row.classId ?? row.class_id ?? row.ClassId ?? '').trim()))
+          .filter((classId) => Number.isInteger(classId) && classId > 0),
+      ),
+    ];
+    const classGradeById = new Map(
+      (
+        await prisma.class.findMany({
+          where: { id: { in: importedClassIds } },
+          select: { id: true, gradeLevel: true },
+        })
+      ).map((classEntity) => [classEntity.id, classEntity.gradeLevel]),
+    );
 
     const errors: { row: number; field: string; message: string }[] = [];
     const validUsers: Array<{
       username: string;
       passwordHash: string;
+      plainPassword: string;
+      passwordGenerated: boolean;
       fullName: string | null;
       phone: string | null;
       role: ImportRole;
       accountCode: string | null;
+      studentCode: string | null;
+      parentStudentCode: string | null;
       parentCode: string | null;
       classId: number | null;
     }> = [];
 
     const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
     const newUsernames = new Set<string>();
+    const newStudentCodes = new Set<string>();
+    const newParentCodes = new Set<string>();
+    const importedStudentCodes = new Set<string>();
+
+    const generateRandomPassword = (length = 10): string => {
+      const lower = 'abcdefghijkmnopqrstuvwxyz';
+      const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+      const digits = '23456789';
+      const all = lower + upper + digits;
+      const pick = (alphabet: string) => alphabet[randomInt(0, alphabet.length)];
+      const chars = [pick(lower), pick(upper), pick(digits)];
+      for (let i = chars.length; i < length; i++) chars.push(pick(all));
+      for (let i = chars.length - 1; i > 0; i--) {
+        const j = randomInt(0, i + 1);
+        [chars[i], chars[j]] = [chars[j], chars[i]];
+      }
+      return chars.join('');
+    };
+
+    for (const row of rows) {
+      const roleName = String(row.role ?? row.Role ?? '').trim().toUpperCase();
+      if (roleName !== 'STUDENT') continue;
+
+      const accountCode = String(row.accountCode ?? row.account_code ?? row.code ?? row.Code ?? row.ID ?? row.id ?? row.Id ?? '').trim();
+      if (!accountCode) continue;
+
+      const className = String(row.className ?? row.class_name ?? row.class ?? row.Class ?? '').trim();
+      const classIdRaw = String(row.classId ?? row.class_id ?? row.ClassId ?? '').trim();
+      const classId = classIdRaw ? Number(classIdRaw) : null;
+      const gradeLevel = classId ? classGradeById.get(classId) : inferGradeLevelFromClassName(className);
+      if (!gradeLevel) continue;
+
+      try {
+        importedStudentCodes.add(formatStudentAccountId(accountCode, gradeLevel).toUpperCase());
+      } catch {
+        // Row-level validation below will report the exact error.
+      }
+    }
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
@@ -527,7 +670,7 @@ export class UserService {
       const fullName = String(row.fullName ?? row.full_name ?? row.FullName ?? '').trim() || null;
       const phone = String(row.phone ?? row.Phone ?? '').trim() || null;
       const roleName = String(row.role ?? row.Role ?? '').trim().toUpperCase();
-      const accountCode = String(row.accountCode ?? row.account_code ?? row.code ?? row.Code ?? '').trim() || null;
+      const accountCode = String(row.accountCode ?? row.account_code ?? row.code ?? row.Code ?? row.ID ?? row.id ?? row.Id ?? '').trim() || null;
       const school = String(row.school ?? row.School ?? '').trim();
       const className = String(row.className ?? row.class_name ?? row.class ?? row.Class ?? '').trim();
       const parentCode = String(row.parentCode ?? row.parent_code ?? row.ParentCode ?? '').trim() || null;
@@ -535,6 +678,86 @@ export class UserService {
       const classId = classIdRaw ? Number(classIdRaw) : null;
 
       let hasError = false;
+      let studentCode: string | null = null;
+      let parentStudentCode: string | null = null;
+      let resolvedAccountCode = accountCode;
+
+      if (roleName === 'STUDENT') {
+        if (!accountCode) {
+          errors.push({ row: rowNum, field: 'accountCode', message: 'accountCode is required for STUDENT IDs' });
+          hasError = true;
+        } else {
+          const gradeLevel = classId ? classGradeById.get(classId) : inferGradeLevelFromClassName(className);
+          if (!gradeLevel) {
+            errors.push({ row: rowNum, field: 'className', message: 'Student class must indicate grade 10, 11, or 12' });
+            hasError = true;
+          } else {
+            try {
+              studentCode = formatStudentAccountId(accountCode, gradeLevel);
+              resolvedAccountCode = studentCode;
+              const normalizedStudentCode = studentCode.toUpperCase();
+              if (existingStudentCodes.has(normalizedStudentCode) || newStudentCodes.has(normalizedStudentCode)) {
+                errors.push({ row: rowNum, field: 'accountCode', message: `Student ID "${studentCode}" already exists` });
+                hasError = true;
+              }
+              if (!username) username = studentCode;
+            } catch (error) {
+              errors.push({ row: rowNum, field: 'accountCode', message: error instanceof Error ? error.message : 'Invalid accountCode' });
+              hasError = true;
+            }
+          }
+        }
+      }
+
+      if (roleName === 'TEACHER') {
+        if (!accountCode) {
+          errors.push({ row: rowNum, field: 'accountCode', message: 'accountCode is required for TEACHER IDs' });
+          hasError = true;
+        } else {
+          try {
+            const teacherCode = formatTeacherAccountId(accountCode);
+            resolvedAccountCode = teacherCode;
+            if (!username) username = teacherCode;
+          } catch (error) {
+            errors.push({ row: rowNum, field: 'accountCode', message: error instanceof Error ? error.message : 'Invalid accountCode' });
+            hasError = true;
+          }
+        }
+      }
+
+      if (roleName === 'PARENT') {
+        if (!accountCode) {
+          errors.push({ row: rowNum, field: 'accountCode', message: 'Student ID is required for PARENT IDs' });
+          hasError = true;
+        } else {
+          try {
+            const parentAccount = formatParentAccountId(accountCode);
+            parentStudentCode = parentAccount.studentCode;
+            resolvedAccountCode = parentAccount.parentCode;
+
+            const normalizedParentCode = parentAccount.parentCode.toUpperCase();
+            if (existingParentCodes.has(normalizedParentCode) || newParentCodes.has(normalizedParentCode)) {
+              errors.push({ row: rowNum, field: 'accountCode', message: `Parent ID "${parentAccount.parentCode}" already exists` });
+              hasError = true;
+            }
+
+            if (!existingStudentCodes.has(parentStudentCode.toUpperCase()) && !importedStudentCodes.has(parentStudentCode.toUpperCase())) {
+              errors.push({ row: rowNum, field: 'accountCode', message: `Student ID "${parentStudentCode}" not found for parent account` });
+              hasError = true;
+            }
+
+            if (!username) username = parentAccount.parentCode;
+          } catch (error) {
+            errors.push({ row: rowNum, field: 'accountCode', message: error instanceof Error ? error.message : 'Invalid parent ID' });
+            hasError = true;
+          }
+        }
+      }
+
+      if (roleName === 'ADMIN' && !username) {
+        errors.push({ row: rowNum, field: 'username', message: 'Username is required for ADMIN accounts' });
+        hasError = true;
+      }
 
       if (!username && roleSet.has(roleName)) {
         if (!fullName || !accountCode || !school || (roleName !== 'PARENT' && !className)) {
@@ -559,7 +782,12 @@ export class UserService {
         hasError = true;
       }
 
-      if (!password || !passwordRegex.test(password)) {
+      let effectivePassword = password;
+      let passwordGenerated = false;
+      if (!password) {
+        effectivePassword = generateRandomPassword(10);
+        passwordGenerated = true;
+      } else if (!passwordRegex.test(password)) {
         errors.push({ row: rowNum, field: 'password', message: 'Password must be 8+ chars with upper, lower, and number' });
         hasError = true;
       }
@@ -579,26 +807,51 @@ export class UserService {
         hasError = true;
       }
 
+      if (classId && !classGradeById.has(classId)) {
+        errors.push({ row: rowNum, field: 'classId', message: `Class not found: ${classId}` });
+        hasError = true;
+      }
+
       if (!hasError) {
-        const passwordHash = await bcrypt.hash(password, 12);
+        const passwordHash = await bcrypt.hash(effectivePassword, 12);
         validUsers.push({
           username,
           passwordHash,
+          plainPassword: effectivePassword,
+          passwordGenerated,
           fullName,
           phone,
           role: roleName as ImportRole,
-          accountCode,
+          accountCode: resolvedAccountCode,
+          studentCode,
+          parentStudentCode,
           parentCode,
           classId,
         });
         newUsernames.add(username.toLowerCase());
+        if (studentCode) newStudentCodes.add(studentCode.toUpperCase());
+        if (roleName === 'PARENT' && resolvedAccountCode) newParentCodes.add(resolvedAccountCode.toUpperCase());
       }
     }
 
     let createdCount = 0;
+    const credentials: Array<{
+      username: string;
+      password: string;
+      fullName: string | null;
+      role: ImportRole;
+      accountCode: string | null;
+      passwordGenerated: boolean;
+    }> = [];
     if (validUsers.length > 0) {
       await prisma.$transaction(async (tx) => {
-        for (const row of validUsers) {
+        const usersToCreate = [...validUsers].sort((a, b) => {
+          if (a.role === 'STUDENT' && b.role === 'PARENT') return -1;
+          if (a.role === 'PARENT' && b.role === 'STUDENT') return 1;
+          return 0;
+        });
+
+        for (const row of usersToCreate) {
           const user = await tx.user.create({
             data: {
               username: row.username,
@@ -613,7 +866,7 @@ export class UserService {
           if (row.role === 'STUDENT') {
             await tx.studentProfile.create({
               data: {
-                studentCode: row.accountCode || `student-${user.id}`,
+                studentCode: row.studentCode || `student-${user.id}`,
                 userId: user.id,
                 parentCode: row.parentCode,
                 fullName: row.fullName || row.username,
@@ -635,8 +888,23 @@ export class UserService {
                 fullName: row.fullName || row.username,
               },
             });
+
+            if (row.parentStudentCode && row.accountCode) {
+              await tx.studentProfile.update({
+                where: { studentCode: row.parentStudentCode },
+                data: { parentCode: row.accountCode },
+              });
+            }
           }
 
+          credentials.push({
+            username: row.username,
+            password: row.plainPassword,
+            fullName: row.fullName,
+            role: row.role,
+            accountCode: row.accountCode,
+            passwordGenerated: row.passwordGenerated,
+          });
           createdCount++;
         }
       });
@@ -653,30 +921,30 @@ export class UserService {
         imported: createdCount,
         errorCount: errors.length,
         errors: errors.slice(0, 100),
+        credentials,
       },
     };
   }
 
   getImportTemplate() {
     const templateData = [
-      { username: '', password: 'Pass1234', fullName: 'Nguyen Van A', phone: '0901234567', role: 'STUDENT', accountCode: 'HS001', className: '10A1', school: 'webquiz', parentCode: 'PH001', classId: '' },
-      { username: '', password: 'Pass1234', fullName: 'Tran Thi B', phone: '0912345678', role: 'TEACHER', accountCode: 'GV001', className: '10A1', school: 'webquiz', parentCode: '', classId: '' },
-      { username: '', password: 'Pass1234', fullName: 'Le Thi C', phone: '0934567890', role: 'PARENT', accountCode: 'PH001', className: '', school: 'webquiz', parentCode: '', classId: '' },
+      { fullName: 'Nguyen Van A', phone: '0901234567', role: 'STUDENT', ID: '001', className: '10A1', school: 'webquiz' },
+      { fullName: 'Tran Thi B', phone: '0912345678', role: 'TEACHER', ID: '001', className: '', school: 'webquiz' },
+      { fullName: 'Pham Van D', phone: '0923456789', role: 'STUDENT', ID: '002', className: '11A1', school: 'webquiz' },
+      { fullName: 'Le Thi C', phone: '0934567890', role: 'PARENT', ID: 'C10001', className: '', school: 'webquiz' },
     ];
 
-    const worksheet = XLSX.utils.json_to_sheet(templateData);
+    const worksheet = XLSX.utils.json_to_sheet(templateData, {
+      header: ['fullName', 'phone', 'role', 'ID', 'className', 'school'],
+    });
 
     const colWidths = [
-      { wch: 15 }, // username
-      { wch: 15 }, // password
       { wch: 25 }, // fullName
       { wch: 15 }, // phone
       { wch: 10 }, // role
-      { wch: 15 }, // accountCode
+      { wch: 10 }, // ID
       { wch: 12 }, // className
       { wch: 15 }, // school
-      { wch: 15 }, // parentCode
-      { wch: 10 }, // classId
     ];
     worksheet['!cols'] = colWidths;
 

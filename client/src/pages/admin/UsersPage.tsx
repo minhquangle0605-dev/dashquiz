@@ -26,6 +26,7 @@ import {
   deleteUser,
   importUsers,
   getImportTemplateUrl,
+  type ImportUserCredential,
 } from '@/services/admin.api';
 import api from '@/services/api';
 import type { AdminUser, AdminUserRole, CreateUserPayload, RoleOption, UpdateUserPayload, UserStatus } from '@/types/admin';
@@ -68,12 +69,28 @@ const createUserSchema = z
     role: z.enum(['ADMIN', 'TEACHER', 'STUDENT', 'PARENT'], { message: 'Please select a role' }),
   })
   .refine(
-    (d) => d.username || (d.accountCode && d.school),
-    { message: 'Enter a username, or provide code and school for auto-generation', path: ['username'] },
+    (d) => d.role !== 'ADMIN' || d.username,
+    { message: 'Username is required for admin accounts', path: ['username'] },
   )
   .refine(
-    (d) => d.username || d.role === 'PARENT' || d.className,
-    { message: 'Class is required for generated student/teacher usernames', path: ['className'] },
+    (d) => d.role === 'ADMIN' || d.username || d.accountCode,
+    { message: 'Enter a username, or provide an ID suffix in Account ID', path: ['username'] },
+  )
+  .refine(
+    (d) => d.role !== 'STUDENT' || d.accountCode,
+    { message: 'Account ID suffix is required for student IDs', path: ['accountCode'] },
+  )
+  .refine(
+    (d) => d.role !== 'STUDENT' || d.className || d.classId,
+    { message: 'Class or Class ID is required for student IDs', path: ['className'] },
+  )
+  .refine(
+    (d) => d.role !== 'TEACHER' || d.accountCode,
+    { message: 'Account ID suffix is required for teacher IDs', path: ['accountCode'] },
+  )
+  .refine(
+    (d) => d.role !== 'PARENT' || d.accountCode,
+    { message: 'Student ID is required for parent IDs', path: ['accountCode'] },
   );
 
 const editUserSchema = z.object({
@@ -164,14 +181,16 @@ export default function UsersPage() {
   async function handleBulkDelete() {
     if (selectedIds.size === 0) return;
     if (!window.confirm(`Are you sure you want to delete ${selectedIds.size} user(s)?`)) return;
-    try {
-      await Promise.all([...selectedIds].map((id) => deleteUser(id)));
-      toast.success(`${selectedIds.size} user(s) deleted`);
-      setSelectedIds(new Set());
-      fetchUsers();
-    } catch {
-      toast.error('Failed to delete some users');
+    const results = await Promise.allSettled([...selectedIds].map((id) => deleteUser(id)));
+    const failed = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
+    const succeeded = results.length - failed.length;
+    if (succeeded > 0) toast.success(`${succeeded} user(s) deleted`);
+    if (failed.length > 0) {
+      const firstMsg = (failed[0].reason as any)?.response?.data?.message ?? 'Failed to delete some users';
+      toast.error(failed.length === 1 ? firstMsg : `${failed.length} user(s) failed: ${firstMsg}`);
     }
+    setSelectedIds(new Set());
+    fetchUsers();
   }
 
   async function handleDelete(id: number) {
@@ -180,8 +199,8 @@ export default function UsersPage() {
       await deleteUser(id);
       toast.success('User deleted');
       fetchUsers();
-    } catch {
-      toast.error('Failed to delete user');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? 'Failed to delete user');
     }
   }
 
@@ -448,7 +467,6 @@ export default function UsersPage() {
         isOpen={showImportModal}
         onClose={() => setShowImportModal(false)}
         onSuccess={() => {
-          setShowImportModal(false);
           fetchUsers();
         }}
       />
@@ -576,9 +594,14 @@ function CreateUserModal({
           <Input label="Phone" error={errors.phone?.message} {...register('phone')} />
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <Input label={selectedRole === 'PARENT' ? 'Parent ID' : 'Account ID'} error={errors.accountCode?.message} {...register('accountCode')} />
+          <Input
+            label={selectedRole === 'PARENT' ? 'Student ID' : 'ID suffix'}
+            placeholder={selectedRole === 'TEACHER' ? '001 -> TEA001' : selectedRole === 'STUDENT' ? '001 -> C10001' : 'C10001 -> C10001P'}
+            error={errors.accountCode?.message}
+            {...register('accountCode')}
+          />
           <Input label="School" error={errors.school?.message} {...register('school')} />
-          {selectedRole !== 'PARENT' && (
+          {selectedRole === 'STUDENT' && (
             <Input label="Class" error={errors.className?.message} {...register('className')} />
           )}
         </div>
@@ -686,10 +709,12 @@ function ImportUsersModal({
   const fileRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
+  const [credentials, setCredentials] = useState<ImportUserCredential[]>([]);
 
   useEffect(() => {
     if (!isOpen) {
       setFile(null);
+      setCredentials([]);
     }
   }, [isOpen]);
 
@@ -697,6 +722,7 @@ function ImportUsersModal({
     const f = e.target.files?.[0];
     if (!f) return;
     setFile(f);
+    setCredentials([]);
   }
 
   async function handleImport() {
@@ -705,9 +731,26 @@ function ImportUsersModal({
     try {
       const result = await importUsers(file);
       const imported = result?.imported ?? 0;
-      toast.success(`Successfully imported ${imported} user(s)`);
-      if (result?.errors?.length) {
-        result.errors.forEach((err) => toast.error(err));
+      const errorList = Array.isArray(result?.errors) ? result.errors : [];
+      const credList = Array.isArray(result?.credentials) ? result.credentials : [];
+      if (imported > 0) {
+        toast.success(`Successfully imported ${imported} user(s)`);
+      } else if (errorList.length === 0) {
+        toast.success('Import finished — no rows to add');
+      }
+      errorList.slice(0, 5).forEach((err) => {
+        const rowLabel = err?.row ? `Row ${err.row}` : 'Row';
+        const fieldLabel = err?.field ? ` (${err.field})` : '';
+        const message = err?.message ?? 'Invalid row';
+        toast.error(`${rowLabel}${fieldLabel}: ${message}`);
+      });
+      if (errorList.length > 5) {
+        toast.error(`…and ${errorList.length - 5} more error(s)`);
+      }
+      setCredentials(credList);
+      if (credList.length > 0) {
+        setFile(null);
+        if (fileRef.current) fileRef.current.value = '';
       }
       onSuccess();
     } catch (err: any) {
@@ -715,6 +758,37 @@ function ImportUsersModal({
     } finally {
       setImporting(false);
     }
+  }
+
+  function handleDownloadCredentials() {
+    if (credentials.length === 0) return;
+    const escape = (val: string) => {
+      const s = val ?? '';
+      return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const header = ['Full name', 'Username', 'Password', 'Role', 'Account code', 'Password type'];
+    const lines = [header.join(',')];
+    for (const c of credentials) {
+      lines.push([
+        escape(c.fullName ?? ''),
+        escape(c.username),
+        escape(c.password),
+        escape(c.role),
+        escape(c.accountCode ?? ''),
+        escape(c.passwordGenerated ? 'auto-generated' : 'from file'),
+      ].join(','));
+    }
+    const csv = '﻿' + lines.join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    link.href = url;
+    link.setAttribute('download', `imported-users-${ts}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
   }
 
   async function handleDownloadTemplate() {
@@ -784,8 +858,62 @@ function ImportUsersModal({
           Download import template
         </button>
 
+        <p className="text-xs text-slate-500">
+          Leave the <span className="font-semibold">password</span> column blank to auto-generate a secure 10-character password for each account. The generated credentials will be shown after import so you can download and share them.
+        </p>
+
+        {credentials.length > 0 && (
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-emerald-800">
+                  {credentials.length} account(s) ready
+                </p>
+                <p className="text-xs text-emerald-700">
+                  Download the credentials file now — passwords cannot be retrieved later.
+                </p>
+              </div>
+              <Button size="sm" onClick={handleDownloadCredentials}>
+                <svg className="mr-1.5 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Download CSV
+              </Button>
+            </div>
+            <div className="max-h-56 overflow-auto rounded-lg border border-emerald-200 bg-white">
+              <table className="min-w-full text-xs">
+                <thead className="bg-emerald-100/60 text-left text-emerald-900">
+                  <tr>
+                    <th className="px-3 py-2 font-medium">Full name</th>
+                    <th className="px-3 py-2 font-medium">Username</th>
+                    <th className="px-3 py-2 font-medium">Password</th>
+                    <th className="px-3 py-2 font-medium">Role</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-emerald-100 text-slate-700">
+                  {credentials.map((c, idx) => (
+                    <tr key={`${c.username}-${idx}`}>
+                      <td className="px-3 py-2">{c.fullName ?? '—'}</td>
+                      <td className="px-3 py-2 font-mono">{c.username}</td>
+                      <td className="px-3 py-2 font-mono">
+                        {c.password}
+                        {c.passwordGenerated && (
+                          <span className="ml-1.5 text-[10px] uppercase tracking-wide text-emerald-600">auto</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">{c.role}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-          <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="outline" onClick={onClose}>
+            {credentials.length > 0 ? 'Close' : 'Cancel'}
+          </Button>
           <Button onClick={handleImport} isLoading={importing} disabled={!file}>
             Import Users
           </Button>
