@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ReactNode, HTMLAttributes } from 'react';
 
 export interface TableProps {
   children: ReactNode;
@@ -7,8 +7,10 @@ export interface TableProps {
 
 export function Table({ children, className = '' }: TableProps) {
   return (
-    <div className={`overflow-x-auto rounded-xl border border-slate-200 ${className}`}>
-      <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
+    <div
+      className={`overflow-x-auto rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] shadow-[var(--shadow-sm)] ${className}`}
+    >
+      <table className="min-w-full divide-y divide-[var(--color-border-subtle)] text-left text-sm">
         {children}
       </table>
     </div>
@@ -22,7 +24,9 @@ export interface TableHeadProps {
 
 export function TableHead({ children, className = '' }: TableHeadProps) {
   return (
-    <thead className={`bg-slate-50 ${className}`}>
+    <thead
+      className={`bg-[var(--color-bg-subtle)] text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)] ${className}`}
+    >
       {children}
     </thead>
   );
@@ -35,19 +39,23 @@ export interface TableBodyProps {
 
 export function TableBody({ children, className = '' }: TableBodyProps) {
   return (
-    <tbody className={`divide-y divide-slate-200 bg-white ${className}`}>
+    <tbody className={`divide-y divide-[var(--color-border-subtle)] bg-[var(--color-bg-card)] ${className}`}>
       {children}
     </tbody>
   );
 }
 
-export interface TableRowProps {
-  children: ReactNode;
-  className?: string;
-}
+export type TableRowProps = HTMLAttributes<HTMLTableRowElement>;
 
-export function TableRow({ children, className = '' }: TableRowProps) {
-  return <tr className={className}>{children}</tr>;
+export function TableRow({ children, className = '', ...rest }: TableRowProps) {
+  return (
+    <tr
+      className={`transition-colors hover:bg-[var(--color-bg-subtle)] ${className}`}
+      {...rest}
+    >
+      {children}
+    </tr>
+  );
 }
 
 export interface TableHeaderCellProps {
@@ -62,7 +70,7 @@ export function TableHeaderCell({
   return (
     <th
       scope="col"
-      className={`px-4 py-3 font-semibold text-slate-700 ${className}`}
+      className={`px-4 py-3 ${className}`}
     >
       {children}
     </th>
@@ -76,6 +84,6 @@ export interface TableCellProps {
 
 export function TableCell({ children, className = '' }: TableCellProps) {
   return (
-    <td className={`px-4 py-3 text-slate-600 ${className}`}>{children}</td>
+    <td className={`px-4 py-3 text-[var(--color-text-secondary)] ${className}`}>{children}</td>
   );
 }

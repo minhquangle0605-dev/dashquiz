@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import type { ReactNode } from 'react';
 
-const transition = { duration: 0.2 };
+const transition = { duration: 0.22, ease: [0.16, 1, 0.3, 1] as const };
 
 export type PageTransitionProps = {
   children: ReactNode;
@@ -16,9 +16,9 @@ export function PageTransition({ children, transitionKey, className }: PageTrans
       <motion.div
         key={transitionKey}
         className={className}
-        initial={false}
+        initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -4 }}
+        exit={{ opacity: 0, y: -6 }}
         transition={transition}
       >
         {children}

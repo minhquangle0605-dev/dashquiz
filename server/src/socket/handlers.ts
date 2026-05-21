@@ -1,6 +1,6 @@
 import { prisma } from '../config/database';
 import { logger } from '../utils/logger';
-import { rooms, ClientEvents } from './events';
+import { rooms, ClientEvents, ServerEvents } from './events';
 import type { AuthenticatedSocket } from './socketAuth';
 
 /**
@@ -55,14 +55,25 @@ export function registerHandlers(socket: AuthenticatedSocket): void {
   // ─── exam:heartbeat ──────────────────────────
   // Students send periodic heartbeats so the teacher's monitoring
   // view knows who is still actively taking the exam.
-  socket.on(ClientEvents.EXAM_HEARTBEAT, (data: { examId: number; attemptId: number }) => {
+  socket.on(ClientEvents.EXAM_HEARTBEAT, (data: {
+    examId: number;
+    attemptId: number;
+    answeredCount?: number;
+    unansweredCount?: number;
+    timeRemainingSec?: number;
+    currentQuestionId?: number | null;
+  }) => {
     const examId = data?.examId;
     if (!examId || typeof examId !== 'number') return;
 
-    socket.to(rooms.exam(examId)).emit('exam:heartbeat-ack', {
+    socket.to(rooms.exam(examId)).emit(ServerEvents.EXAM_HEARTBEAT, {
       studentId: userId,
       attemptId: data.attemptId,
-      timestamp: Date.now(),
+      answeredCount: data.answeredCount,
+      unansweredCount: data.unansweredCount,
+      timeRemainingSec: data.timeRemainingSec,
+      currentQuestionId: data.currentQuestionId ?? null,
+      occurredAt: new Date(),
     });
   });
 

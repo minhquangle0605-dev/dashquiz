@@ -82,6 +82,22 @@ export async function submitAttempt(
   }
 }
 
+export async function recordAttemptEvent(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (!req.user) throw new AppError('Authentication required', 401);
+    const attemptId = parseInt(req.params.id, 10);
+    if (isNaN(attemptId)) throw new AppError('Invalid attempt ID', 400);
+    const result = await studentExamService.recordAttemptEvent(attemptId, req.body, req.user.id);
+    res.status(201).json(result);
+  } catch (error: unknown) {
+    next(error instanceof Error ? error : new Error('Unexpected error'));
+  }
+}
+
 // ═══════════════════════════════════════════════
 // GET RESULT (GET /api/student/attempts/:id/result)
 // ═══════════════════════════════════════════════

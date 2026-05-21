@@ -101,8 +101,13 @@ export default function ExamsPage() {
       await deleteExam(exam.id);
       toast.success('Exam deleted.');
       fetchExams();
-    } catch {
-      toast.error('Failed to delete exam.');
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string; error?: string } } };
+      toast.error(
+        e?.response?.data?.message ||
+          e?.response?.data?.error ||
+          'Failed to delete exam.',
+      );
     } finally {
       setDeletingId(null);
     }
@@ -266,6 +271,7 @@ export default function ExamsPage() {
             <TableRow>
               <TableHeaderCell>Title</TableHeaderCell>
               <TableHeaderCell>Subject</TableHeaderCell>
+              <TableHeaderCell>Classes</TableHeaderCell>
               <TableHeaderCell className="text-center">Questions</TableHeaderCell>
               <TableHeaderCell className="text-center">Duration</TableHeaderCell>
               <TableHeaderCell className="text-center">Status</TableHeaderCell>
@@ -283,6 +289,28 @@ export default function ExamsPage() {
                     <p className="truncate font-medium text-slate-800">{exam.title}</p>
                   </TableCell>
                   <TableCell>{exam.subject?.name ?? '—'}</TableCell>
+                  <TableCell className="max-w-[200px]">
+                    {exam.examAssignments && exam.examAssignments.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {exam.examAssignments.slice(0, 3).map((a) => (
+                          <span
+                            key={a.id}
+                            className="inline-flex items-center rounded-md bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700"
+                            title={a.class?.name}
+                          >
+                            {a.class?.name ?? `#${a.classId}`}
+                          </span>
+                        ))}
+                        {exam.examAssignments.length > 3 && (
+                          <span className="text-xs text-slate-500">
+                            +{exam.examAssignments.length - 3}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-xs italic text-slate-400">Unassigned</span>
+                    )}
+                  </TableCell>
                   <TableCell className="text-center">{exam.totalQuestions}</TableCell>
                   <TableCell className="text-center">{exam.durationMin} min</TableCell>
                   <TableCell className="text-center">

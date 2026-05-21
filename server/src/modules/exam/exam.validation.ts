@@ -85,9 +85,14 @@ export const assignExamSchema = z.object({
 export const listExamsQuerySchema = z.object({
   status: z.enum(['DRAFT', 'PUBLISHED', 'SCHEDULED', 'CLOSED']).optional(),
   subjectId: z.coerce.number().int().positive().optional(),
+  classId: z.coerce.number().int().positive().optional(),
   search: z.string().max(200).optional(),
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(20),
+});
+
+export const examMonitoringQuerySchema = z.object({
+  classId: z.coerce.number().int().positive().optional(),
 });
 
 // ═══════════════════════════════════════════════
@@ -100,3 +105,4 @@ export type AddQuestionsInput = z.infer<typeof addQuestionsSchema>;
 export type ScheduleExamInput = z.infer<typeof scheduleExamSchema>;
 export type AssignExamInput = z.infer<typeof assignExamSchema>;
 export type ListExamsQuery = z.infer<typeof listExamsQuerySchema>;
+export type ExamMonitoringQuery = z.infer<typeof examMonitoringQuerySchema>;

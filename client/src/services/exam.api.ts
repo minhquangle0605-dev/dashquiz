@@ -11,6 +11,7 @@ import type {
   ScheduleExamPayload,
   AssignExamPayload,
   ExamAssignmentItem,
+  ExamMonitoringData,
 } from '@/types/exam';
 import { API_ENDPOINTS } from '@/utils/constants';
 
@@ -76,14 +77,46 @@ export async function getExamResult(attemptId: string): Promise<ExamResult> {
 export interface TeacherExamListParams extends PaginationParams {
   status?: string;
   subjectId?: number;
+  classId?: number;
   search?: string;
 }
 
 export async function listTeacherExams(
   params: TeacherExamListParams = {},
 ): Promise<PaginatedResponse<TeacherExam>> {
-  const { data } = await api.get(API_ENDPOINTS.EXAMS.BASE, { params });
-  return data.data ?? data;
+  // Backend schema accepts `limit` (not `pageSize`) and returns
+  // { success, data: TeacherExam[], pagination: { page, limit, total, totalPages, hasNext, hasPrev } }.
+  // Normalize to the frontend's PaginatedResponse shape.
+  const { pageSize, sortBy: _sortBy, sortOrder: _sortOrder, ...rest } = params;
+  void _sortBy;
+  void _sortOrder;
+  const query: Record<string, unknown> = { ...rest };
+  if (pageSize != null) query.limit = pageSize;
+
+  const { data } = await api.get(API_ENDPOINTS.EXAMS.BASE, { params: query });
+
+  const items: TeacherExam[] = Array.isArray(data?.data)
+    ? data.data
+    : Array.isArray(data?.items)
+      ? data.items
+      : Array.isArray(data)
+        ? data
+        : [];
+  const p = data?.pagination ?? {};
+  const page = Number(p.page ?? params.page ?? 1);
+  const limit = Number(p.limit ?? pageSize ?? items.length);
+  const total = Number(p.total ?? items.length);
+  const totalPages = Number(p.totalPages ?? (limit > 0 ? Math.ceil(total / limit) : 0));
+
+  return {
+    items,
+    total,
+    page,
+    pageSize: limit,
+    totalPages,
+    hasNextPage: p.hasNext ?? page < totalPages,
+    hasPreviousPage: p.hasPrev ?? page > 1,
+  };
 }
 
 export async function getTeacherExam(id: number): Promise<TeacherExam> {
@@ -140,5 +173,13 @@ export async function getExamAssignments(
   id: number,
 ): Promise<ExamAssignmentItem[]> {
   const { data } = await api.get(API_ENDPOINTS.EXAMS.ASSIGNMENTS(id));
+  return data.data ?? data;
+}
+
+export async function getExamMonitoring(
+  id: number,
+  params?: { classId?: number },
+): Promise<ExamMonitoringData> {
+  const { data } = await api.get(API_ENDPOINTS.EXAMS.MONITORING(id), { params });
   return data.data ?? data;
 }

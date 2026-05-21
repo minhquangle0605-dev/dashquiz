@@ -1,5 +1,5 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
 import { Button } from '@/components/ui/Button';
@@ -70,8 +70,17 @@ const defaultForm: ExamFormState = {
 
 export default function CreateExamPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const prefilledClassId = searchParams.get('classId');
+  const prefilledSubjectId = searchParams.get('subjectId');
+  const returnTo = searchParams.get('returnTo');
+
   const [step, setStep] = useState(0);
-  const [form, setForm] = useState<ExamFormState>(defaultForm);
+  const [form, setForm] = useState<ExamFormState>(() => ({
+    ...defaultForm,
+    subjectId: prefilledSubjectId ?? '',
+    selectedClassIds: prefilledClassId ? [Number(prefilledClassId)] : [],
+  }));
   const [saving, setSaving] = useState(false);
   const [previewMode, setPreviewMode] = useState(false);
 
@@ -87,6 +96,50 @@ export default function CreateExamPage() {
     emptyCurriculumSelection(),
   );
   const [bankDifficulty, setBankDifficulty] = useState('');
+  const [classGradeFilter, setClassGradeFilter] = useState<number | null>(null);
+
+  const availableGrades = useMemo(
+    () => Array.from(new Set(classes.map((c) => c.gradeLevel))).sort((a, b) => a - b),
+    [classes],
+  );
+
+  const filteredClasses = useMemo(
+    () =>
+      classGradeFilter == null
+        ? classes
+        : classes.filter((c) => c.gradeLevel === classGradeFilter),
+    [classes, classGradeFilter],
+  );
+
+  const classStripRef = useRef<HTMLDivElement | null>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const updateScrollState = useCallback(() => {
+    const el = classStripRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 4);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+  }, []);
+
+  useEffect(() => {
+    if (step !== 4) return;
+    // Defer to next tick so layout is ready.
+    const id = window.setTimeout(updateScrollState, 0);
+    const onResize = () => updateScrollState();
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.clearTimeout(id);
+      window.removeEventListener('resize', onResize);
+    };
+  }, [step, filteredClasses, updateScrollState]);
+
+  const scrollStrip = (dir: 'left' | 'right') => {
+    const el = classStripRef.current;
+    if (!el) return;
+    const delta = Math.max(240, Math.round(el.clientWidth * 0.8));
+    el.scrollBy({ left: dir === 'left' ? -delta : delta, behavior: 'smooth' });
+  };
 
   useEffect(() => {
     listSubjects().then(setSubjects).catch(() => {});
@@ -191,7 +244,9 @@ export default function CreateExamPage() {
         subjectId: Number(form.subjectId),
         durationMin: form.durationMin,
         totalQuestions: form.selectedQuestionIds.length,
-        passingScore: form.passingScore,
+        // Backend stores passingScore on the 0–10 scale (total exam = 10 pts).
+        // The UI captures it as a percentage (0–100), so convert here.
+        passingScore: Number((form.passingScore / 10).toFixed(2)),
         shuffle: form.shuffle,
         showResult: form.showResult,
         maxAttempts: form.maxAttempts,
@@ -202,27 +257,32 @@ export default function CreateExamPage() {
         questionIds: form.selectedQuestionIds,
       });
 
+      // Exam must leave DRAFT before classes can be assigned.
+      // Schedule => SCHEDULED; otherwise publish to PUBLISHED so assign works
+      // even when the teacher leaves schedule disabled.
       if (form.scheduleEnabled && form.startTime && form.endTime) {
         await scheduleExam(exam.id, {
           startTime: new Date(form.startTime).toISOString(),
           endTime: new Date(form.endTime).toISOString(),
         });
+      } else if (form.selectedClassIds.length > 0) {
+        await publishExam(exam.id);
       }
 
       if (form.selectedClassIds.length > 0) {
         await assignExam(exam.id, { classIds: form.selectedClassIds });
       }
 
-      if (form.selectedClassIds.length > 0 || (form.scheduleEnabled && form.startTime)) {
-        try {
-          await publishExam(exam.id);
-        } catch { /* exam stays draft */ }
-      }
-
       toast.success('Exam created successfully!');
-      navigate('/teacher/exams');
-    } catch {
-      toast.error('Failed to create exam. Please try again.');
+      navigate(returnTo ?? '/teacher/exams');
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string; error?: string } } };
+      const msg =
+        e?.response?.data?.message ||
+        e?.response?.data?.error ||
+        (err instanceof Error ? err.message : '') ||
+        'Failed to create exam. Please try again.';
+      toast.error(msg);
     } finally {
       setSaving(false);
     }
@@ -342,7 +402,7 @@ export default function CreateExamPage() {
       </nav>
 
       {/* Step content */}
-      <Card padding="lg" className="min-h-[400px]">
+      <Card padding="lg" className={step === 4 ? '' : 'min-h-[400px]'}>
         {/* Step 1: Basic Info */}
         {step === 0 && (
           <div className="space-y-6">
@@ -625,107 +685,173 @@ export default function CreateExamPage() {
 
         {/* Step 5: Assign Classes + Review */}
         {step === 4 && (
-          <div className="space-y-6">
-            <h2 className="text-lg font-semibold text-slate-900">Assign to Classes</h2>
-            <p className="text-sm text-slate-500">
-              Select the classes that will take this exam. You can also assign later.
-            </p>
-
-            {classes.length === 0 ? (
-              <div className="py-8 text-center">
-                <p className="text-sm text-slate-500">No classes available. Create a class first.</p>
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Assign to Classes</h2>
+                <p className="text-xs text-slate-500">
+                  Pick classes now or assign later.{' '}
+                  <span className="font-semibold text-indigo-600">
+                    {form.selectedClassIds.length} selected
+                  </span>
+                </p>
               </div>
-            ) : (
-              <div className="grid gap-3 sm:grid-cols-2">
-                {classes.map((cls) => {
-                  const checked = form.selectedClassIds.includes(cls.id);
-                  return (
+
+              {availableGrades.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="mr-1 text-xs font-medium text-slate-500">Khối:</span>
+                  <button
+                    type="button"
+                    onClick={() => setClassGradeFilter(null)}
+                    className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                      classGradeFilter === null
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    Tất cả
+                  </button>
+                  {availableGrades.map((g) => (
                     <button
-                      key={cls.id}
+                      key={g}
                       type="button"
-                      onClick={() => {
-                        setForm((prev) => ({
-                          ...prev,
-                          selectedClassIds: checked
-                            ? prev.selectedClassIds.filter((id) => id !== cls.id)
-                            : [...prev.selectedClassIds, cls.id],
-                        }));
-                      }}
-                      className={`flex items-center gap-3 rounded-xl border p-4 text-left transition-colors ${
-                        checked
-                          ? 'border-indigo-300 bg-indigo-50/50 ring-1 ring-indigo-200'
-                          : 'border-slate-200 bg-white hover:border-slate-300'
+                      onClick={() => setClassGradeFilter(g)}
+                      className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                        classGradeFilter === g
+                          ? 'bg-indigo-600 text-white shadow-sm'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                       }`}
                     >
-                      <span
-                        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 transition-colors ${
-                          checked ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300 bg-white'
+                      Khối {g}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {classes.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 py-8 text-center">
+                <p className="text-sm text-slate-500">No classes available. Create a class first.</p>
+              </div>
+            ) : filteredClasses.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 py-8 text-center">
+                <p className="text-sm text-slate-500">Không có lớp nào ở khối này.</p>
+              </div>
+            ) : (
+              <div className="relative">
+                {/* Left arrow */}
+                <button
+                  type="button"
+                  onClick={() => scrollStrip('left')}
+                  disabled={!canScrollLeft}
+                  aria-label="Cuộn sang trái"
+                  className={`absolute left-0 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 -translate-x-1 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-md transition-all hover:bg-indigo-50 hover:text-indigo-600 ${
+                    canScrollLeft ? 'opacity-100' : 'pointer-events-none opacity-0'
+                  }`}
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+
+                {/* Right arrow */}
+                <button
+                  type="button"
+                  onClick={() => scrollStrip('right')}
+                  disabled={!canScrollRight}
+                  aria-label="Cuộn sang phải"
+                  className={`absolute right-0 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 translate-x-1 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-md transition-all hover:bg-indigo-50 hover:text-indigo-600 ${
+                    canScrollRight ? 'opacity-100' : 'pointer-events-none opacity-0'
+                  }`}
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+
+                {/* Edge fade hints */}
+                <div
+                  className={`pointer-events-none absolute left-0 top-0 z-[5] h-full w-8 bg-gradient-to-r from-white to-transparent transition-opacity ${
+                    canScrollLeft ? 'opacity-100' : 'opacity-0'
+                  }`}
+                />
+                <div
+                  className={`pointer-events-none absolute right-0 top-0 z-[5] h-full w-8 bg-gradient-to-l from-white to-transparent transition-opacity ${
+                    canScrollRight ? 'opacity-100' : 'opacity-0'
+                  }`}
+                />
+
+                <div
+                  ref={classStripRef}
+                  onScroll={updateScrollState}
+                  className="flex flex-nowrap snap-x snap-mandatory gap-3 overflow-x-auto scroll-smooth pb-3 [scrollbar-width:thin]"
+                >
+                  {filteredClasses.map((cls) => {
+                    const checked = form.selectedClassIds.includes(cls.id);
+                    return (
+                      <button
+                        key={cls.id}
+                        type="button"
+                        onClick={() => {
+                          setForm((prev) => ({
+                            ...prev,
+                            selectedClassIds: checked
+                              ? prev.selectedClassIds.filter((id) => id !== cls.id)
+                              : [...prev.selectedClassIds, cls.id],
+                          }));
+                        }}
+                        className={`group flex w-52 shrink-0 snap-start flex-col gap-2 rounded-xl border p-3 text-left transition-all ${
+                          checked
+                            ? 'border-indigo-400 bg-indigo-50 ring-2 ring-indigo-200'
+                            : 'border-slate-200 bg-white hover:border-indigo-300 hover:shadow-sm'
                         }`}
                       >
-                        {checked && (
-                          <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                          </svg>
-                        )}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-slate-800">{cls.name}</p>
-                        <p className="text-xs text-slate-500">
-                          Grade {cls.gradeLevel}
-                          {cls.subject ? ` · ${cls.subject.name}` : ''}
-                          {cls._count?.classStudents != null ? ` · ${cls._count.classStudents} students` : ''}
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="inline-flex items-center rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-600">
+                            Khối {cls.gradeLevel}
+                          </span>
+                          <span
+                            className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+                              checked
+                                ? 'border-indigo-600 bg-indigo-600 text-white'
+                                : 'border-slate-300 bg-white group-hover:border-indigo-400'
+                            }`}
+                          >
+                            {checked && (
+                              <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                              </svg>
+                            )}
+                          </span>
+                        </div>
+                        <p className="truncate text-sm font-semibold text-slate-800">{cls.name}</p>
+                        <p className="truncate text-xs text-slate-500">
+                          {cls.subject?.name ?? '—'}
+                          {cls._count?.classStudents != null && (
+                            <span className="ml-1 text-slate-400">· {cls._count.classStudents} HS</span>
+                          )}
                         </p>
-                      </div>
-                    </button>
-                  );
-                })}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
-            {/* Summary */}
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
-              <h3 className="mb-3 text-sm font-bold text-slate-800">Review Summary</h3>
-              <dl className="grid gap-y-2 gap-x-6 text-sm sm:grid-cols-2">
-                <div className="flex justify-between">
-                  <dt className="text-slate-500">Title</dt>
-                  <dd className="font-medium text-slate-800">{form.title || '—'}</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-slate-500">Subject</dt>
-                  <dd className="font-medium text-slate-800">{subjectName}</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-slate-500">Duration</dt>
-                  <dd className="font-medium text-slate-800">{form.durationMin} min</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-slate-500">Questions</dt>
-                  <dd className="font-medium text-slate-800">{form.selectedQuestionIds.length}</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-slate-500">Passing Score</dt>
-                  <dd className="font-medium text-slate-800">{form.passingScore}%</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-slate-500">Max Attempts</dt>
-                  <dd className="font-medium text-slate-800">{form.maxAttempts}</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-slate-500">Shuffle</dt>
-                  <dd className="font-medium text-slate-800">{form.shuffle ? 'Yes' : 'No'}</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-slate-500">Show Results</dt>
-                  <dd className="font-medium text-slate-800">{form.showResult ? 'Yes' : 'No'}</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-slate-500">Scheduled</dt>
-                  <dd className="font-medium text-slate-800">{form.scheduleEnabled ? 'Yes' : 'No'}</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-slate-500">Classes</dt>
-                  <dd className="font-medium text-slate-800">{form.selectedClassIds.length}</dd>
-                </div>
+            {/* Compact Review Summary */}
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <h3 className="mb-2 text-sm font-bold text-slate-800">Review Summary</h3>
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs sm:grid-cols-3 lg:grid-cols-5">
+                <SummaryItem label="Title" value={form.title || '—'} />
+                <SummaryItem label="Subject" value={subjectName} />
+                <SummaryItem label="Duration" value={`${form.durationMin} min`} />
+                <SummaryItem label="Questions" value={form.selectedQuestionIds.length} />
+                <SummaryItem label="Passing" value={`${form.passingScore}%`} />
+                <SummaryItem label="Max Attempts" value={form.maxAttempts} />
+                <SummaryItem label="Shuffle" value={form.shuffle ? 'Yes' : 'No'} />
+                <SummaryItem label="Show Results" value={form.showResult ? 'Yes' : 'No'} />
+                <SummaryItem label="Scheduled" value={form.scheduleEnabled ? 'Yes' : 'No'} />
+                <SummaryItem label="Classes" value={form.selectedClassIds.length} />
               </dl>
             </div>
           </div>
@@ -758,6 +884,17 @@ export default function CreateExamPage() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ── Summary item sub-component ────────────────────── */
+
+function SummaryItem({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="flex min-w-0 items-center justify-between gap-2 rounded-md bg-white px-2.5 py-1.5">
+      <dt className="truncate text-[11px] uppercase tracking-wide text-slate-500">{label}</dt>
+      <dd className="truncate text-xs font-semibold text-slate-800">{value}</dd>
     </div>
   );
 }

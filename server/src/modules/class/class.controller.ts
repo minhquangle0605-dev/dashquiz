@@ -85,6 +85,18 @@ export async function listStudents(req: Request, res: Response, next: NextFuncti
   }
 }
 
+export async function listClassmates(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    if (!req.user) throw new AppError('Authentication required', 401);
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) throw new AppError('Invalid class ID', 400);
+    const result = await classService.listClassmates(id, req.user.id, req.user.role);
+    res.json(result);
+  } catch (error: unknown) {
+    next(error instanceof Error ? error : new Error('Unexpected error'));
+  }
+}
+
 export async function getCourse(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     if (!req.user) throw new AppError('Authentication required', 401);

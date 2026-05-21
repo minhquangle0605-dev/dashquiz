@@ -24,6 +24,9 @@ import {
   TableHeaderCell,
   TableCell,
 } from '@/components/ui/Table';
+import { GreetingBanner } from '@/components/shared/GreetingBanner';
+import { StatTile } from '@/components/shared/StatTile';
+import { QuickActionsGrid } from '@/components/shared/QuickActionsGrid';
 import {
   getTeacherClasses,
   getTeacherExams,
@@ -204,74 +207,121 @@ export default function DashboardPage() {
     );
   }
 
-  const statCards = classDash
+  const statTiles = classDash
     ? [
         {
           label: 'Enrolled',
           value: classDash.enrolledCount,
           icon: iconUsers,
-          color: 'text-blue-600',
-          bg: 'bg-blue-50',
+          tone: 'info' as const,
+          hint: `${classDash.class.name}`,
         },
         {
           label: 'Average Score',
-          value: classDash.avgScore.toFixed(1),
+          value: Number(classDash.avgScore.toFixed(1)),
           icon: iconChart,
-          color: 'text-emerald-600',
-          bg: 'bg-emerald-50',
+          tone: 'success' as const,
+          decimals: 1,
         },
         {
           label: 'Pass Rate',
           value: `${classDash.passRate}%`,
           icon: iconCheck,
-          color: 'text-violet-600',
-          bg: 'bg-violet-50',
+          tone: 'accent' as const,
         },
         {
           label: 'Total Exams',
           value: classDash.examCount,
           icon: iconExam,
-          color: 'text-amber-600',
-          bg: 'bg-amber-50',
+          tone: 'warning' as const,
         },
       ]
     : [];
+
+  const quickActions = [
+    {
+      label: 'Create exam',
+      description: 'Build a new assessment',
+      to: '/teacher/exams/create',
+      icon: iconExam,
+      tone: 'brand' as const,
+    },
+    {
+      label: 'Question bank',
+      description: 'Manage your library',
+      to: '/teacher/questions',
+      icon: iconBank,
+      tone: 'accent' as const,
+    },
+    {
+      label: 'Classes',
+      description: 'Roster & resources',
+      to: '/teacher/classes',
+      icon: iconUsers,
+      tone: 'info' as const,
+    },
+    {
+      label: 'All exams',
+      description: 'Browse & monitor',
+      to: '/teacher/exams',
+      icon: iconChart,
+      tone: 'success' as const,
+    },
+  ];
 
   const performanceChartData = buildPerformanceChart(performance);
   const distributionChartData = buildDistributionChart(distribution);
 
   return (
     <div className="space-y-6">
-      {/* Header + class selector */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Class performance analytics and reporting.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-3">
-          <select
-            value={selectedClassId ?? ''}
-            onChange={(e) => setSelectedClassId(Number(e.target.value))}
-            className="min-h-[44px] rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-          >
-            {classes.length === 0 && <option value="">No classes</option>}
-            {classes.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+      {/* Greeting hero */}
+      <GreetingBanner
+        subtitle="Analytics, học sinh cần hỗ trợ và kết quả lớp – trong một màn hình."
+        meta={
+          classDash
+            ? [
+                { label: 'Class', value: classDash.class.name, tone: 'brand' },
+                { label: 'Avg', value: classDash.avgScore.toFixed(1), tone: 'success' },
+                { label: 'Pass rate', value: `${classDash.passRate}%`, tone: 'info' },
+              ]
+            : undefined
+        }
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={selectedClassId ?? ''}
+              onChange={(e) => setSelectedClassId(Number(e.target.value))}
+              className="min-h-[44px] rounded-xl border border-white/30 bg-white/15 px-4 py-2 text-sm font-semibold text-white backdrop-blur-sm placeholder:text-white/60 focus:border-white focus:outline-none focus:ring-2 focus:ring-white/40 [&>option]:text-slate-900"
+            >
+              {classes.length === 0 && <option value="">No classes</option>}
+              {classes.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            <Button
+              variant="outline"
+              className="border-white/40 bg-white/15 text-white hover:bg-white/25 hover:text-white"
+              isLoading={exportLoading === 'pdf'}
+              onClick={() => handleExport('pdf')}
+            >
+              Export PDF
+            </Button>
+            <Button
+              variant="outline"
+              className="border-white/40 bg-white/15 text-white hover:bg-white/25 hover:text-white"
+              isLoading={exportLoading === 'excel'}
+              onClick={() => handleExport('excel')}
+            >
+              Export Excel
+            </Button>
+          </div>
+        }
+      />
 
-          <Button variant="outline" isLoading={exportLoading === 'pdf'} onClick={() => handleExport('pdf')}>
-            Export PDF
-          </Button>
-          <Button variant="outline" isLoading={exportLoading === 'excel'} onClick={() => handleExport('excel')}>
-            Export Excel
-          </Button>
-        </div>
-      </div>
+      {/* Quick actions */}
+      <QuickActionsGrid title="Quick actions" actions={quickActions} />
 
       {classLoading ? (
         <div className="flex items-center justify-center py-12">
@@ -279,21 +329,19 @@ export default function DashboardPage() {
         </div>
       ) : (
         <>
-          {/* Stat Cards */}
-          {statCards.length > 0 && (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              {statCards.map((card) => (
-                <Card key={card.label} padding="md" className="hover:shadow-md transition-shadow">
-                  <div className="flex items-center gap-4">
-                    <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${card.bg} ${card.color}`}>
-                      {card.icon}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-slate-500 truncate">{card.label}</p>
-                      <p className="text-2xl font-bold text-slate-900">{card.value}</p>
-                    </div>
-                  </div>
-                </Card>
+          {/* Stat Tiles */}
+          {statTiles.length > 0 && (
+            <div className="grid grid-cols-1 gap-4 stagger sm:grid-cols-2 xl:grid-cols-4">
+              {statTiles.map((s) => (
+                <StatTile
+                  key={s.label}
+                  label={s.label}
+                  value={s.value}
+                  hint={s.hint}
+                  icon={s.icon}
+                  tone={s.tone}
+                  decimals={s.decimals}
+                />
               ))}
             </div>
           )}
@@ -626,5 +674,11 @@ const iconCheck = (
 const iconExam = (
   <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+  </svg>
+);
+
+const iconBank = (
+  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
   </svg>
 );

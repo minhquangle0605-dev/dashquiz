@@ -267,6 +267,114 @@ export interface AssignExamPayload {
   classIds: number[];
 }
 
+export type AttemptMonitoringEventType =
+  | 'STARTED'
+  | 'RESUMED'
+  | 'HEARTBEAT'
+  | 'ANSWER_SAVED'
+  | 'TAB_HIDDEN'
+  | 'WINDOW_BLUR'
+  | 'COPY'
+  | 'PASTE'
+  | 'CONTEXT_MENU'
+  | 'SHORTCUT_BLOCKED'
+  | 'OFFLINE'
+  | 'ONLINE'
+  | 'SUBMITTED'
+  | 'AUTO_SUBMITTED';
+
+export interface AttemptMonitoringEvent {
+  id: number;
+  type: AttemptMonitoringEventType;
+  occurredAt: string;
+  clientElapsedSec: number | null;
+  questionId: number | null;
+  metadata: Record<string, unknown> | null;
+}
+
+export type ExamMonitoringStudentStatus =
+  | 'NOT_STARTED'
+  | 'IN_PROGRESS'
+  | 'SUBMITTED'
+  | 'GRADED';
+
+export interface ExamMonitoringStudent {
+  student: {
+    studentId: number;
+    studentName: string | null;
+    studentUsername: string;
+    avatar: string | null;
+    studentCode: string | null;
+    homeroomClassName: string | null;
+    classes: Array<{ id: number; name: string; gradeLevel: number }>;
+  };
+  attemptId: number | null;
+  status: ExamMonitoringStudentStatus;
+  startedAt: string | null;
+  submittedAt: string | null;
+  score: number | null;
+  passed: boolean | null;
+  correctCount: number;
+  answeredQuestions: number;
+  totalQuestions: number;
+  timeSpentSec: number | null;
+  timeElapsedSec: number | null;
+  timeRemainingSec: number | null;
+  isAutoSubmitted: boolean;
+  lastActivityAt: string | null;
+  lastHeartbeatAt: string | null;
+  violationCount: number;
+  tabSwitchCount: number;
+  copyPasteCount: number;
+  offlineCount: number;
+  blockedShortcutCount: number;
+  riskScore: number;
+  riskLevel: 'low' | 'medium' | 'high';
+  flags: string[];
+  recentEvents: AttemptMonitoringEvent[];
+}
+
+export interface ExamMonitoringData {
+  exam: {
+    id: number;
+    title: string;
+    status: TeacherExamStatus;
+    durationMin: number;
+    totalQuestions: number;
+    passingScore: number | null;
+    classes: Array<{ id: number; name: string; gradeLevel: number }>;
+  };
+  summary: {
+    totalStudents: number;
+    notStarted: number;
+    inProgress: number;
+    submitted: number;
+    autoSubmitted: number;
+    avgScore: number | null;
+    passRate: number | null;
+    suspiciousCount: number;
+    highRiskCount: number;
+  };
+  students: ExamMonitoringStudent[];
+  updatedAt: string;
+}
+
+export interface RecordAttemptEventPayload {
+  type:
+    | 'HEARTBEAT'
+    | 'TAB_HIDDEN'
+    | 'WINDOW_BLUR'
+    | 'COPY'
+    | 'PASTE'
+    | 'CONTEXT_MENU'
+    | 'SHORTCUT_BLOCKED'
+    | 'OFFLINE'
+    | 'ONLINE';
+  clientElapsedSec?: number;
+  questionId?: number;
+  metadata?: Record<string, unknown>;
+}
+
 /* ── Class management types ─────────────────────────── */
 
 export interface ClassItem {

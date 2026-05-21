@@ -25,6 +25,9 @@ import {
   TableHeaderCell,
   TableCell,
 } from '@/components/ui/Table';
+import { GreetingBanner } from '@/components/shared/GreetingBanner';
+import { StatTile, type StatTone } from '@/components/shared/StatTile';
+import { QuickActionsGrid } from '@/components/shared/QuickActionsGrid';
 import {
   getStudentDashboard,
   getStudentStrengths,
@@ -79,10 +82,10 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-24">
-        <div className="flex flex-col items-center gap-3">
+      <div className="flex items-center justify-center py-24 animate-fade-in">
+        <div className="flex flex-col items-center gap-4">
           <Spinner size="lg" />
-          <p className="text-sm text-slate-500">Loading dashboard...</p>
+          <p className="text-sm font-medium text-[var(--color-text-muted)]">Loading dashboard…</p>
         </div>
       </div>
     );
@@ -100,35 +103,83 @@ export default function DashboardPage() {
 
   const streak = computeStreak(dashboard?.recentResults ?? []);
 
-  const statCards = [
+  const trend30 = dashboard?.trends?.['30d'];
+  const trend60 = dashboard?.trends?.['60d'];
+  const scoreDelta =
+    trend30 && trend60 && trend60.avgScore > 0
+      ? ((trend30.avgScore - trend60.avgScore) / trend60.avgScore) * 100
+      : undefined;
+
+  const statTiles: Array<{
+    label: string;
+    value: number | string;
+    hint?: string;
+    icon: React.ReactNode;
+    tone: StatTone;
+    deltaPct?: number;
+    decimals?: number;
+  }> = [
     {
       label: 'Total Exams',
       value: totalExams,
       icon: iconExams,
-      color: 'text-indigo-600',
-      bg: 'bg-indigo-50',
+      tone: 'brand',
+      hint: trend30 ? `${trend30.examCount} in last 30 days` : undefined,
     },
     {
       label: 'Average Score',
-      value: avgScore.toFixed(1),
+      value: Number(avgScore.toFixed(1)),
       icon: iconStar,
-      color: 'text-emerald-600',
-      bg: 'bg-emerald-50',
+      tone: 'success',
+      deltaPct: scoreDelta,
+      hint: scoreDelta !== undefined ? 'vs previous period' : undefined,
+      decimals: 1,
     },
     {
       label: 'Latest Exam',
-      value: lastResult ? `${lastResult.score.toFixed(1)}` : '--',
-      sub: lastResult?.examTitle ?? 'No exams yet',
+      value: lastResult ? Number(lastResult.score.toFixed(1)) : '--',
+      hint: lastResult?.examTitle ?? 'No exams yet',
       icon: iconClipboard,
-      color: 'text-blue-600',
-      bg: 'bg-blue-50',
+      tone: 'info',
+      decimals: 1,
     },
     {
       label: 'Passing Streak',
       value: streak,
+      hint: streak > 0 ? '🔥 Keep it up' : 'No streak yet',
       icon: iconFire,
-      color: 'text-amber-600',
-      bg: 'bg-amber-50',
+      tone: 'warning',
+    },
+  ];
+
+  const quickActions = [
+    {
+      label: 'Browse exams',
+      description: 'See what is available',
+      to: '/student/exams',
+      icon: iconExams,
+      tone: 'brand' as const,
+    },
+    {
+      label: 'AI Practice',
+      description: 'Adaptive smart study',
+      to: '/student/ai-practice',
+      icon: iconAi,
+      tone: 'accent' as const,
+    },
+    {
+      label: 'My Classes',
+      description: 'Resources & activities',
+      to: '/student/classes',
+      icon: iconClasses,
+      tone: 'info' as const,
+    },
+    {
+      label: 'Knowledge Graph',
+      description: 'Strength map by topic',
+      to: '/student/knowledge-graph',
+      icon: iconGraph,
+      tone: 'success' as const,
     },
   ];
 
@@ -143,30 +194,36 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Your learning progress and analytics overview.
-        </p>
-      </div>
+      {/* Hero banner — personalized greeting + at-a-glance meta */}
+      <GreetingBanner
+        subtitle="Theo dõi tiến độ học tập, phân tích điểm mạnh – yếu, và tiếp tục luyện tập với AI."
+        meta={[
+          { label: 'Avg score', value: avgScore.toFixed(1), tone: 'success' },
+          { label: 'Streak', value: streak, tone: 'warning' },
+          { label: 'Exams', value: totalExams, tone: 'brand' },
+        ]}
+      />
 
-      {/* Row 1: Stat Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {statCards.map((card) => (
-          <Card key={card.label} padding="md" className="hover:shadow-md transition-shadow">
-            <div className="flex items-center gap-4">
-              <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${card.bg} ${card.color}`}>
-                {card.icon}
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-slate-500 truncate">{card.label}</p>
-                <p className="text-2xl font-bold text-slate-900">{card.value}</p>
-                {card.sub && (
-                  <p className="text-xs text-slate-400 truncate">{card.sub}</p>
-                )}
-              </div>
-            </div>
-          </Card>
+      {/* Quick actions */}
+      <QuickActionsGrid
+        title="Quick actions"
+        subtitle="Jump right back in"
+        actions={quickActions}
+      />
+
+      {/* Row 1: Stat Tiles */}
+      <div className="grid grid-cols-1 gap-4 stagger sm:grid-cols-2 xl:grid-cols-4">
+        {statTiles.map((s) => (
+          <StatTile
+            key={s.label}
+            label={s.label}
+            value={s.value}
+            hint={s.hint}
+            icon={s.icon}
+            tone={s.tone}
+            deltaPct={s.deltaPct}
+            decimals={s.decimals}
+          />
         ))}
       </div>
 
@@ -175,17 +232,19 @@ export default function DashboardPage() {
         {/* Line chart — score trend */}
         <Card padding="md">
           <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-slate-900">Score Trend</h3>
-            <div className="flex gap-1">
+            <h3 className="text-base font-semibold tracking-tight text-[var(--color-text-primary)]">
+              Score Trend
+            </h3>
+            <div className="inline-flex gap-1 rounded-xl bg-[var(--color-bg-muted)] p-1">
               {(['30d', '60d', '90d'] as TrendPeriod[]).map((p) => (
                 <button
                   key={p}
                   type="button"
                   onClick={() => setTrendPeriod(p)}
-                  className={`min-h-[44px] min-w-[44px] rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${
+                  className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
                     trendPeriod === p
-                      ? 'bg-indigo-600 text-white'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      ? 'bg-[var(--color-bg-card)] text-[var(--color-primary)] shadow-[var(--shadow-sm)]'
+                      : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'
                   }`}
                 >
                   {p.replace('d', ' days')}
@@ -202,11 +261,11 @@ export default function DashboardPage() {
           </div>
           {currentTrend && (
             <div className="mt-3 flex items-center gap-4 text-sm">
-              <span className="text-slate-500">
-                Avg: <span className="font-semibold text-slate-900">{currentTrend.avgScore.toFixed(1)}</span>
+              <span className="text-[var(--color-text-muted)]">
+                Avg: <span className="font-bold tabular-nums text-[var(--color-text-primary)]">{currentTrend.avgScore.toFixed(1)}</span>
               </span>
-              <span className="text-slate-500">
-                Exams: <span className="font-semibold text-slate-900">{currentTrend.examCount}</span>
+              <span className="text-[var(--color-text-muted)]">
+                Exams: <span className="font-bold tabular-nums text-[var(--color-text-primary)]">{currentTrend.examCount}</span>
               </span>
               {prevTrend && prevTrend.avgScore > 0 && (
                 <TrendBadge current={currentTrend.avgScore} previous={prevTrend.avgScore} />
@@ -217,8 +276,8 @@ export default function DashboardPage() {
 
         {/* Radar chart — strengths/weaknesses */}
         <Card padding="md">
-          <h3 className="mb-4 text-lg font-semibold text-slate-900">
-            Strengths & Weaknesses
+          <h3 className="mb-4 text-base font-semibold tracking-tight text-[var(--color-text-primary)]">
+            Strengths &amp; Weaknesses
           </h3>
           <div className="h-56">
             {radarData ? (
@@ -249,7 +308,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Bar chart — time-on-task */}
         <Card padding="md">
-          <h3 className="mb-4 text-lg font-semibold text-slate-900">
+          <h3 className="mb-4 text-base font-semibold tracking-tight text-[var(--color-text-primary)]">
             Time per Topic
           </h3>
           <div className="h-56">
@@ -260,69 +319,87 @@ export default function DashboardPage() {
             )}
           </div>
           {timeData && (
-            <p className="mt-3 text-sm text-slate-500">
-              Overall average: <span className="font-semibold text-slate-900">{timeData.overallAvgTimeSec}s</span> per question
+            <p className="mt-3 text-sm text-[var(--color-text-muted)]">
+              Overall average: <span className="font-bold tabular-nums text-[var(--color-text-primary)]">{timeData.overallAvgTimeSec}s</span> per question
             </p>
           )}
         </Card>
 
         {/* Recent Exam History */}
         <Card padding="none">
-          <div className="flex items-center justify-between px-6 pb-3 pt-5">
-            <h3 className="text-lg font-semibold text-slate-900">Recent Exams</h3>
+          <div className="flex items-center justify-between border-b border-[var(--color-border-subtle)] px-6 py-4">
+            <h3 className="text-base font-semibold tracking-tight text-[var(--color-text-primary)]">
+              Recent Exams
+            </h3>
             <Link
               to="/student/exams"
-              className="min-h-[44px] inline-flex items-center rounded-lg px-3 py-2 text-sm font-semibold text-indigo-600 hover:bg-indigo-50 transition-colors"
+              className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-bold text-[var(--color-primary)] transition-colors hover:bg-[var(--color-primary-soft)]"
             >
               View all
+              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+              </svg>
             </Link>
           </div>
 
           {(!dashboard?.recentResults || dashboard.recentResults.length === 0) ? (
-            <div className="flex flex-col items-center justify-center pb-8 pt-4 text-center">
-              <svg className="mx-auto h-10 w-10 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              <p className="mt-3 text-sm text-slate-500">No exams taken yet.</p>
+            <div className="flex flex-col items-center justify-center px-6 py-10 text-center">
+              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--color-bg-muted)] text-[var(--color-text-muted)]">
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+              <p className="text-sm font-semibold text-[var(--color-text-primary)]">
+                No exams taken yet
+              </p>
+              <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                Start your first exam to see results here.
+              </p>
             </div>
           ) : (
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableHeaderCell>Exam</TableHeaderCell>
-                  <TableHeaderCell>Subject</TableHeaderCell>
-                  <TableHeaderCell>Score</TableHeaderCell>
-                  <TableHeaderCell>Date</TableHeaderCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {dashboard.recentResults.slice(0, 5).map((r) => (
-                  <TableRow key={r.id} className="hover:bg-slate-50 transition-colors">
-                    <TableCell>
-                      <Link
-                        to={`/student/attempts/${r.id}/result`}
-                        className="font-medium text-indigo-600 hover:text-indigo-500"
-                      >
-                        {r.examTitle}
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="neutral">{r.subjectName}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <span className={`font-semibold ${r.score >= 5 ? 'text-emerald-600' : 'text-red-600'}`}>
-                        {r.score.toFixed(1)}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-slate-500">
-                        {new Date(r.submittedAt).toLocaleDateString()}
-                      </span>
-                    </TableCell>
+            <div className="p-2">
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableHeaderCell>Exam</TableHeaderCell>
+                    <TableHeaderCell>Subject</TableHeaderCell>
+                    <TableHeaderCell>Score</TableHeaderCell>
+                    <TableHeaderCell>Date</TableHeaderCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHead>
+                <TableBody>
+                  {dashboard.recentResults.slice(0, 5).map((r) => (
+                    <TableRow key={r.id}>
+                      <TableCell>
+                        <Link
+                          to={`/student/attempts/${r.id}/result`}
+                          className="font-semibold text-[var(--color-primary)] hover:underline"
+                        >
+                          {r.examTitle}
+                        </Link>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="neutral" size="sm">
+                          {r.subjectName}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <span
+                          className={`tabular-nums font-bold ${
+                            r.score >= 5 ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]'
+                          }`}
+                        >
+                          {r.score.toFixed(1)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-xs">
+                        {new Date(r.submittedAt).toLocaleDateString()}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </Card>
       </div>
@@ -349,7 +426,13 @@ function TrendBadge({ current, previous }: { current: number; previous: number }
   const isUp = diff > 0;
 
   return (
-    <span className={`inline-flex items-center gap-1 text-xs font-semibold ${isUp ? 'text-emerald-600' : 'text-red-600'}`}>
+    <span
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold ${
+        isUp
+          ? 'bg-[var(--color-success-soft)] text-[var(--color-success)]'
+          : 'bg-[var(--color-danger-soft)] text-[var(--color-danger)]'
+      }`}
+    >
       <svg className={`h-3 w-3 ${isUp ? '' : 'rotate-180'}`} fill="currentColor" viewBox="0 0 20 20">
         <path d="M10 3l-7 7h4v7h6v-7h4l-7-7z" />
       </svg>
@@ -361,10 +444,10 @@ function TrendBadge({ current, previous }: { current: number; previous: number }
 function EmptyChart({ message }: { message: string }) {
   return (
     <div className="flex h-full flex-col items-center justify-center text-center">
-      <svg className="mx-auto h-10 w-10 text-slate-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <svg className="mx-auto h-10 w-10 text-[var(--color-border-strong)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
       </svg>
-      <p className="mt-2 text-sm text-slate-400">{message}</p>
+      <p className="mt-2 text-sm text-[var(--color-text-muted)]">{message}</p>
     </div>
   );
 }
@@ -544,5 +627,23 @@ const iconFire = (
   <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0112 21 8.25 8.25 0 016.038 7.048 8.287 8.287 0 009 9.6a8.983 8.983 0 013.361-6.867 8.21 8.21 0 003 2.48z" />
     <path strokeLinecap="round" strokeLinejoin="round" d="M12 18a3.75 3.75 0 00.495-7.467 5.99 5.99 0 00-1.925 3.546 5.974 5.974 0 01-2.133-1A3.75 3.75 0 0012 18z" />
+  </svg>
+);
+
+const iconAi = (
+  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+  </svg>
+);
+
+const iconClasses = (
+  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-2a4 4 0 100-8 4 4 0 000 8zm6 0a3 3 0 100-6 3 3 0 000 6zM7 12a3 3 0 100-6 3 3 0 000 6z" />
+  </svg>
+);
+
+const iconGraph = (
+  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418" />
   </svg>
 );

@@ -10,6 +10,7 @@ import {
   scheduleExamSchema,
   assignExamSchema,
   listExamsQuerySchema,
+  examMonitoringQuerySchema,
 } from './exam.validation';
 import { ROLES } from '../../utils/constants';
 
@@ -50,6 +51,15 @@ router.put(
   validate(updateExamSchema),
   activityLogger('UPDATE_EXAM', 'exam'),
   examController.updateExam,
+);
+
+// ── Delete exam (DELETE /api/exams/:id) ──────────
+router.delete(
+  '/:id',
+  authenticate,
+  authorize(ROLES.TEACHER, ROLES.ADMIN),
+  activityLogger('DELETE_EXAM', 'exam'),
+  examController.deleteExam,
 );
 
 // ── Add questions (POST /api/exams/:id/questions) ─
@@ -97,6 +107,15 @@ router.get(
   authenticate,
   authorize(ROLES.TEACHER, ROLES.ADMIN),
   examController.getAssignments,
+);
+
+// ── Teacher monitoring dashboard for an assigned exam
+router.get(
+  '/:id/monitoring',
+  authenticate,
+  authorize(ROLES.TEACHER, ROLES.ADMIN),
+  validate(examMonitoringQuerySchema, 'query'),
+  examController.getMonitoring,
 );
 
 export default router;

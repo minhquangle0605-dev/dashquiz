@@ -26,6 +26,9 @@ import {
   TableHeaderCell,
   TableCell,
 } from '@/components/ui/Table';
+import { GreetingBanner } from '@/components/shared/GreetingBanner';
+import { StatTile } from '@/components/shared/StatTile';
+import { QuickActionsGrid } from '@/components/shared/QuickActionsGrid';
 import { getChildren, getChildDashboard, getChildStrengths } from '@/services/parent.api';
 import type { ChildDashboardData } from '@/types/parent';
 import type { StrengthItem } from '@/services/analytics.api';
@@ -76,49 +79,66 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header with child selector */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Parent Dashboard</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Monitor your child's learning progress and exam results.
-          </p>
-        </div>
-
-        {children.length > 1 ? (
-          <div className="flex items-center gap-3">
-            <label htmlFor="child-select" className="text-sm font-medium text-slate-600">
-              Viewing:
-            </label>
-            <select
-              id="child-select"
-              value={selectedChildId ?? ''}
-              onChange={(e) => setSelectedChildId(Number(e.target.value))}
-              className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-            >
-              {children.map((child) => (
-                <option key={child.student.id} value={child.student.id}>
-                  {child.student.fullName}
-                </option>
-              ))}
-            </select>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 rounded-xl bg-amber-50 px-4 py-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-200 text-sm font-bold text-amber-800">
-              {selectedChild?.student.fullName
-                ?.split(' ')
-                .map((n) => n[0])
-                .slice(0, 2)
-                .join('')
-                .toUpperCase() ?? '?'}
+      <GreetingBanner
+        subtitle={
+          children.length > 1
+            ? `Bạn đang theo dõi ${children.length} con. Chọn từng học sinh để xem chi tiết.`
+            : `Theo dõi tiến độ học tập của ${selectedChild?.student.fullName ?? 'con'} tại đây.`
+        }
+        meta={
+          selectedChild
+            ? [{ label: 'Viewing', value: selectedChild.student.fullName, tone: 'warning' }]
+            : undefined
+        }
+        action={
+          children.length > 1 ? (
+            <div className="flex items-center gap-3 rounded-2xl bg-white/15 px-3 py-2 backdrop-blur-sm ring-1 ring-white/20">
+              <label htmlFor="child-select" className="text-xs font-semibold uppercase tracking-wider text-white/80">
+                Child
+              </label>
+              <select
+                id="child-select"
+                value={selectedChildId ?? ''}
+                onChange={(e) => setSelectedChildId(Number(e.target.value))}
+                className="min-w-[10rem] rounded-lg border border-white/30 bg-white/15 px-3 py-1.5 text-sm font-semibold text-white focus:outline-none focus:ring-2 focus:ring-white/40 [&>option]:text-slate-900"
+              >
+                {children.map((child) => (
+                  <option key={child.student.id} value={child.student.id}>
+                    {child.student.fullName}
+                  </option>
+                ))}
+              </select>
             </div>
-            <span className="text-sm font-semibold text-amber-900">
-              {selectedChild?.student.fullName}
-            </span>
-          </div>
-        )}
-      </div>
+          ) : undefined
+        }
+      />
+
+      <QuickActionsGrid
+        title="Quick actions"
+        actions={[
+          {
+            label: "Child's results",
+            description: 'Detailed history per exam',
+            to: '/parent/results',
+            icon: iconClipboard,
+            tone: 'brand',
+          },
+          {
+            label: 'Notifications',
+            description: 'Updates from school',
+            to: '/parent/notifications',
+            icon: iconBell,
+            tone: 'warning',
+          },
+          {
+            label: 'Profile',
+            description: 'Account & contact',
+            to: '/parent/profile',
+            icon: iconStar,
+            tone: 'accent',
+          },
+        ]}
+      />
 
       {selectedChildId && <ChildDashboardContent childId={selectedChildId} />}
     </div>
@@ -167,35 +187,34 @@ function ChildDashboardContent({ childId }: { childId: number }) {
   const avgScore = dashboard?.avgScore ?? 0;
   const lastResult = dashboard?.recentResults?.[0] ?? null;
 
-  const statCards = [
+  const statTiles = [
     {
       label: 'Total Exams',
       value: totalExams,
       icon: iconExams,
-      color: 'text-indigo-600',
-      bg: 'bg-indigo-50',
+      tone: 'brand' as const,
     },
     {
       label: 'Average Score',
-      value: avgScore.toFixed(1),
+      value: Number(avgScore.toFixed(1)),
       icon: iconStar,
-      color: 'text-emerald-600',
-      bg: 'bg-emerald-50',
+      tone: 'success' as const,
+      decimals: 1,
     },
     {
       label: 'Latest Exam',
-      value: lastResult ? lastResult.score.toFixed(1) : '--',
-      sub: lastResult?.examTitle ?? 'No exams yet',
+      value: lastResult ? Number(lastResult.score.toFixed(1)) : '--',
+      hint: lastResult?.examTitle ?? 'No exams yet',
       icon: iconClipboard,
-      color: 'text-blue-600',
-      bg: 'bg-blue-50',
+      tone: 'info' as const,
+      decimals: 1,
     },
     {
       label: 'Max Score',
-      value: dashboard?.maxScore?.toFixed(1) ?? '--',
+      value: dashboard?.maxScore ? Number(dashboard.maxScore.toFixed(1)) : '--',
       icon: iconTrophy,
-      color: 'text-amber-600',
-      bg: 'bg-amber-50',
+      tone: 'warning' as const,
+      decimals: 1,
     },
   ];
 
@@ -204,23 +223,18 @@ function ChildDashboardContent({ childId }: { childId: number }) {
 
   return (
     <>
-      {/* Stat cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {statCards.map((card) => (
-          <Card key={card.label} padding="md" className="hover:shadow-md transition-shadow">
-            <div className="flex items-center gap-4">
-              <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${card.bg} ${card.color}`}>
-                {card.icon}
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-slate-500 truncate">{card.label}</p>
-                <p className="text-2xl font-bold text-slate-900">{card.value}</p>
-                {card.sub && (
-                  <p className="text-xs text-slate-400 truncate">{card.sub}</p>
-                )}
-              </div>
-            </div>
-          </Card>
+      {/* Stat tiles */}
+      <div className="grid grid-cols-1 gap-4 stagger sm:grid-cols-2 xl:grid-cols-4">
+        {statTiles.map((s) => (
+          <StatTile
+            key={s.label}
+            label={s.label}
+            value={s.value}
+            hint={s.hint}
+            icon={s.icon}
+            tone={s.tone}
+            decimals={s.decimals}
+          />
         ))}
       </div>
 
@@ -454,5 +468,10 @@ const iconClipboard = (
 const iconTrophy = (
   <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 18.75h-9m9 0a3 3 0 013 3h-15a3 3 0 013-3m9 0v-3.375c0-.621-.503-1.125-1.125-1.125h-.871M7.5 18.75v-3.375c0-.621.504-1.125 1.125-1.125h.872m5.007 0H9.497m5.007 0a7.454 7.454 0 01-.982-3.172M9.497 14.25a7.454 7.454 0 00.981-3.172M5.25 4.236c-.982.143-1.954.317-2.916.52A6.003 6.003 0 007.73 9.728M5.25 4.236V4.5c0 2.108.966 3.99 2.48 5.228M5.25 4.236V2.721C7.456 2.41 9.71 2.25 12 2.25c2.291 0 4.545.16 6.75.47v1.516M18.75 4.236c.982.143 1.954.317 2.916.52A6.003 6.003 0 0016.27 9.728M18.75 4.236V4.5c0 2.108-.966 3.99-2.48 5.228m0 0a9.014 9.014 0 01-1.772.483" />
+  </svg>
+);
+const iconBell = (
+  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
   </svg>
 );

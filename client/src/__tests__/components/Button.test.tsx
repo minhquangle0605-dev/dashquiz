@@ -47,10 +47,10 @@ describe('Button component', () => {
 
   it('should apply variant classes', () => {
     const { rerender } = render(<Button variant="primary">Primary</Button>);
-    expect(screen.getByRole('button').className).toContain('bg-indigo-600');
+    expect(screen.getByRole('button').className).toContain('bg-gradient-brand');
 
     rerender(<Button variant="danger">Danger</Button>);
-    expect(screen.getByRole('button').className).toContain('bg-red-600');
+    expect(screen.getByRole('button').className).toContain('bg-[var(--color-danger)]');
   });
 
   it('should apply size classes', () => {

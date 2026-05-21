@@ -40,16 +40,18 @@ describe('Input component', () => {
     expect(input).toHaveValue('hello world');
   });
 
-  it('should apply error border styles', () => {
+  it('should apply error border styles on wrapper', () => {
     render(<Input name="email" label="Email" error="Error" />);
     const input = screen.getByLabelText('Email');
-    expect(input.className).toContain('border-red-500');
+    const wrapper = input.parentElement;
+    expect(wrapper?.className).toContain('border-[var(--color-danger)]');
   });
 
   it('should apply normal border styles without error', () => {
     render(<Input name="email" label="Email" />);
     const input = screen.getByLabelText('Email');
-    expect(input.className).toContain('border-slate-300');
+    const wrapper = input.parentElement;
+    expect(wrapper?.className).toContain('border-[var(--color-border)]');
   });
 
   it('should forward ref properly', () => {

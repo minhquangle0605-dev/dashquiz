@@ -9,20 +9,54 @@ import { useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
 import { Button } from '@/components/ui/Button';
-import { Modal } from '@/components/ui/Modal';
 import { Spinner } from '@/components/ui/Spinner';
-import { MathText } from '@/components/shared/MathText';
+import { CLIENT_SOCKET_EVENTS } from '@/constants/socketEvents';
 import {
   useStartStudentExam,
   useSaveAnswers,
   useSubmitStudentExam,
 } from '@/hooks/useExam';
-import type { ExamQuestion, StartExamData, StudentAnswerValue } from '@/types/exam';
+import { useSocketContext } from '@/providers/SocketProvider';
+import { recordAttemptEvent } from '@/services/studentExam.api';
+import type {
+  ExamQuestion,
+  RecordAttemptEventPayload,
+  StartExamData,
+  StudentAnswerValue,
+} from '@/types/exam';
+
+import { ExamBanners } from './take-exam/ExamBanners';
+import { ExamHeader } from './take-exam/ExamHeader';
+import { QuestionPanel } from './take-exam/QuestionPanel';
+import { QuestionNavigator } from './take-exam/QuestionNavigator';
+import { ExamFooter } from './take-exam/ExamFooter';
+import { SubmitDialog } from './take-exam/SubmitDialog';
 
 const AUTO_SAVE_INTERVAL = 30_000;
+const MONITORING_HEARTBEAT_INTERVAL = 30_000;
 const WARNING_THRESHOLD = 300;
 const CRITICAL_THRESHOLD = 60;
 const TAB_SWITCH_WARN_LIMIT = 3;
+
+function getAnsweredCount(
+  questions: ExamQuestion[],
+  answers: Record<string, StudentAnswerValue>,
+) {
+  return questions.length - questions.filter((q) => {
+    const answer = answers[String(q.questionId)];
+    if (answer === undefined || answer === null) return true;
+    if (Array.isArray(answer)) return answer.length === 0;
+    if (typeof answer === 'string') return answer.trim().length === 0;
+    if (typeof answer === 'object') {
+      const pairLabels = q.options
+        .filter((opt) => opt.content.includes('=>'))
+        .map((opt) => opt.label);
+      if (pairLabels.length === 0) return false;
+      return pairLabels.some((label) => !String(answer[label] || '').trim());
+    }
+    return false;
+  }).length;
+}
 
 export default function TakeExamPage() {
   const { id } = useParams<{ id: string }>();
@@ -52,10 +86,66 @@ export default function TakeExamPage() {
   const startMutation = useStartStudentExam();
   const saveMutation = useSaveAnswers();
   const submitMutation = useSubmitStudentExam();
+  const { socket } = useSocketContext();
 
   const attemptId = examData?.attempt.id;
   const questions: ExamQuestion[] = examData?.questions ?? [];
   const currentQuestion = questions[currentIndex];
+  const monitoringRef = useRef({
+    answers,
+    questions,
+    timeLeft,
+    currentQuestionId: currentQuestion?.questionId ?? null,
+    flaggedCount: flagged.size,
+    tabSwitchCount,
+  });
+
+  monitoringRef.current = {
+    answers,
+    questions,
+    timeLeft,
+    currentQuestionId: currentQuestion?.questionId ?? null,
+    flaggedCount: flagged.size,
+    tabSwitchCount,
+  };
+
+  const buildMonitoringMetadata = useCallback((extra?: Record<string, unknown>) => {
+    const snapshot = monitoringRef.current;
+    const answeredCount = getAnsweredCount(snapshot.questions, snapshot.answers);
+    return {
+      answeredCount,
+      unansweredCount: Math.max(0, snapshot.questions.length - answeredCount),
+      totalQuestions: snapshot.questions.length,
+      timeRemainingSec: snapshot.timeLeft,
+      currentQuestionId: snapshot.currentQuestionId,
+      flaggedCount: snapshot.flaggedCount,
+      tabSwitchCount: snapshot.tabSwitchCount,
+      ...extra,
+    };
+  }, []);
+
+  const sendMonitoringEvent = useCallback(
+    (
+      type: RecordAttemptEventPayload['type'],
+      extra?: Record<string, unknown>,
+    ) => {
+      if (!attemptId || hasSubmitted.current) return;
+      const metadata = buildMonitoringMetadata(extra);
+      const elapsedSec = examData
+        ? Math.max(0, examData.exam.durationMin * 60 - monitoringRef.current.timeLeft)
+        : undefined;
+
+      void recordAttemptEvent(attemptId, {
+        type,
+        clientElapsedSec: elapsedSec,
+        questionId: monitoringRef.current.currentQuestionId ?? undefined,
+        metadata,
+      }).catch(() => {});
+    },
+    [attemptId, buildMonitoringMetadata, examData],
+  );
+  const sendMonitoringEventRef = useRef(sendMonitoringEvent);
+  sendMonitoringEventRef.current = sendMonitoringEvent;
 
   // Start or resume exam
   useEffect(() => {
@@ -81,7 +171,34 @@ export default function TakeExamPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [examId]);
 
-  // Countdown timer — uses ref to avoid stale closure
+  useEffect(() => {
+    if (!examData || !attemptId || hasSubmitted.current) return;
+
+    socket?.emit(CLIENT_SOCKET_EVENTS.JOIN_EXAM, { examId });
+
+    const sendHeartbeat = () => {
+      const metadata = buildMonitoringMetadata();
+      socket?.emit(CLIENT_SOCKET_EVENTS.EXAM_HEARTBEAT, {
+        examId,
+        attemptId,
+        answeredCount: metadata.answeredCount,
+        unansweredCount: metadata.unansweredCount,
+        timeRemainingSec: metadata.timeRemainingSec,
+        currentQuestionId: metadata.currentQuestionId,
+      });
+      sendMonitoringEvent('HEARTBEAT');
+    };
+
+    sendHeartbeat();
+    const heartbeat = setInterval(sendHeartbeat, MONITORING_HEARTBEAT_INTERVAL);
+
+    return () => {
+      clearInterval(heartbeat);
+      socket?.emit(CLIENT_SOCKET_EVENTS.LEAVE_EXAM, { examId });
+    };
+  }, [attemptId, buildMonitoringMetadata, examData, examId, sendMonitoringEvent, socket]);
+
+  // Countdown timer
   useEffect(() => {
     if (!examData || hasSubmitted.current) return;
 
@@ -100,7 +217,7 @@ export default function TakeExamPage() {
     };
   }, [examData]);
 
-  // Auto-save interval
+  // Auto-save
   useEffect(() => {
     if (!attemptId || hasSubmitted.current) return;
 
@@ -119,8 +236,12 @@ export default function TakeExamPage() {
     const goOnline = () => {
       setIsOnline(true);
       performSave();
+      sendMonitoringEventRef.current('ONLINE');
     };
-    const goOffline = () => setIsOnline(false);
+    const goOffline = () => {
+      setIsOnline(false);
+      sendMonitoringEventRef.current('OFFLINE');
+    };
 
     window.addEventListener('online', goOnline);
     window.addEventListener('offline', goOffline);
@@ -141,7 +262,7 @@ export default function TakeExamPage() {
     return () => window.removeEventListener('beforeunload', handler);
   }, [examData]);
 
-  // Anti-cheat: Tab switch / visibility change detection
+  // Anti-cheat: Tab switch
   useEffect(() => {
     if (!examData || hasSubmitted.current) return;
 
@@ -149,6 +270,7 @@ export default function TakeExamPage() {
       if (document.hidden) {
         setTabSwitchCount((prev) => {
           const next = prev + 1;
+          sendMonitoringEvent('TAB_HIDDEN', { tabSwitchCount: next });
           if (next >= TAB_SWITCH_WARN_LIMIT) {
             toast.error(
               `Warning: You have switched tabs ${next} times. This activity is being recorded.`,
@@ -164,18 +286,33 @@ export default function TakeExamPage() {
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [examData]);
+  }, [examData, sendMonitoringEvent]);
 
-  // Anti-cheat: Prevent copy, paste, right-click, and keyboard shortcuts
+  useEffect(() => {
+    if (!examData || hasSubmitted.current) return;
+    let lastBlurAt = 0;
+    const handleBlur = () => {
+      const now = Date.now();
+      if (now - lastBlurAt < 3000) return;
+      lastBlurAt = now;
+      sendMonitoringEvent('WINDOW_BLUR');
+    };
+    window.addEventListener('blur', handleBlur);
+    return () => window.removeEventListener('blur', handleBlur);
+  }, [examData, sendMonitoringEvent]);
+
+  // Anti-cheat: Prevent copy/paste/right-click/devtools
   useEffect(() => {
     if (!examData || hasSubmitted.current) return;
 
     const preventCopy = (e: ClipboardEvent) => {
       e.preventDefault();
+      sendMonitoringEvent(e.type === 'paste' ? 'PASTE' : 'COPY');
       toast.error('Copying is not allowed during the exam.');
     };
     const preventContextMenu = (e: MouseEvent) => {
       e.preventDefault();
+      sendMonitoringEvent('CONTEXT_MENU');
     };
     const preventShortcuts = (e: KeyboardEvent) => {
       if (
@@ -183,9 +320,11 @@ export default function TakeExamPage() {
         ['c', 'v', 'a', 'u', 'p'].includes(e.key.toLowerCase())
       ) {
         e.preventDefault();
+        sendMonitoringEvent('SHORTCUT_BLOCKED', { key: e.key.toLowerCase() });
       }
       if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && e.key === 'I')) {
         e.preventDefault();
+        sendMonitoringEvent('SHORTCUT_BLOCKED', { key: e.key });
       }
     };
 
@@ -199,7 +338,7 @@ export default function TakeExamPage() {
       document.removeEventListener('contextmenu', preventContextMenu);
       document.removeEventListener('keydown', preventShortcuts);
     };
-  }, [examData]);
+  }, [examData, sendMonitoringEvent]);
 
   const performSave = useCallback(() => {
     if (!attemptId || hasSubmitted.current || !isOnline) {
@@ -232,10 +371,7 @@ export default function TakeExamPage() {
       {
         onSuccess: (res) => {
           toast.success('Time is up! Your exam has been submitted automatically.');
-          navigate(
-            `/student/attempts/${res.data.attemptId}/result`,
-            { replace: true },
-          );
+          navigate(`/student/attempts/${res.data.attemptId}/result`, { replace: true });
         },
         onError: () => {
           toast.error('Auto-submit failed. Please try submitting manually.');
@@ -262,10 +398,7 @@ export default function TakeExamPage() {
       {
         onSuccess: (res) => {
           toast.success('Exam submitted successfully!');
-          navigate(
-            `/student/attempts/${res.data.attemptId}/result`,
-            { replace: true },
-          );
+          navigate(`/student/attempts/${res.data.attemptId}/result`, { replace: true });
         },
         onError: () => {
           toast.error('Submit failed. Please try again.');
@@ -276,10 +409,7 @@ export default function TakeExamPage() {
   };
 
   const selectAnswer = (questionId: number, optionId: number) => {
-    setAnswers((prev) => ({
-      ...prev,
-      [String(questionId)]: optionId,
-    }));
+    setAnswers((prev) => ({ ...prev, [String(questionId)]: optionId }));
   };
 
   const toggleMultiAnswer = (questionId: number, optionId: number) => {
@@ -309,10 +439,7 @@ export default function TakeExamPage() {
           : {};
       return {
         ...prev,
-        [key]: {
-          ...current,
-          [label]: value,
-        },
+        [key]: { ...current, [label]: value },
       };
     });
   };
@@ -333,33 +460,25 @@ export default function TakeExamPage() {
       if (Array.isArray(answer)) return answer.length === 0;
       if (typeof answer === 'string') return answer.trim().length === 0;
       if (typeof answer === 'object') {
-        return q.options.some((option) => !String(answer[option.label] || '').trim());
+        const pairLabels = q.options
+          .filter((opt) => opt.content.includes('=>'))
+          .map((opt) => opt.label);
+        if (pairLabels.length === 0) return false;
+        return pairLabels.some((label) => !String(answer[label] || '').trim());
       }
       return false;
     }).length;
   }, [questions, answers]);
 
-  const formatTime = (sec: number) => {
-    const m = Math.floor(sec / 60);
-    const s = sec % 60;
-    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  };
-
-  const splitMatchingPair = (content: string) => {
-    const [left = '', ...rightParts] = content.split(/\s*=>\s*/);
-    return {
-      left: left.trim(),
-      right: rightParts.join(' => ').trim(),
-    };
-  };
-
   // Loading state
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="flex flex-col items-center gap-4">
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="flex flex-col items-center gap-4 animate-fade-in">
           <Spinner size="lg" />
-          <p className="text-sm text-slate-500">Preparing your exam...</p>
+          <p className="text-sm font-medium text-[var(--color-text-muted)]">
+            Preparing your exam…
+          </p>
         </div>
       </div>
     );
@@ -368,15 +487,17 @@ export default function TakeExamPage() {
   // Error state
   if (error || !examData) {
     return (
-      <div className="mx-auto max-w-lg mt-16">
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-8 text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
-            <svg className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <div className="mx-auto mt-16 max-w-lg animate-fade-in-up">
+        <div className="rounded-2xl border border-[var(--color-danger)]/30 bg-[var(--color-danger-soft)] p-8 text-center">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--color-danger)]/15">
+            <svg className="h-7 w-7 text-[var(--color-danger)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
             </svg>
           </div>
-          <h2 className="text-lg font-semibold text-red-800">Cannot Start Exam</h2>
-          <p className="mt-2 text-sm text-red-600">{error}</p>
+          <h2 className="text-lg font-bold tracking-tight text-[var(--color-text-primary)]">
+            Cannot Start Exam
+          </h2>
+          <p className="mt-2 text-sm text-[var(--color-text-secondary)]">{error}</p>
           <Button
             variant="outline"
             className="mt-6"
@@ -393,448 +514,75 @@ export default function TakeExamPage() {
   const isCritical = timeLeft <= CRITICAL_THRESHOLD;
 
   return (
-    <div className="flex flex-col h-[calc(100vh-3.5rem)] -m-4 sm:-m-6">
-      {/* Tab-switch warning banner */}
-      {showTabWarning && (
-        <div className="bg-red-600 px-4 py-2 text-center text-sm font-medium text-white">
-          <svg className="mr-2 inline h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-          </svg>
-          Tab switch detected ({tabSwitchCount}/{TAB_SWITCH_WARN_LIMIT}). This activity is being recorded by the system.
-        </div>
-      )}
+    <div className="-m-4 flex h-[calc(100vh-4rem)] flex-col sm:-m-6 lg:-m-8">
+      <ExamBanners
+        showTabWarning={showTabWarning}
+        tabSwitchCount={tabSwitchCount}
+        tabSwitchLimit={TAB_SWITCH_WARN_LIMIT}
+        isOnline={isOnline}
+      />
 
-      {/* Offline warning banner */}
-      {!isOnline && (
-        <div className="bg-amber-500 px-4 py-2 text-center text-sm font-medium text-white">
-          <svg className="mr-2 inline h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-          </svg>
-          You are offline. Your answers are saved locally and will sync when you reconnect.
-        </div>
-      )}
+      <ExamHeader
+        title={examData.exam.title}
+        lastSaved={lastSaved}
+        tabSwitchCount={tabSwitchCount}
+        timeLeft={timeLeft}
+        isWarning={isWarning}
+        isCritical={isCritical}
+        onToggleSidebar={() => setSidebarOpen((o) => !o)}
+      />
 
-      {/* Header with timer */}
-      <header className="flex items-center justify-between gap-4 border-b border-slate-200 bg-white px-4 py-3 sm:px-6 shadow-sm">
-        <div className="flex items-center gap-3 min-w-0">
-          <h1 className="text-base font-semibold text-slate-900 truncate">
-            {examData.exam.title}
-          </h1>
-          {lastSaved && (
-            <span className="hidden sm:inline-flex items-center gap-1 text-xs text-emerald-600">
-              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-              </svg>
-              Saved
-            </span>
-          )}
-        </div>
-
-        <div className="flex items-center gap-3">
-          {/* Tab switch indicator */}
-          {tabSwitchCount > 0 && (
-            <div className="hidden sm:flex items-center gap-1.5 rounded-lg bg-red-50 px-2.5 py-2 text-xs font-medium text-red-700">
-              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.64 0 8.577 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.64 0-8.577-3.007-9.963-7.178z" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-              {tabSwitchCount} tab switch{tabSwitchCount > 1 ? 'es' : ''}
-            </div>
-          )}
-          {/* Timer */}
-          <div
-            className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-bold tabular-nums min-h-[44px] ${
-              isCritical
-                ? 'bg-red-100 text-red-700 animate-pulse'
-                : isWarning
-                  ? 'bg-red-50 text-red-600'
-                  : 'bg-slate-100 text-slate-700'
-            }`}
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            {formatTime(timeLeft)}
-          </div>
-
-          {/* Mobile sidebar toggle */}
-          <button
-            type="button"
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="flex h-[44px] w-[44px] items-center justify-center rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 lg:hidden"
-            aria-label="Toggle question navigator"
-          >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
-            </svg>
-          </button>
-        </div>
-      </header>
-
-      {/* Main content */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Question area */}
         <div className="flex-1 overflow-y-auto">
           <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
-            {currentQuestion ? (
-              <div className="space-y-6">
-                {/* Question counter */}
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-slate-500">
-                    Question {currentIndex + 1} of {questions.length}
-                  </span>
-                  {currentQuestion.points > 0 && (
-                    <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-semibold text-indigo-700">
-                      {Number(currentQuestion.points)} pt{Number(currentQuestion.points) !== 1 ? 's' : ''}
-                    </span>
-                  )}
-                </div>
-
-                {/* Progress bar */}
-                <div className="h-1.5 w-full rounded-full bg-slate-100">
-                  <div
-                    className="h-full rounded-full bg-indigo-500 transition-[width] duration-300"
-                    style={{
-                      width: `${((currentIndex + 1) / questions.length) * 100}%`,
-                    }}
-                  />
-                </div>
-
-                {/* Question content */}
-                <div className="text-base leading-relaxed text-slate-800">
-                  <MathText>{currentQuestion.content}</MathText>
-                </div>
-
-                {currentQuestion.questionType === 'SHORT_ANSWER' ? (
-                  <textarea
-                    rows={4}
-                    value={
-                      typeof answers[String(currentQuestion.questionId)] === 'string'
-                        ? (answers[String(currentQuestion.questionId)] as string)
-                        : ''
-                    }
-                    onChange={(event) =>
-                      setTextAnswer(currentQuestion.questionId, event.target.value)
-                    }
-                    className="w-full rounded-xl border-2 border-slate-200 bg-white p-4 text-sm text-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                    placeholder="Type your answer"
-                  />
-                ) : currentQuestion.questionType === 'MATCHING' ? (
-                  <div className="space-y-3">
-                    {currentQuestion.options.map((opt) => {
-                      const pair = splitMatchingPair(opt.content);
-                      const answer =
-                        answers[String(currentQuestion.questionId)] &&
-                        typeof answers[String(currentQuestion.questionId)] === 'object' &&
-                        !Array.isArray(answers[String(currentQuestion.questionId)])
-                          ? (answers[String(currentQuestion.questionId)] as Record<string, string>)
-                          : {};
-                      return (
-                        <div
-                          key={opt.id}
-                          className="grid gap-3 rounded-xl border-2 border-slate-200 bg-white p-4 sm:grid-cols-[1fr_1fr]"
-                        >
-                          <div className="text-sm font-medium text-slate-700">
-                            <MathText>{pair.left || opt.content}</MathText>
-                          </div>
-                          <input
-                            type="text"
-                            value={answer[opt.label] || ''}
-                            onChange={(event) =>
-                              setMatchingAnswer(
-                                currentQuestion.questionId,
-                                opt.label,
-                                event.target.value,
-                              )
-                            }
-                            className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                            placeholder="Matching answer"
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {currentQuestion.options.map((opt) => {
-                      const answer = answers[String(currentQuestion.questionId)];
-                      const selected =
-                        currentQuestion.questionType === 'MULTIPLE_CHOICE'
-                          ? Array.isArray(answer) && answer.includes(opt.id)
-                          : answer === opt.id;
-                      return (
-                        <button
-                          key={opt.id}
-                          type="button"
-                          onClick={() =>
-                            currentQuestion.questionType === 'MULTIPLE_CHOICE'
-                              ? toggleMultiAnswer(currentQuestion.questionId, opt.id)
-                              : selectAnswer(currentQuestion.questionId, opt.id)
-                          }
-                          className={`flex w-full items-start gap-4 rounded-xl border-2 p-4 text-left transition-colors min-h-[44px] ${
-                            selected
-                              ? 'border-indigo-500 bg-indigo-50'
-                              : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
-                          }`}
-                        >
-                          <span
-                            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
-                              selected
-                                ? 'bg-indigo-600 text-white'
-                                : 'bg-slate-100 text-slate-600'
-                            }`}
-                          >
-                            {currentQuestion.questionType === 'MULTIPLE_CHOICE' ? (
-                              <input
-                                type="checkbox"
-                                checked={selected}
-                                readOnly
-                                className="h-4 w-4 rounded border-white text-indigo-600"
-                              />
-                            ) : (
-                              opt.label
-                            )}
-                          </span>
-                          <div
-                            className={`flex-1 pt-0.5 text-sm leading-relaxed ${
-                              selected
-                                ? 'text-indigo-900 font-medium'
-                                : 'text-slate-700'
-                            }`}
-                          >
-                            <MathText>{opt.content}</MathText>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="py-20 text-center text-slate-500">
-                No questions available
-              </div>
-            )}
+            <QuestionPanel
+              question={currentQuestion}
+              currentIndex={currentIndex}
+              total={questions.length}
+              answer={answers[String(currentQuestion?.questionId ?? 0)]}
+              onSingleSelect={selectAnswer}
+              onMultiSelect={toggleMultiAnswer}
+              onTextAnswer={setTextAnswer}
+              onMatchingAnswer={setMatchingAnswer}
+            />
           </div>
         </div>
 
-        {/* Sidebar — question navigator (desktop always, mobile toggle) */}
-        {sidebarOpen && (
-          <div
-            className="fixed inset-0 z-30 bg-black/40 lg:hidden"
-            onClick={() => setSidebarOpen(false)}
-          />
-        )}
-        <aside
-          className={`fixed right-0 top-0 z-40 h-full w-72 bg-white border-l border-slate-200 shadow-xl transition-transform duration-200 lg:static lg:z-auto lg:w-64 lg:translate-x-0 lg:shadow-none ${
-            sidebarOpen ? 'translate-x-0' : 'translate-x-full'
-          }`}
-        >
-          <div className="flex h-full flex-col">
-            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-              <h2 className="text-sm font-semibold text-slate-700">
-                Questions
-              </h2>
-              <button
-                type="button"
-                onClick={() => setSidebarOpen(false)}
-                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 lg:hidden"
-                aria-label="Close navigator"
-              >
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            {/* Legend */}
-            <div className="flex flex-wrap gap-3 border-b border-slate-100 px-4 py-2.5 text-xs text-slate-500">
-              <span className="flex items-center gap-1.5">
-                <span className="h-3 w-3 rounded bg-slate-200" /> Not answered
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="h-3 w-3 rounded bg-indigo-500" /> Answered
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="h-3 w-3 rounded bg-amber-400" /> Flagged
-              </span>
-            </div>
-
-            {/* Grid */}
-            <div className="flex-1 overflow-y-auto p-4">
-              <div className="grid grid-cols-5 gap-2">
-                {questions.map((q, i) => {
-                  const answered = answers[String(q.questionId)] != null;
-                  const isFlagged = flagged.has(i);
-                  const isCurrent = i === currentIndex;
-
-                  return (
-                    <button
-                      key={q.questionId}
-                      type="button"
-                      onClick={() => {
-                        setCurrentIndex(i);
-                        setSidebarOpen(false);
-                      }}
-                      className={`relative flex h-10 w-full items-center justify-center rounded-lg text-sm font-semibold transition-colors min-h-[44px] ${
-                        isCurrent
-                          ? 'ring-2 ring-indigo-500 ring-offset-1'
-                          : ''
-                      } ${
-                        isFlagged
-                          ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
-                          : answered
-                            ? 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
-                    >
-                      {i + 1}
-                      {isFlagged && (
-                        <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-amber-500 ring-2 ring-white" />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Summary */}
-            <div className="border-t border-slate-200 px-4 py-3 text-xs text-slate-500 space-y-1">
-              <div className="flex justify-between">
-                <span>Answered</span>
-                <span className="font-semibold text-slate-700">
-                  {questions.length - unansweredCount} / {questions.length}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span>Flagged</span>
-                <span className="font-semibold text-slate-700">
-                  {flagged.size}
-                </span>
-              </div>
-            </div>
-          </div>
-        </aside>
+        <QuestionNavigator
+          questions={questions}
+          answers={answers}
+          flagged={flagged}
+          currentIndex={currentIndex}
+          sidebarOpen={sidebarOpen}
+          unansweredCount={unansweredCount}
+          onSelect={(i) => {
+            setCurrentIndex(i);
+            setSidebarOpen(false);
+          }}
+          onClose={() => setSidebarOpen(false)}
+        />
       </div>
 
-      {/* Footer navigation */}
-      <footer className="flex items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-3 sm:px-6 shadow-[0_-2px_8px_rgba(0,0,0,.04)]">
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="md"
-            disabled={currentIndex === 0}
-            onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}
-            className="min-h-[44px]"
-          >
-            <svg className="mr-1.5 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-            </svg>
-            Previous
-          </Button>
-          <Button
-            variant="outline"
-            size="md"
-            disabled={currentIndex === questions.length - 1}
-            onClick={() =>
-              setCurrentIndex((i) => Math.min(questions.length - 1, i + 1))
-            }
-            className="min-h-[44px]"
-          >
-            Next
-            <svg className="ml-1.5 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-            </svg>
-          </Button>
-        </div>
+      <ExamFooter
+        currentIndex={currentIndex}
+        total={questions.length}
+        isFlagged={flagged.has(currentIndex)}
+        isSubmitting={submitMutation.isPending}
+        onPrev={() => setCurrentIndex((i) => Math.max(0, i - 1))}
+        onNext={() => setCurrentIndex((i) => Math.min(questions.length - 1, i + 1))}
+        onToggleFlag={() => toggleFlag(currentIndex)}
+        onOpenSubmit={() => setShowSubmitDialog(true)}
+      />
 
-        <div className="flex gap-2">
-          <Button
-            variant="ghost"
-            size="md"
-            onClick={() => toggleFlag(currentIndex)}
-            className="min-h-[44px]"
-          >
-            {flagged.has(currentIndex) ? (
-              <>
-                <svg className="mr-1.5 h-4 w-4 text-amber-500" viewBox="0 0 24 24" fill="currentColor">
-                  <path fillRule="evenodd" d="M3 2.25a.75.75 0 01.75.75v.54l1.838-.46a9.75 9.75 0 016.725.738l.108.054a8.25 8.25 0 005.58.652l3.109-.732a.75.75 0 01.917.81 47.784 47.784 0 00.005 10.337.75.75 0 01-.574.812l-3.114.733a9.75 9.75 0 01-6.594-.77l-.108-.054a8.25 8.25 0 00-5.69-.625l-1.81.452A.75.75 0 013 14.175V3A.75.75 0 013.75 2.25z" clipRule="evenodd" />
-                </svg>
-                Unflag
-              </>
-            ) : (
-              <>
-                <svg className="mr-1.5 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 3v1.5M3 21v-6m0 0l2.77-.693a9 9 0 016.208.682l.108.054a9 9 0 006.086.71l3.114-.732a48.524 48.524 0 01-.005-10.499l-3.11.732a9 9 0 01-6.085-.711l-.108-.054a9 9 0 00-6.208-.682L3 4.5M3 15V4.5" />
-                </svg>
-                Flag
-              </>
-            )}
-          </Button>
-
-          <Button
-            variant="danger"
-            size="md"
-            onClick={() => setShowSubmitDialog(true)}
-            isLoading={submitMutation.isPending}
-            className="min-h-[44px]"
-          >
-            Submit Exam
-          </Button>
-        </div>
-      </footer>
-
-      {/* Submit confirmation dialog */}
-      <Modal
+      <SubmitDialog
         isOpen={showSubmitDialog}
+        unansweredCount={unansweredCount}
+        totalQuestions={questions.length}
+        flaggedCount={flagged.size}
+        isSubmitting={submitMutation.isPending}
         onClose={() => setShowSubmitDialog(false)}
-        title="Submit Exam"
-        size="sm"
-      >
-        <div className="space-y-4">
-          {unansweredCount > 0 ? (
-            <div className="rounded-lg bg-amber-50 border border-amber-200 p-4">
-              <div className="flex items-start gap-3">
-                <svg className="h-5 w-5 shrink-0 text-amber-600 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-                </svg>
-                <div>
-                  <p className="text-sm font-semibold text-amber-800">
-                    You have {unansweredCount} unanswered question
-                    {unansweredCount > 1 ? 's' : ''}
-                  </p>
-                  <p className="mt-1 text-sm text-amber-700">
-                    Once submitted, you cannot change your answers.
-                  </p>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <p className="text-sm text-slate-600">
-              You have answered all {questions.length} questions. Are you sure
-              you want to submit?
-            </p>
-          )}
-
-          <div className="flex gap-3 justify-end pt-2">
-            <Button
-              variant="outline"
-              onClick={() => setShowSubmitDialog(false)}
-              className="min-h-[44px]"
-            >
-              Go Back
-            </Button>
-            <Button
-              variant="primary"
-              onClick={handleManualSubmit}
-              isLoading={submitMutation.isPending}
-              className="min-h-[44px]"
-            >
-              Confirm Submit
-            </Button>
-          </div>
-        </div>
-      </Modal>
+        onConfirm={handleManualSubmit}
+      />
     </div>
   );
 }

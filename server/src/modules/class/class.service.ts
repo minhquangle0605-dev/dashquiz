@@ -398,6 +398,44 @@ export class ClassService {
   // LIST STUDENTS IN CLASS
   // ═══════════════════════════════════════════════
 
+  async listClassmates(classId: number, userId: number, role: string) {
+    // Access guard: must be enrolled in the class or staff
+    const access = await this.getClassAccess(classId, userId, role);
+    const allowed = access.isStudent || access.capabilities.canViewParticipants;
+    if (!allowed) {
+      throw new AppError('You do not have access to this class roster', 403);
+    }
+
+    const students = await prisma.classStudent.findMany({
+      where: { classId },
+      include: {
+        student: {
+          select: {
+            id: true,
+            username: true,
+            fullName: true,
+            avatar: true,
+          },
+        },
+      },
+      orderBy: { enrolledAt: 'asc' },
+    });
+
+    return {
+      success: true,
+      message: 'Classmates retrieved successfully',
+      data: students.map((cs) => ({
+        classId: cs.classId,
+        studentId: cs.studentId,
+        enrolledAt: cs.enrolledAt,
+        student: {
+          ...cs.student,
+          phone: null,
+        },
+      })),
+    };
+  }
+
   async listStudents(classId: number, query: ListStudentsQuery, userId: number, role: string) {
     const access = await this.getClassAccess(classId, userId, role);
     if (!access.capabilities.canViewParticipants) {

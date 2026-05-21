@@ -6,6 +6,7 @@ import type {
   SubmitExamResponse,
   AttemptResultData,
   StudentAnswerValue,
+  RecordAttemptEventPayload,
 } from '@/types/exam';
 import { API_ENDPOINTS } from '@/utils/constants';
 
@@ -26,6 +27,7 @@ interface ServerResponse<T> {
 export interface StudentExamListParams {
   filter?: 'upcoming' | 'in_progress' | 'completed' | 'all';
   subjectId?: number;
+  classId?: number;
   page?: number;
   limit?: number;
 }
@@ -78,4 +80,11 @@ export async function getAttemptResult(
     API_ENDPOINTS.STUDENT_EXAMS.RESULT(attemptId),
   );
   return data;
+}
+
+export async function recordAttemptEvent(
+  attemptId: number,
+  payload: RecordAttemptEventPayload,
+): Promise<void> {
+  await api.post(API_ENDPOINTS.STUDENT_EXAMS.EVENT(attemptId), payload);
 }

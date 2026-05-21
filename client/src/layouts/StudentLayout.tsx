@@ -54,19 +54,29 @@ const iconClasses = (
     />
   </svg>
 );
+const iconDiscussions = (
+  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+    />
+  </svg>
+);
 
 export default function StudentLayout() {
   return (
     <DashboardShell
       roleLabel="Student"
-      sidebarClassName="bg-gradient-to-b from-indigo-700 to-indigo-900"
-      activeNavClassName="bg-white text-indigo-900 shadow-sm"
+      sidebarClassName="bg-gradient-to-b from-indigo-600 via-indigo-800 to-violet-950"
+      activeNavClassName="bg-white text-indigo-900"
       navItems={[
         { to: '/student/dashboard', label: 'Dashboard', end: true, icon: iconDashboard },
         { to: '/student/classes', label: 'My Classes', icon: iconClasses },
         { to: '/student/knowledge-graph', label: 'Knowledge Graph', icon: iconGraph },
         { to: '/student/exams', label: 'Exams', icon: iconExam },
         { to: '/student/ai-practice', label: 'AI Practice', icon: iconAI },
+        { to: '/student/discussions', label: 'Thảo luận', icon: iconDiscussions },
         { to: '/student/profile', label: 'Profile', icon: iconProfile },
       ]}
     />

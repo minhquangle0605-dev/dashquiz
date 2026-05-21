@@ -1,4 +1,4 @@
-import { Prisma, AttemptStatus } from '@prisma/client';
+import { Prisma, AttemptStatus, ExamAttemptEventType } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { getRedisClient } from '../../config/redis';
 import { AppError } from '../../middlewares/errorHandler';
@@ -6,11 +6,12 @@ import { logger } from '../../utils/logger';
 import { PAGINATION, COMPLETED_ATTEMPT_STATUSES } from '../../utils/constants';
 import { invalidateStudentCache } from '../analytics/analytics.service';
 import { notificationService } from '../notification/notification.service';
-import { emitStudentSubmitted, emitDashboardUpdate } from '../../socket';
+import { emitStudentSubmitted, emitDashboardUpdate, emitAttemptEvent } from '../../socket';
 import type {
   ListStudentExamsQuery,
   SaveAnswersInput,
   SubmitAttemptInput,
+  AttemptEventInput,
   ListAttemptsQuery,
 } from './studentExam.validation';
 
@@ -102,6 +103,23 @@ function normalizeSelectedIds(value: StudentAnswerValue): number[] {
   return [];
 }
 
+function metadataToJson(
+  metadata: Record<string, unknown> | undefined,
+): Prisma.InputJsonValue | typeof Prisma.JsonNull {
+  if (!metadata) return Prisma.JsonNull;
+  return JSON.parse(JSON.stringify(metadata)) as Prisma.InputJsonValue;
+}
+
+function countAnsweredValues(answers: Record<string, StudentAnswerValue>): number {
+  return Object.values(answers).filter((value) => {
+    if (value === undefined || value === null) return false;
+    if (Array.isArray(value)) return value.length > 0;
+    if (typeof value === 'string') return value.trim().length > 0;
+    if (typeof value === 'object') return Object.values(value).some((v) => String(v).trim());
+    return true;
+  }).length;
+}
+
 function splitMatchingPair(content: string): [string, string] | null {
   const [left = '', ...rightParts] = content.split(/\s*=>\s*/);
   const right = rightParts.join(' => ').trim();
@@ -110,6 +128,89 @@ function splitMatchingPair(content: string): [string, string] | null {
 }
 
 export class StudentExamService {
+  private async createAttemptEvent(
+    attemptId: number,
+    type: ExamAttemptEventType,
+    options: {
+      clientElapsedSec?: number;
+      questionId?: number;
+      metadata?: Record<string, unknown>;
+    } = {},
+  ) {
+    return prisma.examAttemptEvent.create({
+      data: {
+        attemptId,
+        type,
+        clientElapsedSec: options.clientElapsedSec ?? null,
+        questionId: options.questionId ?? null,
+        metadata: metadataToJson(options.metadata),
+      },
+    });
+  }
+
+  async recordAttemptEvent(attemptId: number, data: AttemptEventInput, studentId: number) {
+    const attempt = await prisma.examAttempt.findUnique({
+      where: { id: attemptId },
+      include: {
+        student: { select: { id: true, fullName: true, username: true } },
+        exam: {
+          select: {
+            id: true,
+            durationMin: true,
+            examQuestions: { select: { questionId: true } },
+          },
+        },
+      },
+    });
+
+    if (!attempt) throw new AppError('Attempt not found', 404);
+    if (attempt.studentId !== studentId) throw new AppError('Access denied', 403);
+    if (attempt.status !== 'IN_PROGRESS') {
+      throw new AppError('This attempt is no longer active', 400);
+    }
+
+    if (
+      data.questionId &&
+      !attempt.exam.examQuestions.some((question) => question.questionId === data.questionId)
+    ) {
+      throw new AppError('Question does not belong to this exam', 400);
+    }
+
+    const elapsed = Math.max(
+      0,
+      data.clientElapsedSec ??
+        Math.floor((Date.now() - new Date(attempt.startedAt).getTime()) / 1000),
+    );
+
+    const event = await this.createAttemptEvent(attemptId, data.type as ExamAttemptEventType, {
+      clientElapsedSec: elapsed,
+      questionId: data.questionId,
+      metadata: data.metadata,
+    });
+
+    emitAttemptEvent(attempt.examId, {
+      attemptId,
+      studentId: attempt.studentId,
+      studentName: attempt.student.fullName || attempt.student.username || 'Học sinh',
+      type: event.type,
+      occurredAt: event.occurredAt,
+      clientElapsedSec: event.clientElapsedSec,
+      questionId: event.questionId,
+      metadata: event.metadata,
+    });
+
+    return {
+      success: true,
+      message: 'Attempt event recorded',
+      data: {
+        id: event.id,
+        attemptId: event.attemptId,
+        type: event.type,
+        occurredAt: event.occurredAt,
+      },
+    };
+  }
+
   // ═══════════════════════════════════════════════
   // LIST EXAMS ASSIGNED TO STUDENT
   // UC05: Xem DS bài kiểm tra
@@ -124,7 +225,19 @@ export class StudentExamService {
       where: { studentId },
       select: { classId: true },
     });
-    const classIds = enrolledClasses.map((cs) => cs.classId);
+    let classIds = enrolledClasses.map((cs) => cs.classId);
+
+    if (query.classId) {
+      if (!classIds.includes(query.classId)) {
+        return {
+          success: true,
+          message: 'No exams found — you are not enrolled in this class',
+          data: [],
+          pagination: { page, limit, total: 0, totalPages: 0, hasNext: false, hasPrev: false },
+        };
+      }
+      classIds = [query.classId];
+    }
 
     if (classIds.length === 0) {
       return {
@@ -310,6 +423,13 @@ export class StudentExamService {
         // Fall through to create new attempt below
       } else {
         const savedAnswers = await this.getSavedAnswers(existingAttempt.id);
+        await this.createAttemptEvent(existingAttempt.id, ExamAttemptEventType.RESUMED, {
+          clientElapsedSec: elapsed,
+          metadata: {
+            answeredCount: countAnsweredValues(savedAnswers),
+            remainingSec: Math.max(0, durationSec - elapsed),
+          },
+        });
 
         let questions = exam.examQuestions.map((eq) => ({
           questionId: eq.questionId,
@@ -378,6 +498,11 @@ export class StudentExamService {
         status: 'IN_PROGRESS',
         startedAt: new Date(),
       },
+    });
+
+    await this.createAttemptEvent(attempt.id, ExamAttemptEventType.STARTED, {
+      clientElapsedSec: 0,
+      metadata: { durationSec: exam.durationMin * 60 },
     });
 
     const redis = getRedisClient();
@@ -453,6 +578,15 @@ export class StudentExamService {
 
     const ttl = Math.max(60, (durationSec + BUFFER_MINUTES * 60) - elapsed);
     await redis.set(key, JSON.stringify(merged), 'EX', ttl);
+
+    await this.createAttemptEvent(attemptId, ExamAttemptEventType.ANSWER_SAVED, {
+      clientElapsedSec: elapsed,
+      metadata: {
+        savedCount: Object.keys(merged).length,
+        answeredCount: countAnsweredValues(merged),
+        remainingSec: Math.max(0, durationSec - elapsed),
+      },
+    });
 
     return {
       success: true,
@@ -805,6 +939,8 @@ export class StudentExamService {
       });
     }
 
+    const correctCount = attemptAnswerData.filter((a) => a.isCorrect).length;
+
     await prisma.$transaction(async (tx) => {
       await tx.examAttempt.update({
         where: { id: attempt.id },
@@ -821,6 +957,20 @@ export class StudentExamService {
         await tx.attemptAnswer.deleteMany({ where: { attemptId: attempt.id } });
         await tx.attemptAnswer.createMany({ data: attemptAnswerData });
       }
+
+      await tx.examAttemptEvent.create({
+        data: {
+          attemptId: attempt.id,
+          type: isAuto ? ExamAttemptEventType.AUTO_SUBMITTED : ExamAttemptEventType.SUBMITTED,
+          clientElapsedSec: validatedTimeSpent,
+          metadata: {
+            totalScore: Number(totalScore),
+            totalQuestions: examQuestions.length,
+            correctCount,
+            answeredCount: countAnsweredValues(answers),
+          },
+        },
+      });
     });
 
     try {
@@ -832,8 +982,6 @@ export class StudentExamService {
     invalidateStudentCache(attempt.studentId).catch((err) =>
       logger.warn('Failed to invalidate analytics cache:', err),
     );
-
-    const correctCount = attemptAnswerData.filter((a) => a.isCorrect).length;
 
     // Real-time: emit exam:student-submitted so teacher sees it live
     const student = await prisma.user.findUnique({

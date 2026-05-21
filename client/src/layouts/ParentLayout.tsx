@@ -32,8 +32,8 @@ export default function ParentLayout() {
   return (
     <DashboardShell
       roleLabel="Parent"
-      sidebarClassName="bg-gradient-to-b from-amber-600 to-orange-900"
-      activeNavClassName="bg-white text-amber-900 shadow-sm"
+      sidebarClassName="bg-gradient-to-b from-amber-500 via-orange-700 to-amber-950"
+      activeNavClassName="bg-white text-amber-900"
       navItems={[
         { to: '/parent/dashboard', label: 'Dashboard', end: true, icon: iconDashboard },
         { to: '/parent/results', label: "Child's Results", icon: iconResults },

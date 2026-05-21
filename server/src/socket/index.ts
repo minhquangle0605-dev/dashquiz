@@ -2,6 +2,7 @@ export { initSocketServer, getIO, getIOSafe } from './socketManager';
 export {
   emitExamStarted,
   emitStudentSubmitted,
+  emitAttemptEvent,
   emitNotification,
   emitExamTimeWarning,
   emitExamClosed,

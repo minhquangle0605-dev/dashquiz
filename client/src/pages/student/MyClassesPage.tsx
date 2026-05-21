@@ -8,21 +8,37 @@ import { Button } from '@/components/ui/Button';
 import {
   getClassCourse,
   getResourceDownloadUrl,
+  listClassmates,
   listMyClasses,
   markCompletion,
   submitActivity,
 } from '@/services/class.api';
-import type { ClassActivity, ClassCourseOverview, ClassItem, ClassResource } from '@/types/exam';
+import type {
+  ClassActivity,
+  ClassCourseOverview,
+  ClassItem,
+  ClassResource,
+  ClassStudent,
+} from '@/types/exam';
+
+import { StudentClassExamsTab } from './classes/StudentClassExamsTab';
+import { StudentRosterList } from './classes/StudentRosterList';
 
 type EnrolledClass = ClassItem & { enrolledAt?: string };
+
+type StudentClassTab = 'course' | 'exams';
 
 export default function MyClassesPage() {
   const [classes, setClasses] = useState<EnrolledClass[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedClass, setSelectedClass] = useState<EnrolledClass | null>(null);
   const [course, setCourse] = useState<ClassCourseOverview | null>(null);
   const [courseLoading, setCourseLoading] = useState(false);
+  const [classmates, setClassmates] = useState<ClassStudent[]>([]);
+  const [classmatesLoading, setClassmatesLoading] = useState(false);
   const [submissionText, setSubmissionText] = useState<Record<number, string>>({});
   const [savingId, setSavingId] = useState<number | null>(null);
+  const [activeTab, setActiveTab] = useState<StudentClassTab>('course');
 
   const fetchClasses = useCallback(async () => {
     setLoading(true);
@@ -40,15 +56,27 @@ export default function MyClassesPage() {
     fetchClasses();
   }, [fetchClasses]);
 
-  const openCourse = async (classId: number) => {
+  const openCourse = async (cls: EnrolledClass) => {
+    if (selectedClass?.id === cls.id) {
+      setSelectedClass(null);
+      setCourse(null);
+      setClassmates([]);
+      return;
+    }
+    setSelectedClass(cls);
+    setActiveTab('course');
     setCourseLoading(true);
+    setClassmatesLoading(true);
     try {
-      const data = await getClassCourse(classId);
-      setCourse(data);
-    } catch {
-      toast.error('Failed to load class content.');
+      const [courseData, classmatesData] = await Promise.all([
+        getClassCourse(cls.id).catch(() => null),
+        listClassmates(cls.id).catch(() => [] as ClassStudent[]),
+      ]);
+      setCourse(courseData);
+      setClassmates(Array.isArray(classmatesData) ? classmatesData : []);
     } finally {
       setCourseLoading(false);
+      setClassmatesLoading(false);
     }
   };
 
@@ -62,7 +90,8 @@ export default function MyClassesPage() {
       }
       if (course?.class.id) {
         await markCompletion(course.class.id, { resourceId: resource.id });
-        openCourse(course.class.id);
+        const refreshed = await getClassCourse(course.class.id);
+        setCourse(refreshed);
       }
     } catch {
       toast.error('Could not open this resource.');
@@ -82,7 +111,8 @@ export default function MyClassesPage() {
       await markCompletion(course.class.id, { activityId: activity.id });
       toast.success('Submission saved.');
       setSubmissionText((prev) => ({ ...prev, [activity.id]: '' }));
-      openCourse(course.class.id);
+      const refreshed = await getClassCourse(course.class.id);
+      setCourse(refreshed);
     } catch {
       toast.error('Failed to submit activity.');
     } finally {
@@ -102,11 +132,13 @@ export default function MyClassesPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-7xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">My Classes</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          All the classes you are currently enrolled in.
+        <h1 className="text-2xl font-bold tracking-tight text-[var(--color-text-primary)] sm:text-3xl">
+          Lớp của tôi
+        </h1>
+        <p className="mt-1 text-sm text-[var(--color-text-muted)]">
+          Các lớp bạn đang tham gia. Chọn một lớp để xem nội dung và bài thi.
         </p>
       </div>
 
@@ -127,52 +159,116 @@ export default function MyClassesPage() {
               />
             </svg>
             <p className="mt-3 text-sm font-medium text-slate-700">
-              You are not enrolled in any class yet.
+              Bạn chưa tham gia lớp nào.
             </p>
             <p className="mt-1 text-xs text-slate-500">
-              Once a teacher adds you to a class, it will appear here.
+              Khi giáo viên thêm bạn vào lớp, lớp sẽ hiển thị ở đây.
             </p>
           </div>
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {classes.map((cls) => (
-            <ClassCard key={cls.id} cls={cls} onOpen={() => openCourse(cls.id)} />
+            <ClassCard
+              key={cls.id}
+              cls={cls}
+              isSelected={selectedClass?.id === cls.id}
+              onOpen={() => openCourse(cls)}
+            />
           ))}
         </div>
       )}
 
-      {courseLoading && (
-        <Card padding="lg">
-          <div className="flex justify-center py-10">
-            <Spinner size="md" label="Loading class content" />
+      {selectedClass && (
+        <div className="grid grid-cols-1 gap-5 animate-fade-in-up lg:grid-cols-12">
+          <div className="lg:col-span-5 lg:sticky lg:top-4 lg:self-start lg:h-[calc(100vh-7rem)] lg:min-h-[520px]">
+            <StudentRosterList
+              selectedClass={selectedClass}
+              students={classmates}
+              loading={classmatesLoading}
+            />
           </div>
-        </Card>
-      )}
 
-      {course && !courseLoading && (
-        <StudentCoursePanel
-          course={course}
-          submissionText={submissionText}
-          savingId={savingId}
-          onResourceOpen={handleResourceOpen}
-          onSubmissionChange={(activityId, value) =>
-            setSubmissionText((prev) => ({ ...prev, [activityId]: value }))
-          }
-          onSubmitActivity={handleSubmitActivity}
-        />
+          <div className="lg:col-span-7">
+            <Card padding="lg">
+              <div className="mb-5 flex items-center justify-between gap-3">
+                <div role="tablist" className="inline-flex rounded-2xl bg-[var(--color-bg-muted)] p-1">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeTab === 'course'}
+                    onClick={() => setActiveTab('course')}
+                    className={`rounded-xl px-4 py-2 text-sm font-bold transition-all duration-150 ${
+                      activeTab === 'course'
+                        ? 'bg-[var(--color-bg-card)] text-[var(--color-text-primary)] shadow-[var(--shadow-sm)]'
+                        : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'
+                    }`}
+                  >
+                    Nội dung khóa học
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeTab === 'exams'}
+                    onClick={() => setActiveTab('exams')}
+                    className={`rounded-xl px-4 py-2 text-sm font-bold transition-all duration-150 ${
+                      activeTab === 'exams'
+                        ? 'bg-[var(--color-bg-card)] text-[var(--color-text-primary)] shadow-[var(--shadow-sm)]'
+                        : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'
+                    }`}
+                  >
+                    Bài thi
+                  </button>
+                </div>
+              </div>
+
+              {activeTab === 'course' ? (
+                courseLoading ? (
+                  <div className="flex justify-center py-10">
+                    <Spinner size="md" label="Loading class content" />
+                  </div>
+                ) : course ? (
+                  <StudentCourseContent
+                    course={course}
+                    submissionText={submissionText}
+                    savingId={savingId}
+                    onResourceOpen={handleResourceOpen}
+                    onSubmissionChange={(activityId, value) =>
+                      setSubmissionText((prev) => ({ ...prev, [activityId]: value }))
+                    }
+                    onSubmitActivity={handleSubmitActivity}
+                  />
+                ) : (
+                  <p className="py-8 text-center text-sm text-[var(--color-text-muted)]">
+                    Không tải được nội dung lớp.
+                  </p>
+                )
+              ) : (
+                <StudentClassExamsTab selectedClass={selectedClass} />
+              )}
+            </Card>
+          </div>
+        </div>
       )}
     </div>
   );
 }
 
-function ClassCard({ cls, onOpen }: { cls: EnrolledClass; onOpen: () => void }) {
+function ClassCard({
+  cls,
+  isSelected,
+  onOpen,
+}: {
+  cls: EnrolledClass;
+  isSelected: boolean;
+  onOpen: () => void;
+}) {
   const enrolledLabel = cls.enrolledAt
     ? new Date(cls.enrolledAt).toLocaleDateString()
     : null;
 
   return (
-    <Card padding="none" className="overflow-hidden transition-shadow hover:shadow-md">
+    <Card padding="none" className={`overflow-hidden transition-all ${isSelected ? 'ring-2 ring-[var(--color-primary-soft-strong)]' : ''}`}>
       <div className="h-1.5 w-full bg-gradient-to-r from-indigo-500 to-indigo-700" />
       <div className="flex flex-col gap-4 p-5">
         <div className="flex items-start justify-between gap-3">
@@ -193,14 +289,14 @@ function ClassCard({ cls, onOpen }: { cls: EnrolledClass; onOpen: () => void }) 
           {cls.teacher && (
             <InfoRow
               icon={iconUser}
-              label="Teacher"
+              label="Giáo viên"
               value={cls.teacher.fullName}
             />
           )}
           {cls.semester && (
             <InfoRow
               icon={iconCalendar}
-              label="Semester"
+              label="Học kỳ"
               value={
                 cls.semester.academicYear
                   ? `${cls.semester.name} • ${cls.semester.academicYear.name}`
@@ -211,16 +307,16 @@ function ClassCard({ cls, onOpen }: { cls: EnrolledClass; onOpen: () => void }) 
           {typeof cls._count?.classStudents === 'number' && (
             <InfoRow
               icon={iconGroup}
-              label="Students"
+              label="Sĩ số"
               value={`${cls._count.classStudents}`}
             />
           )}
           {enrolledLabel && (
-            <InfoRow icon={iconClock} label="Joined" value={enrolledLabel} />
+            <InfoRow icon={iconClock} label="Tham gia" value={enrolledLabel} />
           )}
         </div>
-        <Button variant="primary" size="sm" onClick={onOpen}>
-          Open Class
+        <Button variant={isSelected ? 'outline' : 'primary'} size="sm" onClick={onOpen}>
+          {isSelected ? 'Đóng' : 'Mở lớp'}
         </Button>
       </div>
     </Card>
@@ -249,11 +345,9 @@ function InfoRow({
   );
 }
 
-// ── Icons ─────────────────────────────────────────────
-
 type StudentSubmission = NonNullable<ClassCourseOverview['mySubmissions']>[number];
 
-function StudentCoursePanel({
+function StudentCourseContent({
   course,
   submissionText,
   savingId,
@@ -275,18 +369,49 @@ function StudentCoursePanel({
     course.mySubmissions?.map((s) => [s.activityId, s]) ?? [],
   );
 
+  const isEmpty =
+    course.sections.length === 0 &&
+    course.standaloneResources.length === 0 &&
+    course.standaloneActivities.length === 0;
+
   return (
-    <Card padding="lg">
-      <div className="mb-4">
-        <h2 className="text-lg font-bold text-slate-900">{course.class.name}</h2>
-        <p className="text-sm text-slate-500">Materials, activities, submissions, and feedback</p>
+    <div className="space-y-4">
+      <div>
+        <h3 className="text-base font-bold tracking-tight text-[var(--color-text-primary)]">
+          Tài liệu và hoạt động
+        </h3>
+        <p className="mt-0.5 text-sm text-[var(--color-text-muted)]">
+          Mở tài liệu, nộp bài và xem feedback từ giáo viên
+        </p>
       </div>
-      <div className="space-y-4">
-        {course.standaloneResources.length > 0 || course.standaloneActivities.length > 0 ? (
+
+      {course.standaloneResources.length > 0 || course.standaloneActivities.length > 0 ? (
+        <StudentCourseBlock
+          title="Chung"
+          resources={course.standaloneResources}
+          activities={course.standaloneActivities}
+          completedResources={completedResources}
+          submissions={submissions}
+          submissionText={submissionText}
+          savingId={savingId}
+          onResourceOpen={onResourceOpen}
+          onSubmissionChange={onSubmissionChange}
+          onSubmitActivity={onSubmitActivity}
+        />
+      ) : null}
+
+      {isEmpty ? (
+        <p className="rounded-xl border-2 border-dashed border-[var(--color-border)] py-10 text-center text-sm text-[var(--color-text-muted)]">
+          Lớp chưa có tài liệu nào được xuất bản.
+        </p>
+      ) : (
+        course.sections.map((section) => (
           <StudentCourseBlock
-            title="General"
-            resources={course.standaloneResources}
-            activities={course.standaloneActivities}
+            key={section.id}
+            title={section.title}
+            subtitle={section.description}
+            resources={section.resources}
+            activities={section.activities}
             completedResources={completedResources}
             submissions={submissions}
             submissionText={submissionText}
@@ -295,33 +420,9 @@ function StudentCoursePanel({
             onSubmissionChange={onSubmissionChange}
             onSubmitActivity={onSubmitActivity}
           />
-        ) : null}
-        {course.sections.length === 0 &&
-        course.standaloneResources.length === 0 &&
-        course.standaloneActivities.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-slate-200 py-8 text-center text-sm text-slate-500">
-            No published materials yet.
-          </p>
-        ) : (
-          course.sections.map((section) => (
-            <StudentCourseBlock
-              key={section.id}
-              title={section.title}
-              subtitle={section.description}
-              resources={section.resources}
-              activities={section.activities}
-              completedResources={completedResources}
-              submissions={submissions}
-              submissionText={submissionText}
-              savingId={savingId}
-              onResourceOpen={onResourceOpen}
-              onSubmissionChange={onSubmissionChange}
-              onSubmitActivity={onSubmitActivity}
-            />
-          ))
-        )}
-      </div>
-    </Card>
+        ))
+      )}
+    </div>
   );
 }
 
@@ -351,31 +452,31 @@ function StudentCourseBlock({
   onSubmitActivity: (activity: ClassActivity) => void;
 }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4">
+    <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-5 shadow-[var(--shadow-sm)]">
       <div className="mb-3">
-        <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
-        {subtitle && <p className="mt-0.5 text-xs text-slate-500">{subtitle}</p>}
+        <h4 className="text-sm font-bold text-[var(--color-text-primary)]">{title}</h4>
+        {subtitle && <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">{subtitle}</p>}
       </div>
       <div className="space-y-4">
         {resources.length > 0 && (
           <div>
-            <p className="mb-2 text-xs font-semibold uppercase text-slate-400">Materials</p>
+            <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)]">Tài liệu</p>
             <div className="grid gap-2 sm:grid-cols-2">
               {resources.map((resource) => (
                 <button
                   key={resource.id}
                   type="button"
-                  className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-left transition-colors hover:bg-slate-100"
+                  className="rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-bg-subtle)] px-3 py-2 text-left transition-colors hover:border-[var(--color-border)]"
                   onClick={() => onResourceOpen(resource)}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-sm font-medium text-slate-800">{resource.title}</span>
-                    <Badge variant={completedResources.has(resource.id) ? 'success' : 'info'}>
-                      {completedResources.has(resource.id) ? 'Done' : resource.type}
+                    <span className="truncate text-sm font-semibold text-[var(--color-text-primary)]">{resource.title}</span>
+                    <Badge variant={completedResources.has(resource.id) ? 'success' : 'info'} size="sm">
+                      {completedResources.has(resource.id) ? 'Đã xem' : resource.type}
                     </Badge>
                   </div>
                   {resource.description && (
-                    <p className="mt-1 line-clamp-2 text-xs text-slate-500">{resource.description}</p>
+                    <p className="mt-1 line-clamp-2 text-xs text-[var(--color-text-muted)]">{resource.description}</p>
                   )}
                 </button>
               ))}
@@ -384,39 +485,39 @@ function StudentCourseBlock({
         )}
         {activities.length > 0 && (
           <div>
-            <p className="mb-2 text-xs font-semibold uppercase text-slate-400">Activities</p>
+            <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)]">Hoạt động</p>
             <div className="space-y-3">
               {activities.map((activity) => {
                 const submission = submissions.get(activity.id);
                 const canSubmit = !['FORUM', 'ATTENDANCE'].includes(activity.type);
                 return (
-                  <div key={activity.id} className="rounded-md border border-slate-100 bg-slate-50 p-3">
+                  <div key={activity.id} className="rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-bg-subtle)] p-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
-                        <p className="text-sm font-medium text-slate-800">{activity.title}</p>
-                        <p className="text-xs text-slate-500">
-                          {activity.dueAt ? `Due ${new Date(activity.dueAt).toLocaleString()}` : 'No deadline'}
+                        <p className="text-sm font-semibold text-[var(--color-text-primary)]">{activity.title}</p>
+                        <p className="text-xs text-[var(--color-text-muted)]">
+                          {activity.dueAt ? `Hạn ${new Date(activity.dueAt).toLocaleString()}` : 'Không có hạn'}
                         </p>
                       </div>
-                      <Badge variant={submission ? 'success' : 'info'}>
+                      <Badge variant={submission ? 'success' : 'info'} size="sm">
                         {submission ? submission.status : activity.type}
                       </Badge>
                     </div>
                     {activity.instructions && (
-                      <p className="mt-2 text-sm text-slate-600">{activity.instructions}</p>
+                      <p className="mt-2 text-sm text-[var(--color-text-secondary)]">{activity.instructions}</p>
                     )}
                     {submission?.score !== null && submission?.score !== undefined && activity.showGrades && (
-                      <p className="mt-2 text-sm font-medium text-slate-700">
-                        Score: {submission.score}
+                      <p className="mt-2 text-sm font-medium text-[var(--color-text-primary)]">
+                        Điểm: {submission.score}
                         {submission.feedback ? ` - ${submission.feedback}` : ''}
                       </p>
                     )}
                     {canSubmit && (
                       <div className="mt-3 space-y-2">
                         <textarea
-                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                          className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] px-3 py-2 text-sm text-[var(--color-text-primary)] shadow-sm focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-soft-strong)]"
                           rows={3}
-                          placeholder="Your submission"
+                          placeholder="Nội dung bài nộp"
                           value={submissionText[activity.id] ?? ''}
                           onChange={(e) => onSubmissionChange(activity.id, e.target.value)}
                         />
@@ -426,7 +527,7 @@ function StudentCourseBlock({
                           isLoading={savingId === activity.id}
                           onClick={() => onSubmitActivity(activity)}
                         >
-                          Submit
+                          Nộp bài
                         </Button>
                       </div>
                     )}

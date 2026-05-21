@@ -24,6 +24,12 @@ export const ServerEvents = {
   /** A student submitted their attempt → teacher monitoring room */
   EXAM_STUDENT_SUBMITTED: 'exam:student-submitted',
 
+  /** A student heartbeat while taking an exam → teacher monitoring room */
+  EXAM_HEARTBEAT: 'exam:heartbeat',
+
+  /** A persisted attempt event such as tab switch/copy/paste → teacher monitoring room */
+  EXAM_ATTEMPT_EVENT: 'exam:attempt-event',
+
   /** Time warning (e.g. 5 min remaining) → students in exam room */
   EXAM_TIME_WARNING: 'exam:time-warning',
 

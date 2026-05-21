@@ -20,6 +20,7 @@ import {
   updateQuestion,
   addTags,
 } from '@/services/question.api';
+import { generateMatchingDistractor } from '@/services/ai.api';
 import { MathText } from './MathText';
 import { RichTextEditor } from './RichTextEditor';
 
@@ -68,6 +69,15 @@ function matchingOptions(): OptionField[] {
   ];
 }
 
+function splitMatchingContent(content: string): { left: string; right: string } {
+  const [left = '', ...rightParts] = content.split(/\s*=>\s*/);
+  return { left: left.trim(), right: rightParts.join(' => ').trim() };
+}
+
+function isDistractorOption(option: OptionField): boolean {
+  return !option.isCorrect;
+}
+
 function hasRichTextContent(value: string): boolean {
   if (/<img\b/i.test(value)) return true;
   const template = document.createElement('template');
@@ -100,6 +110,7 @@ export function QuestionFormModal({
   const [options, setOptions] = useState<OptionField[]>(defaultOptions);
   const [tagsInput, setTagsInput] = useState('');
   const [saving, setSaving] = useState(false);
+  const [generatingDistractor, setGeneratingDistractor] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -189,10 +200,55 @@ export function QuestionFormModal({
       return 'Select at least one correct answer.';
     if (questionType === 'SHORT_ANSWER' && options.length < 1)
       return 'Add at least one accepted answer.';
-    if (questionType === 'MATCHING' && options.length < 2)
-      return 'Add at least two matching pairs.';
+    if (questionType === 'MATCHING') {
+      const pairOptions = options.filter((o) => o.isCorrect);
+      if (pairOptions.length < 2) return 'Add at least two matching pairs.';
+      for (const opt of pairOptions) {
+        const { left, right } = splitMatchingContent(opt.content);
+        if (!left || !right)
+          return `Pair ${opt.label} must use the format "Left => Right".`;
+      }
+      if (options.filter((o) => !o.isCorrect).length > 1)
+        return 'Only one distractor is allowed per matching question.';
+    }
     return null;
   };
+
+  const handleGenerateDistractor = useCallback(async () => {
+    const pairs = options
+      .filter((o) => o.isCorrect)
+      .map((o) => splitMatchingContent(o.content))
+      .filter((p) => p.left && p.right);
+    if (pairs.length < 2) {
+      toast.error('Add at least 2 valid pairs (Left => Right) first.');
+      return;
+    }
+    if (options.some((o) => !o.isCorrect)) {
+      toast.error('A distractor already exists. Remove it before generating a new one.');
+      return;
+    }
+    setGeneratingDistractor(true);
+    try {
+      const distractor = await generateMatchingDistractor({
+        pairs,
+        questionContent: content || undefined,
+      });
+      setOptions((prev) => [
+        ...prev,
+        {
+          label: labelFromIndex(prev.length),
+          content: distractor,
+          isCorrect: false,
+        },
+      ]);
+      toast.success('AI distractor added.');
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to generate distractor.';
+      toast.error(msg);
+    } finally {
+      setGeneratingDistractor(false);
+    }
+  }, [options, content]);
 
   const handleSubmit = async () => {
     const err = validate();
@@ -375,7 +431,17 @@ export function QuestionFormModal({
           <div className="space-y-2">
             {options.map((opt, idx) => (
               <div key={opt.label} className="flex items-center gap-3">
-                {questionType === 'SHORT_ANSWER' || questionType === 'MATCHING' ? (
+                {questionType === 'MATCHING' && isDistractorOption(opt) ? (
+                  <span
+                    className="flex h-10 shrink-0 items-center justify-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-2 text-xs font-bold text-amber-700"
+                    title="AI-generated distractor (does not match any left side)"
+                  >
+                    <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M11 3a1 1 0 10-2 0v1a1 1 0 102 0V3zM15.657 5.757a1 1 0 00-1.414-1.414l-.707.707a1 1 0 001.414 1.414l.707-.707zM18 10a1 1 0 01-1 1h-1a1 1 0 110-2h1a1 1 0 011 1zM5.05 6.464A1 1 0 106.464 5.05l-.707-.707a1 1 0 00-1.414 1.414l.707.707zM5 10a1 1 0 01-1 1H3a1 1 0 110-2h1a1 1 0 011 1zM8 16v-1h4v1a2 2 0 11-4 0zM12 14c.015-.34.208-.646.477-.859a4 4 0 10-4.954 0c.27.213.462.519.476.859h4.002z" />
+                    </svg>
+                    Distractor
+                  </span>
+                ) : questionType === 'SHORT_ANSWER' || questionType === 'MATCHING' ? (
                   <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-100 text-sm font-bold text-slate-600">
                     {opt.label}
                   </span>
@@ -408,16 +474,24 @@ export function QuestionFormModal({
                       minHeightClassName="min-h-[72px]"
                       placeholder={
                         questionType === 'MATCHING'
-                          ? 'Left item => Right answer'
+                          ? isDistractorOption(opt)
+                            ? 'Distractor value (no left side)'
+                            : 'Left item => Right answer'
                           : questionType === 'SHORT_ANSWER'
                             ? 'Accepted answer'
                             : `Option ${opt.label}...`
                       }
                       onChange={(nextValue) => {
-                        if (questionType === 'SHORT_ANSWER' || questionType === 'MATCHING') {
+                        if (questionType === 'SHORT_ANSWER') {
                           setOptions((prev) =>
                             prev.map((o, i) =>
                               i === idx ? { ...o, content: nextValue, isCorrect: true } : o,
+                            ),
+                          );
+                        } else if (questionType === 'MATCHING') {
+                          setOptions((prev) =>
+                            prev.map((o, i) =>
+                              i === idx ? { ...o, content: nextValue } : o,
                             ),
                           );
                         } else {
@@ -465,6 +539,31 @@ export function QuestionFormModal({
             >
               Add answer row
             </button>
+          )}
+          {questionType === 'MATCHING' && (
+            <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2">
+              <button
+                type="button"
+                onClick={handleGenerateDistractor}
+                disabled={generatingDistractor || options.some((o) => !o.isCorrect)}
+                className="inline-flex items-center gap-1.5 rounded-md bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {generatingDistractor ? (
+                  <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                  </svg>
+                ) : (
+                  <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M11 3a1 1 0 10-2 0v1a1 1 0 102 0V3zM15.657 5.757a1 1 0 00-1.414-1.414l-.707.707a1 1 0 001.414 1.414l.707-.707zM18 10a1 1 0 01-1 1h-1a1 1 0 110-2h1a1 1 0 011 1zM5.05 6.464A1 1 0 106.464 5.05l-.707-.707a1 1 0 00-1.414 1.414l.707.707zM5 10a1 1 0 01-1 1H3a1 1 0 110-2h1a1 1 0 011 1zM8 16v-1h4v1a2 2 0 11-4 0zM12 14c.015-.34.208-.646.477-.859a4 4 0 10-4.954 0c.27.213.462.519.476.859h4.002z" />
+                  </svg>
+                )}
+                {generatingDistractor ? 'Generating…' : 'Generate distractor with AI'}
+              </button>
+              <span className="text-xs text-amber-800">
+                Adds one plausible-looking wrong answer to the drag pool, based on your existing pairs.
+              </span>
+            </div>
           )}
         </div>
 

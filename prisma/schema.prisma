@@ -53,6 +53,23 @@ enum AttemptStatus {
   GRADED
 }
 
+enum ExamAttemptEventType {
+  STARTED
+  RESUMED
+  HEARTBEAT
+  ANSWER_SAVED
+  TAB_HIDDEN
+  WINDOW_BLUR
+  COPY
+  PASTE
+  CONTEXT_MENU
+  SHORTCUT_BLOCKED
+  OFFLINE
+  ONLINE
+  SUBMITTED
+  AUTO_SUBMITTED
+}
+
 enum BackupStatus {
   IN_PROGRESS
   COMPLETED
@@ -102,6 +119,16 @@ enum AttendanceStatus {
   EXCUSED
 }
 
+enum DiscussionScope {
+  CLASS
+  GLOBAL
+}
+
+enum DiscussionType {
+  ANNOUNCEMENT
+  DISCUSSION
+}
+
 
 // USER MANAGEMENT
 
@@ -142,6 +169,8 @@ model User {
   recordedAttendance   ClassAttendanceRecord[]    @relation("AttendanceRecorder")
   classCompletions     ClassCompletion[]
   classActivityLogs    ClassActivityLog[]
+  discussions          Discussion[]
+  discussionReplies    DiscussionReply[]
 
   @@index([username, role])
   @@map("users")
@@ -229,6 +258,7 @@ model Class {
   activities      ClassActivity[]
   completions     ClassCompletion[]
   courseLogs      ClassActivityLog[]
+  discussions     Discussion[]
 
   @@map("classes")
 }
@@ -630,10 +660,28 @@ model ExamAttempt {
   exam               Exam                @relation(fields: [examId], references: [id], onDelete: Cascade)
   student            User                @relation(fields: [studentId], references: [id], onDelete: Cascade)
   attemptAnswers     AttemptAnswer[]
+  attemptEvents      ExamAttemptEvent[]
   aiPracticeSessions AiPracticeSession[]
 
   @@index([studentId, examId])
   @@map("exam_attempts")
+}
+
+model ExamAttemptEvent {
+  id               Int                  @id @default(autoincrement())
+  attemptId        Int                  @map("attempt_id")
+  type             ExamAttemptEventType
+  occurredAt       DateTime             @default(now()) @map("occurred_at") @db.Timestamptz()
+  clientElapsedSec Int?                 @map("client_elapsed_sec")
+  questionId       Int?                 @map("question_id")
+  metadata         Json?
+
+  attempt ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  @@index([attemptId, occurredAt])
+  @@index([attemptId, type])
+  @@index([type, occurredAt])
+  @@map("exam_attempt_events")
 }
 
 model AttemptAnswer {
@@ -757,4 +805,47 @@ model WebPushSubscription {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("web_push_subscriptions")
+}
+
+
+// DISCUSSIONS & ANNOUNCEMENTS (2 models)
+
+
+model Discussion {
+  id        Int             @id @default(autoincrement())
+  scope     DiscussionScope @default(CLASS)
+  type      DiscussionType  @default(DISCUSSION)
+  classId   Int?            @map("class_id")
+  authorId  Int             @map("author_id")
+  title     String          @db.VarChar(200)
+  content   String          @db.Text
+  isPinned  Boolean         @default(false) @map("is_pinned")
+  isLocked  Boolean         @default(false) @map("is_locked")
+  createdAt DateTime        @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  class   Class?            @relation(fields: [classId], references: [id], onDelete: Cascade)
+  author  User              @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  replies DiscussionReply[]
+
+  @@index([scope, classId, createdAt])
+  @@index([type, createdAt])
+  @@index([authorId])
+  @@map("discussions")
+}
+
+model DiscussionReply {
+  id           Int      @id @default(autoincrement())
+  discussionId Int      @map("discussion_id")
+  authorId     Int      @map("author_id")
+  content      String   @db.Text
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  discussion Discussion @relation(fields: [discussionId], references: [id], onDelete: Cascade)
+  author     User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([discussionId, createdAt])
+  @@index([authorId])
+  @@map("discussion_replies")
 }

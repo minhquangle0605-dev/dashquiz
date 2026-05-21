@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
 import { MathText } from '@/components/shared/MathText';
 import { useAttemptResult } from '@/hooks/useExam';
+import { useGenerateRemedial } from '@/hooks/useAiRemedial';
 import { formatDuration, formatDate } from '@/utils/format';
 import type { ResultQuestion } from '@/types/exam';
 
@@ -226,6 +227,16 @@ export default function ExamResultPage() {
 
   const attemptId = paramAttemptId ? Number(paramAttemptId) : undefined;
   const { data, isLoading, isError, error } = useAttemptResult(attemptId);
+  const generateRemedial = useGenerateRemedial();
+
+  const handleGenerateRemedial = () => {
+    if (!attemptId) return;
+    generateRemedial.mutate(attemptId, {
+      onSuccess: ({ sessionId }) => {
+        navigate(`/student/remedial/${sessionId}`);
+      },
+    });
+  };
 
   if (isLoading) {
     return (
@@ -396,6 +407,42 @@ export default function ExamResultPage() {
                 </span>
               )}
             </div>
+
+            {summary.incorrectCount > 0 && (
+              <div className="rounded-xl border border-violet-200 bg-gradient-to-br from-violet-50 to-indigo-50 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="text-left">
+                    <p className="text-sm font-semibold text-violet-900">
+                      Khắc phục {summary.incorrectCount} câu sai bằng AI
+                    </p>
+                    <p className="mt-0.5 text-xs text-violet-700">
+                      AI sẽ phân tích lỗi và sinh bộ câu hỏi tương đương để bạn luyện lại.
+                    </p>
+                  </div>
+                  <Button
+                    onClick={handleGenerateRemedial}
+                    disabled={generateRemedial.isPending}
+                    className="shrink-0 bg-violet-600 hover:bg-violet-700 text-white min-h-[44px]"
+                  >
+                    {generateRemedial.isPending ? (
+                      <>
+                        <Spinner size="sm" className="mr-2" />
+                        Đang sinh câu hỏi...
+                      </>
+                    ) : (
+                      <>Ôn tập câu sai với AI</>
+                    )}
+                  </Button>
+                </div>
+                {generateRemedial.isError && (
+                  <p className="mt-2 text-xs text-red-600">
+                    {generateRemedial.error instanceof Error
+                      ? generateRemedial.error.message
+                      : 'Không thể sinh câu hỏi, vui lòng thử lại.'}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </Card>

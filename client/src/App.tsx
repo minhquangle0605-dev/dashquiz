@@ -18,6 +18,7 @@ const ExamListPage = lazy(() => import('./pages/student/ExamListPage'));
 const TakeExamPage = lazy(() => import('./pages/student/TakeExamPage'));
 const ExamResultPage = lazy(() => import('./pages/student/ExamResultPage'));
 const AIPracticePage = lazy(() => import('./pages/student/AIPracticePage'));
+const RemedialSessionPage = lazy(() => import('./pages/student/RemedialSessionPage'));
 const MyClassesPage = lazy(() => import('./pages/student/MyClassesPage'));
 
 const TeacherDashboard = lazy(() => import('./pages/teacher/DashboardPage'));
@@ -39,13 +40,18 @@ const ForbiddenPage = lazy(() => import('./pages/common/ForbiddenPage'));
 const ServerErrorPage = lazy(() => import('./pages/common/ServerErrorPage'));
 const ProfilePage = lazy(() => import('./pages/common/ProfilePage'));
 const NotificationsPage = lazy(() => import('./pages/common/NotificationsPage'));
+const DiscussionsPage = lazy(() => import('./pages/common/DiscussionsPage'));
+const AdminDiscussionsPage = lazy(() => import('./pages/admin/DiscussionsPage'));
 
 function LoadingSpinner() {
   return (
-    <div className="flex items-center justify-center min-h-screen bg-slate-50">
-      <div className="flex flex-col items-center gap-3">
-        <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
-        <p className="text-sm text-slate-500">Loading...</p>
+    <div className="flex min-h-screen items-center justify-center bg-[var(--color-bg-page)]">
+      <div className="flex flex-col items-center gap-4 animate-fade-in">
+        <div className="relative h-12 w-12">
+          <div className="absolute inset-0 rounded-full border-[3px] border-[var(--color-primary-soft-strong)]" />
+          <div className="absolute inset-0 animate-spin rounded-full border-[3px] border-transparent border-t-[var(--color-primary)] border-r-[var(--color-secondary)]" />
+        </div>
+        <p className="text-sm font-medium text-[var(--color-text-muted)]">Loading…</p>
       </div>
     </div>
   );
@@ -71,6 +77,8 @@ export default function App() {
             <Route path="exams/:id/take" element={<TakeExamPage />} />
             <Route path="attempts/:attemptId/result" element={<ExamResultPage />} />
             <Route path="ai-practice" element={<AIPracticePage />} />
+            <Route path="remedial/:sessionId" element={<RemedialSessionPage />} />
+            <Route path="discussions" element={<DiscussionsPage />} />
             <Route path="notifications" element={<NotificationsPage />} />
             <Route path="profile" element={<ProfilePage />} />
           </Route>
@@ -85,6 +93,7 @@ export default function App() {
             <Route path="exams" element={<ExamsPage />} />
             <Route path="exams/create" element={<CreateExamPage />} />
             <Route path="classes" element={<ClassesPage />} />
+            <Route path="discussions" element={<DiscussionsPage />} />
             <Route path="notifications" element={<NotificationsPage />} />
             <Route path="profile" element={<ProfilePage />} />
           </Route>
@@ -109,6 +118,7 @@ export default function App() {
             <Route path="users" element={<UsersPage />} />
             <Route path="questions" element={<QuestionBankPage />} />
             <Route path="academic" element={<AcademicPage />} />
+            <Route path="discussions" element={<AdminDiscussionsPage />} />
             <Route path="system" element={<SystemPage />} />
             <Route path="notifications" element={<NotificationsPage />} />
             <Route path="profile" element={<ProfilePage />} />

@@ -1,4 +1,4 @@
-import { Prisma, ExamStatus } from '@prisma/client';
+import { Prisma, ExamStatus, ExamAttemptEventType } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError } from '../../middlewares/errorHandler';
 import { isCoreSubjectCode } from '../../constants/subjects';
@@ -14,10 +14,50 @@ import type {
   AddQuestionsInput,
   ScheduleExamInput,
   AssignExamInput,
+  ExamMonitoringQuery,
   ListExamsQuery,
 } from './exam.validation';
 
 const EXAM_DETAIL_CACHE_TTL = 300;
+
+const MONITORING_VIOLATION_TYPES = new Set<ExamAttemptEventType>([
+  ExamAttemptEventType.TAB_HIDDEN,
+  ExamAttemptEventType.WINDOW_BLUR,
+  ExamAttemptEventType.COPY,
+  ExamAttemptEventType.PASTE,
+  ExamAttemptEventType.CONTEXT_MENU,
+  ExamAttemptEventType.SHORTCUT_BLOCKED,
+  ExamAttemptEventType.OFFLINE,
+]);
+
+const MONITORING_EVENT_WEIGHTS: Partial<Record<ExamAttemptEventType, number>> = {
+  [ExamAttemptEventType.TAB_HIDDEN]: 2,
+  [ExamAttemptEventType.WINDOW_BLUR]: 1,
+  [ExamAttemptEventType.COPY]: 3,
+  [ExamAttemptEventType.PASTE]: 3,
+  [ExamAttemptEventType.CONTEXT_MENU]: 2,
+  [ExamAttemptEventType.SHORTCUT_BLOCKED]: 3,
+  [ExamAttemptEventType.OFFLINE]: 1,
+};
+
+type MonitoringEvent = {
+  id: number;
+  type: ExamAttemptEventType;
+  occurredAt: Date;
+  clientElapsedSec: number | null;
+  questionId: number | null;
+  metadata: Prisma.JsonValue | null;
+};
+
+function metadataNumber(metadata: Prisma.JsonValue | null, key: string): number | null {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return null;
+  const value = (metadata as Record<string, unknown>)[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function countEvents(events: MonitoringEvent[], type: ExamAttemptEventType): number {
+  return events.filter((event) => event.type === type).length;
+}
 
 export class ExamService {
   private examDetailCacheKey(id: number): string {
@@ -51,6 +91,10 @@ export class ExamService {
       where.subjectId = query.subjectId;
     }
 
+    if (query.classId) {
+      where.examAssignments = { some: { classId: query.classId } };
+    }
+
     if (query.search) {
       where.title = { contains: query.search, mode: 'insensitive' };
     }
@@ -73,6 +117,13 @@ export class ExamService {
           createdAt: true,
           subject: { select: { id: true, name: true, code: true } },
           creator: { select: { id: true, fullName: true } },
+          examAssignments: {
+            select: {
+              id: true,
+              classId: true,
+              class: { select: { id: true, name: true, gradeLevel: true } },
+            },
+          },
           _count: {
             select: {
               examQuestions: true,
@@ -597,6 +648,37 @@ export class ExamService {
   }
 
   // ═══════════════════════════════════════════════
+  // DELETE EXAM (DRAFT only)
+  // ═══════════════════════════════════════════════
+
+  async deleteExam(examId: number, userId: number, role: string = 'teacher') {
+    const exam = await prisma.exam.findUnique({
+      where: { id: examId },
+      include: { _count: { select: { examAttempts: true } } },
+    });
+    if (!exam) throw new AppError('Exam not found', 404);
+    if (exam.createdBy !== userId && role !== 'admin') {
+      throw new AppError('You can only delete your own exams', 403);
+    }
+    if (exam.status !== 'DRAFT' && role !== 'admin') {
+      throw new AppError('Only DRAFT exams can be deleted', 400);
+    }
+    if (exam._count.examAttempts > 0) {
+      throw new AppError('Cannot delete an exam that already has attempts', 400);
+    }
+
+    // Related rows (examQuestions, examSchedules, examAssignments) cascade via FK.
+    await prisma.exam.delete({ where: { id: examId } });
+    await this.invalidateExamDetail(examId);
+
+    return {
+      success: true,
+      message: 'Exam deleted successfully',
+      data: { id: examId },
+    };
+  }
+
+  // ═══════════════════════════════════════════════
   // LIST ASSIGNMENTS FOR AN EXAM
   // ═══════════════════════════════════════════════
 
@@ -630,6 +712,346 @@ export class ExamService {
   // ═══════════════════════════════════════════════
   // CRON: Check exam schedules
   // ═══════════════════════════════════════════════
+
+  async getExamMonitoring(
+    examId: number,
+    userId: number,
+    role: string,
+    query: ExamMonitoringQuery = {},
+  ) {
+    const exam = await prisma.exam.findFirst({
+      where: {
+        id: examId,
+        ...(role === 'admin' ? {} : { createdBy: userId }),
+      },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        durationMin: true,
+        totalQuestions: true,
+        passingScore: true,
+        examAssignments: {
+          select: {
+            classId: true,
+            assignedAt: true,
+            class: {
+              select: {
+                id: true,
+                name: true,
+                gradeLevel: true,
+                classStudents: {
+                  select: {
+                    studentId: true,
+                    student: {
+                      select: {
+                        id: true,
+                        username: true,
+                        fullName: true,
+                        avatar: true,
+                        studentProfile: {
+                          select: {
+                            studentCode: true,
+                            homeroomClassName: true,
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!exam) throw new AppError('Exam not found or unauthorized', 404);
+
+    const assignments = query.classId
+      ? exam.examAssignments.filter((assignment) => assignment.classId === query.classId)
+      : exam.examAssignments;
+
+    if (query.classId && assignments.length === 0) {
+      throw new AppError('Exam is not assigned to this class', 404);
+    }
+
+    const studentMap = new Map<
+      number,
+      {
+        studentId: number;
+        studentName: string | null;
+        studentUsername: string;
+        avatar: string | null;
+        studentCode: string | null;
+        homeroomClassName: string | null;
+        classes: { id: number; name: string; gradeLevel: number }[];
+      }
+    >();
+
+    for (const assignment of assignments) {
+      const cls = assignment.class;
+      for (const classStudent of cls.classStudents) {
+        const existing = studentMap.get(classStudent.studentId);
+        const student = classStudent.student;
+        const classInfo = { id: cls.id, name: cls.name, gradeLevel: cls.gradeLevel };
+
+        if (existing) {
+          if (!existing.classes.some((item) => item.id === cls.id)) {
+            existing.classes.push(classInfo);
+          }
+          continue;
+        }
+
+        studentMap.set(classStudent.studentId, {
+          studentId: student.id,
+          studentName: student.fullName,
+          studentUsername: student.username,
+          avatar: student.avatar,
+          studentCode: student.studentProfile?.studentCode ?? null,
+          homeroomClassName: student.studentProfile?.homeroomClassName ?? null,
+          classes: [classInfo],
+        });
+      }
+    }
+
+    const studentIds = [...studentMap.keys()];
+    const attempts = studentIds.length > 0
+      ? await prisma.examAttempt.findMany({
+          where: { examId, studentId: { in: studentIds } },
+          orderBy: [{ studentId: 'asc' }, { startedAt: 'desc' }],
+          select: {
+            id: true,
+            examId: true,
+            studentId: true,
+            startedAt: true,
+            submittedAt: true,
+            isAutoSubmitted: true,
+            totalScore: true,
+            timeSpentSec: true,
+            status: true,
+            attemptAnswers: { select: { isCorrect: true } },
+            attemptEvents: {
+              orderBy: { occurredAt: 'desc' },
+              take: 200,
+              select: {
+                id: true,
+                type: true,
+                occurredAt: true,
+                clientElapsedSec: true,
+                questionId: true,
+                metadata: true,
+              },
+            },
+          },
+        })
+      : [];
+
+    const latestAttemptByStudent = new Map<number, (typeof attempts)[number]>();
+    for (const attempt of attempts) {
+      if (!latestAttemptByStudent.has(attempt.studentId)) {
+        latestAttemptByStudent.set(attempt.studentId, attempt);
+      }
+    }
+
+    const now = new Date();
+    const durationSec = exam.durationMin * 60;
+
+    const rows = [...studentMap.values()].map((student) => {
+      const attempt = latestAttemptByStudent.get(student.studentId);
+
+      if (!attempt) {
+        return {
+          student,
+          attemptId: null,
+          status: 'NOT_STARTED' as const,
+          startedAt: null,
+          submittedAt: null,
+          score: null,
+          passed: null,
+          correctCount: 0,
+          answeredQuestions: 0,
+          totalQuestions: exam.totalQuestions,
+          timeSpentSec: null,
+          timeElapsedSec: null,
+          timeRemainingSec: null,
+          isAutoSubmitted: false,
+          lastActivityAt: null,
+          lastHeartbeatAt: null,
+          violationCount: 0,
+          tabSwitchCount: 0,
+          copyPasteCount: 0,
+          offlineCount: 0,
+          blockedShortcutCount: 0,
+          riskScore: 0,
+          riskLevel: 'low' as const,
+          flags: [] as string[],
+          recentEvents: [] as MonitoringEvent[],
+        };
+      }
+
+      const events = attempt.attemptEvents as MonitoringEvent[];
+      const latestHeartbeat = events.find(
+        (event) =>
+          event.type === ExamAttemptEventType.HEARTBEAT ||
+          event.type === ExamAttemptEventType.ANSWER_SAVED,
+      );
+      const lastActivityAt = events[0]?.occurredAt ?? attempt.submittedAt ?? attempt.startedAt;
+      const elapsedSec = Math.max(
+        0,
+        Math.floor((now.getTime() - new Date(attempt.startedAt).getTime()) / 1000),
+      );
+      const timeSpentSec = attempt.status === 'IN_PROGRESS'
+        ? elapsedSec
+        : attempt.timeSpentSec ?? null;
+      const timeRemainingSec = attempt.status === 'IN_PROGRESS'
+        ? Math.max(0, durationSec - elapsedSec)
+        : null;
+
+      const answeredQuestions =
+        metadataNumber(latestHeartbeat?.metadata ?? null, 'answeredCount') ??
+        (attempt.status === 'IN_PROGRESS' ? 0 : attempt.attemptAnswers.length);
+      const correctCount = attempt.attemptAnswers.filter((answer) => answer.isCorrect).length;
+      const score = attempt.totalScore === null ? null : Number(attempt.totalScore);
+      const passingScore = exam.passingScore === null ? null : Number(exam.passingScore);
+
+      const tabSwitchCount = countEvents(events, ExamAttemptEventType.TAB_HIDDEN);
+      const copyPasteCount =
+        countEvents(events, ExamAttemptEventType.COPY) +
+        countEvents(events, ExamAttemptEventType.PASTE);
+      const offlineCount = countEvents(events, ExamAttemptEventType.OFFLINE);
+      const blockedShortcutCount = countEvents(events, ExamAttemptEventType.SHORTCUT_BLOCKED);
+      const violationCount = events.filter((event) => MONITORING_VIOLATION_TYPES.has(event.type)).length;
+
+      let riskScore = events.reduce(
+        (total, event) => total + (MONITORING_EVENT_WEIGHTS[event.type] ?? 0),
+        0,
+      );
+      const flags: string[] = [];
+
+      if (tabSwitchCount >= 3) flags.push(`Chuyển tab ${tabSwitchCount} lần`);
+      if (copyPasteCount > 0) flags.push(`Copy/paste ${copyPasteCount} lần`);
+      if (blockedShortcutCount > 0) flags.push(`Phím tắt bị chặn ${blockedShortcutCount} lần`);
+      if (offlineCount > 0) flags.push(`Mất kết nối ${offlineCount} lần`);
+      if (attempt.isAutoSubmitted) {
+        riskScore += 1;
+        flags.push('Tự động nộp bài');
+      }
+
+      if (attempt.status === 'IN_PROGRESS' && latestHeartbeat) {
+        const secondsSinceHeartbeat = Math.floor(
+          (now.getTime() - new Date(latestHeartbeat.occurredAt).getTime()) / 1000,
+        );
+        if (secondsSinceHeartbeat > 75) {
+          riskScore += 2;
+          flags.push('Không có heartbeat mới');
+        }
+      }
+
+      if (
+        attempt.status !== 'IN_PROGRESS' &&
+        attempt.timeSpentSec !== null &&
+        attempt.timeSpentSec < Math.max(60, durationSec * 0.2) &&
+        score !== null &&
+        score >= 8
+      ) {
+        riskScore += 2;
+        flags.push('Điểm cao với thời gian rất ngắn');
+      }
+
+      const riskLevel = riskScore >= 8 ? 'high' : riskScore >= 3 ? 'medium' : 'low';
+
+      return {
+        student,
+        attemptId: attempt.id,
+        status: attempt.status,
+        startedAt: attempt.startedAt,
+        submittedAt: attempt.submittedAt,
+        score,
+        passed: passingScore === null || score === null ? null : score >= passingScore,
+        correctCount,
+        answeredQuestions: Math.min(answeredQuestions, exam.totalQuestions),
+        totalQuestions: exam.totalQuestions,
+        timeSpentSec,
+        timeElapsedSec: attempt.status === 'IN_PROGRESS' ? elapsedSec : null,
+        timeRemainingSec,
+        isAutoSubmitted: attempt.isAutoSubmitted,
+        lastActivityAt,
+        lastHeartbeatAt: latestHeartbeat?.occurredAt ?? null,
+        violationCount,
+        tabSwitchCount,
+        copyPasteCount,
+        offlineCount,
+        blockedShortcutCount,
+        riskScore,
+        riskLevel,
+        flags,
+        recentEvents: events.slice(0, 10),
+      };
+    });
+
+    const completedRows = rows.filter((row) => row.status === 'SUBMITTED' || row.status === 'GRADED');
+    const scores = completedRows
+      .map((row) => row.score)
+      .filter((score): score is number => typeof score === 'number');
+    const passableRows = completedRows.filter((row) => row.passed !== null);
+    const passedCount = passableRows.filter((row) => row.passed).length;
+
+    rows.sort((a, b) => {
+      const riskOrder: Record<string, number> = { high: 0, medium: 1, low: 2 };
+      const statusOrder: Record<string, number> = {
+        IN_PROGRESS: 0,
+        NOT_STARTED: 1,
+        SUBMITTED: 2,
+        GRADED: 2,
+      };
+      const byRisk = riskOrder[a.riskLevel] - riskOrder[b.riskLevel];
+      if (byRisk !== 0) return byRisk;
+      const byStatus = (statusOrder[a.status] ?? 3) - (statusOrder[b.status] ?? 3);
+      if (byStatus !== 0) return byStatus;
+      return (a.student.studentName || a.student.studentUsername).localeCompare(
+        b.student.studentName || b.student.studentUsername,
+        'vi',
+      );
+    });
+
+    return {
+      success: true,
+      message: 'Exam monitoring retrieved successfully',
+      data: {
+        exam: {
+          id: exam.id,
+          title: exam.title,
+          status: exam.status,
+          durationMin: exam.durationMin,
+          totalQuestions: exam.totalQuestions,
+          passingScore: exam.passingScore === null ? null : Number(exam.passingScore),
+          classes: assignments.map((assignment) => ({
+            id: assignment.class.id,
+            name: assignment.class.name,
+            gradeLevel: assignment.class.gradeLevel,
+          })),
+        },
+        summary: {
+          totalStudents: rows.length,
+          notStarted: rows.filter((row) => row.status === 'NOT_STARTED').length,
+          inProgress: rows.filter((row) => row.status === 'IN_PROGRESS').length,
+          submitted: completedRows.length,
+          autoSubmitted: rows.filter((row) => row.isAutoSubmitted).length,
+          avgScore: scores.length > 0
+            ? Math.round((scores.reduce((sum, score) => sum + score, 0) / scores.length) * 100) / 100
+            : null,
+          passRate: passableRows.length > 0
+            ? Math.round((passedCount / passableRows.length) * 10000) / 100
+            : null,
+          suspiciousCount: rows.filter((row) => row.riskLevel !== 'low').length,
+          highRiskCount: rows.filter((row) => row.riskLevel === 'high').length,
+        },
+        students: rows,
+        updatedAt: now,
+      },
+    };
+  }
 
   async processSchedules() {
     const now = new Date();

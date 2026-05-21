@@ -301,6 +301,14 @@ router.get(
   classController.listStudents,
 );
 
+// ── List classmates (GET /api/classes/:id/classmates) ─
+// Lightweight roster for enrolled students (no contact info).
+router.get(
+  '/:id/classmates',
+  authenticate,
+  classController.listClassmates,
+);
+
 // ── List available students for adding (GET /api/classes/:id/available-students) ─
 router.get(
   '/:id/available-students',

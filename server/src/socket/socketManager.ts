@@ -145,6 +145,31 @@ export function emitStudentSubmitted(
 }
 
 /**
+ * Emit `exam:attempt-event` to the exam room for live proctoring.
+ */
+export function emitAttemptEvent(
+  examId: number,
+  payload: {
+    attemptId: number;
+    studentId: number;
+    studentName: string;
+    type: string;
+    occurredAt: Date;
+    clientElapsedSec: number | null;
+    questionId: number | null;
+    metadata: unknown;
+  },
+): void {
+  const server = getIOSafe();
+  if (!server) return;
+
+  server.to(rooms.exam(examId)).emit(ServerEvents.EXAM_ATTEMPT_EVENT, payload);
+  logger.debug(
+    `[Socket.IO] exam:attempt-event → exam:${examId} (${payload.type}, student ${payload.studentId})`,
+  );
+}
+
+/**
  * Emit `notification:new` to a specific user's personal room.
  */
 export function emitNotification(

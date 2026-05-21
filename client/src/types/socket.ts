@@ -18,6 +18,27 @@ export interface ExamStudentSubmittedPayload {
   submittedAt: string | Date;
 }
 
+export interface ExamHeartbeatPayload {
+  attemptId: number;
+  studentId: number;
+  answeredCount?: number;
+  unansweredCount?: number;
+  timeRemainingSec?: number;
+  currentQuestionId?: number | null;
+  occurredAt: string | Date;
+}
+
+export interface ExamAttemptEventPayload {
+  attemptId: number;
+  studentId: number;
+  studentName: string;
+  type: string;
+  occurredAt: string | Date;
+  clientElapsedSec: number | null;
+  questionId: number | null;
+  metadata?: unknown;
+}
+
 export interface ExamTimeWarningPayload {
   examId: number;
   minutesRemaining: number;

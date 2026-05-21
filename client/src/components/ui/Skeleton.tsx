@@ -5,7 +5,7 @@ export type SkeletonProps = HTMLAttributes<HTMLDivElement>;
 export function Skeleton({ className = '', ...rest }: SkeletonProps) {
   return (
     <div
-      className={`animate-pulse rounded-md bg-slate-200 ${className}`}
+      className={`skeleton-shimmer rounded-md ${className}`}
       {...rest}
     />
   );
@@ -24,7 +24,7 @@ export function SkeletonTable({
 }: SkeletonTableProps) {
   return (
     <div className={`w-full space-y-3 ${className}`} {...rest}>
-      <div className="flex gap-3 border-b border-slate-200 pb-3">
+      <div className="flex gap-3 border-b border-[var(--color-border-subtle)] pb-3">
         {Array.from({ length: columns }).map((_, i) => (
           <Skeleton key={`h-${i}`} className="h-4 flex-1 rounded" />
         ))}
@@ -45,7 +45,7 @@ export type SkeletonCardProps = HTMLAttributes<HTMLDivElement>;
 export function SkeletonCard({ className = '', ...rest }: SkeletonCardProps) {
   return (
     <div
-      className={`rounded-2xl border border-slate-200 bg-white p-6 shadow-sm ${className}`}
+      className={`rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-6 shadow-[var(--shadow-sm)] ${className}`}
       {...rest}
     >
       <Skeleton className="mb-4 h-5 w-2/5 max-w-xs rounded" />

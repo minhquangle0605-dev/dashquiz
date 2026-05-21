@@ -28,6 +28,7 @@ import systemRoutes from './modules/system/system.routes';
 import curriculumRoutes from './modules/curriculum/curriculum.routes';
 import parentRoutes from './modules/parent/parent.routes';
 import studentExamRoutes from './modules/student-exam/studentExam.routes';
+import discussionRoutes from './modules/discussion/discussion.routes';
 
 const app = express();
 
@@ -83,6 +84,7 @@ app.use('/api/questions', questionRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/classes', classRoutes);
+app.use('/api/discussions', discussionRoutes);
 app.use('/api/admin/users', adminUserRoutes);
 app.use('/api/admin/academic', academicRoutes);
 app.use('/api/admin/system', systemRoutes);
@@ -109,6 +111,7 @@ app.get('/api', (_req, res) => {
           notifications: '/api/notifications/*',
           parent: '/api/parent/*',
           classes: '/api/classes/*',
+          discussions: '/api/discussions/*',
           adminUsers: '/api/admin/users/*',
           adminAcademic: '/api/admin/academic/*',
           adminSystem: '/api/admin/system/*',

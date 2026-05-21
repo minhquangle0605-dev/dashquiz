@@ -50,6 +50,12 @@ export async function updateClass(
   return data.data ?? data;
 }
 
+export async function listClassmates(classId: number): Promise<ClassStudent[]> {
+  const { data } = await api.get(API_ENDPOINTS.CLASSES.CLASSMATES(classId));
+  const students = data.data ?? data;
+  return Array.isArray(students) ? (students as ClassStudent[]) : [];
+}
+
 export async function listStudents(classId: number): Promise<ClassStudent[]> {
   const { data } = await api.get(API_ENDPOINTS.CLASSES.STUDENTS(classId));
   const students = data.data ?? data;

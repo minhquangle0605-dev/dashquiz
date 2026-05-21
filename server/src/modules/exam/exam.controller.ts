@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { examService } from './exam.service';
 import { AppError } from '../../middlewares/errorHandler';
-import type { ListExamsQuery } from './exam.validation';
+import type { ExamMonitoringQuery, ListExamsQuery } from './exam.validation';
 
 // ═══════════════════════════════════════════════
 // LIST EXAMS (GET /api/exams)
@@ -58,6 +58,22 @@ export async function updateExam(req: Request, res: Response, next: NextFunction
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) throw new AppError('Invalid exam ID', 400);
     const result = await examService.updateExam(id, req.body, req.user.id, req.user.role);
+    res.json(result);
+  } catch (error: unknown) {
+    next(error instanceof Error ? error : new Error('Unexpected error'));
+  }
+}
+
+// ═══════════════════════════════════════════════
+// DELETE EXAM (DELETE /api/exams/:id)
+// ═══════════════════════════════════════════════
+
+export async function deleteExam(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    if (!req.user) throw new AppError('Authentication required', 401);
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) throw new AppError('Invalid exam ID', 400);
+    const result = await examService.deleteExam(id, req.user.id, req.user.role);
     res.json(result);
   } catch (error: unknown) {
     next(error instanceof Error ? error : new Error('Unexpected error'));
@@ -137,6 +153,19 @@ export async function getAssignments(req: Request, res: Response, next: NextFunc
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) throw new AppError('Invalid exam ID', 400);
     const result = await examService.getAssignments(id);
+    res.json(result);
+  } catch (error: unknown) {
+    next(error instanceof Error ? error : new Error('Unexpected error'));
+  }
+}
+
+export async function getMonitoring(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    if (!req.user) throw new AppError('Authentication required', 401);
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) throw new AppError('Invalid exam ID', 400);
+    const query = (req as Request & { validatedQuery?: ExamMonitoringQuery }).validatedQuery ?? {};
+    const result = await examService.getExamMonitoring(id, req.user.id, req.user.role, query);
     res.json(result);
   } catch (error: unknown) {
     next(error instanceof Error ? error : new Error('Unexpected error'));

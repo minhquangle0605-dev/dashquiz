@@ -3,6 +3,8 @@
 export const SERVER_SOCKET_EVENTS = {
   EXAM_STARTED: 'exam:started',
   EXAM_STUDENT_SUBMITTED: 'exam:student-submitted',
+  EXAM_HEARTBEAT: 'exam:heartbeat',
+  EXAM_ATTEMPT_EVENT: 'exam:attempt-event',
   EXAM_TIME_WARNING: 'exam:time-warning',
   EXAM_CLOSED: 'exam:closed',
   NOTIFICATION_NEW: 'notification:new',

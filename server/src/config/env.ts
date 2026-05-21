@@ -66,6 +66,11 @@ export const env = {
     apiKey: process.env.OPENAI_API_KEY || '',
   },
 
+  gemini: {
+    apiKey: process.env.GEMINI_API_KEY || '',
+    model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+  },
+
   vapid: {
     publicKey: process.env.VAPID_PUBLIC_KEY || '',
     privateKey: process.env.VAPID_PRIVATE_KEY || '',

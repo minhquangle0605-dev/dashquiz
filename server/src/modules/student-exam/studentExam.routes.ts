@@ -7,6 +7,7 @@ import {
   listStudentExamsQuerySchema,
   saveAnswersSchema,
   submitAttemptSchema,
+  attemptEventSchema,
   listAttemptsQuerySchema,
 } from './studentExam.validation';
 import { ROLES } from '../../utils/constants';
@@ -44,6 +45,13 @@ router.post(
   validate(submitAttemptSchema),
   activityLogger('SUBMIT_EXAM', 'exam_attempt'),
   studentExamController.submitAttempt,
+);
+
+// ── Record monitoring event (POST /api/student/attempts/:id/events)
+router.post(
+  '/attempts/:id/events',
+  validate(attemptEventSchema),
+  studentExamController.recordAttemptEvent,
 );
 
 // ── Get result (GET /api/student/attempts/:id/result) ───

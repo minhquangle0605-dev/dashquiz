@@ -2,17 +2,12 @@ import { useEffect, useState, useCallback } from 'react';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Spinner } from '@/components/ui/Spinner';
+import { GreetingBanner } from '@/components/shared/GreetingBanner';
+import { StatTile, type StatTone } from '@/components/shared/StatTile';
+import { QuickActionsGrid } from '@/components/shared/QuickActionsGrid';
 import { getMonitoring, listActivityLogs } from '@/services/admin.api';
 import api from '@/services/api';
 import type { MonitoringData, ActivityLog } from '@/types/admin';
-
-interface StatCard {
-  label: string;
-  value: string | number;
-  icon: React.ReactNode;
-  color: string;
-  bgColor: string;
-}
 
 export default function DashboardPage() {
   const [stats, setStats] = useState({
@@ -78,14 +73,13 @@ export default function DashboardPage() {
     fetchDashboard();
   }, [fetchDashboard]);
 
-  const statCards: StatCard[] = [
+  const statTiles: Array<{ label: string; value: number; icon: React.ReactNode; tone: StatTone }> = [
     {
       label: 'Total Users',
       value: stats.totalUsers,
-      color: 'text-blue-600',
-      bgColor: 'bg-blue-50',
+      tone: 'info',
       icon: (
-        <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
         </svg>
       ),
@@ -93,10 +87,9 @@ export default function DashboardPage() {
     {
       label: 'Total Exams',
       value: stats.totalExams,
-      color: 'text-violet-600',
-      bgColor: 'bg-violet-50',
+      tone: 'accent',
       icon: (
-        <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
         </svg>
       ),
@@ -104,10 +97,9 @@ export default function DashboardPage() {
     {
       label: 'Subjects',
       value: stats.totalSubjects,
-      color: 'text-emerald-600',
-      bgColor: 'bg-emerald-50',
+      tone: 'success',
       icon: (
-        <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
         </svg>
       ),
@@ -115,11 +107,58 @@ export default function DashboardPage() {
     {
       label: 'Questions',
       value: stats.totalQuestions,
-      color: 'text-amber-600',
-      bgColor: 'bg-amber-50',
+      tone: 'warning',
       icon: (
-        <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      ),
+    },
+  ];
+
+  const quickActions = [
+    {
+      label: 'Manage users',
+      description: 'Roles, status, accounts',
+      to: '/admin/users',
+      tone: 'brand' as const,
+      icon: (
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
+        </svg>
+      ),
+    },
+    {
+      label: 'Question bank',
+      description: 'Library & categories',
+      to: '/admin/questions',
+      tone: 'accent' as const,
+      icon: (
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+        </svg>
+      ),
+    },
+    {
+      label: 'Academic',
+      description: 'Subjects, years, semesters',
+      to: '/admin/academic',
+      tone: 'success' as const,
+      icon: (
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+        </svg>
+      ),
+    },
+    {
+      label: 'System',
+      description: 'Monitoring, backups, configs',
+      to: '/admin/system',
+      tone: 'warning' as const,
+      icon: (
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
         </svg>
       ),
     },
@@ -141,29 +180,38 @@ export default function DashboardPage() {
   const uptimeHours = monitoring?.uptime ? Math.floor(monitoring.uptime / 3600) : 0;
   const uptimeMins = monitoring?.uptime ? Math.floor((monitoring.uptime % 3600) / 60) : 0;
 
+  const healthTone =
+    cpuPct > 85 || memPct > 85 ? 'danger' : cpuPct > 60 || memPct > 60 ? 'warning' : 'success';
+  const healthLabel =
+    healthTone === 'danger' ? 'Critical' : healthTone === 'warning' ? 'Warning' : 'Healthy';
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Overview of your system at a glance.
-        </p>
-      </div>
+      <GreetingBanner
+        subtitle="System status, users, exams, and recent activity – at a glance."
+        meta={[
+          { label: 'CPU', value: `${Math.round(cpuPct)}%`, tone: 'info' },
+          { label: 'Memory', value: `${Math.round(memPct)}%`, tone: 'warning' },
+          {
+            label: 'Status',
+            value: healthLabel,
+            tone: healthTone === 'success' ? 'success' : healthTone === 'warning' ? 'warning' : 'neutral',
+          },
+        ]}
+      />
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {statCards.map((card) => (
-          <Card key={card.label} padding="md" className="hover:shadow-md transition-shadow">
-            <div className="flex items-center gap-4">
-              <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${card.bgColor} ${card.color}`}>
-                {card.icon}
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-slate-500 truncate">{card.label}</p>
-                <p className="text-2xl font-bold text-slate-900">{card.value.toLocaleString()}</p>
-              </div>
-            </div>
-          </Card>
+      <QuickActionsGrid title="Quick actions" actions={quickActions} />
+
+      {/* Stat Tiles */}
+      <div className="grid grid-cols-1 gap-4 stagger sm:grid-cols-2 xl:grid-cols-4">
+        {statTiles.map((s) => (
+          <StatTile
+            key={s.label}
+            label={s.label}
+            value={s.value}
+            icon={s.icon}
+            tone={s.tone}
+          />
         ))}
       </div>
 

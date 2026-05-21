@@ -55,18 +55,28 @@ const iconProfile = (
     />
   </svg>
 );
+const iconDiscussions = (
+  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+    />
+  </svg>
+);
 
 export default function AdminLayout() {
   return (
     <DashboardShell
       roleLabel="Administrator"
-      sidebarClassName="bg-gradient-to-b from-slate-800 to-slate-950"
-      activeNavClassName="bg-white text-slate-900 shadow-sm"
+      sidebarClassName="bg-gradient-to-b from-slate-700 via-slate-900 to-slate-950"
+      activeNavClassName="bg-white text-slate-900"
       navItems={[
         { to: '/admin/dashboard', label: 'Dashboard', end: true, icon: iconDashboard },
         { to: '/admin/users', label: 'Users', icon: iconUsers },
         { to: '/admin/questions', label: 'Question Bank', icon: iconBank },
         { to: '/admin/academic', label: 'Academic', icon: iconAcademic },
+        { to: '/admin/discussions', label: 'Thảo luận', icon: iconDiscussions },
         { to: '/admin/system', label: 'System', icon: iconSystem },
         { to: '/admin/profile', label: 'Profile', icon: iconProfile },
       ]}

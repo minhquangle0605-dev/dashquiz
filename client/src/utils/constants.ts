@@ -73,7 +73,15 @@ export const API_ENDPOINTS = {
     SAVE: (attemptId: number) => `/api/student/attempts/${attemptId}/save`,
     SUBMIT: (attemptId: number) => `/api/student/attempts/${attemptId}/submit`,
     RESULT: (attemptId: number) => `/api/student/attempts/${attemptId}/result`,
+    EVENT: (attemptId: number) => `/api/student/attempts/${attemptId}/events`,
     ATTEMPTS: '/api/student/attempts',
+  },
+  AI: {
+    REMEDIAL_GENERATE: '/api/ai/remedial-practice',
+    REMEDIAL_SESSION: (sessionId: number) => `/api/ai/remedial-sessions/${sessionId}`,
+    REMEDIAL_ANSWER: (sessionId: number, questionId: number) =>
+      `/api/ai/remedial-sessions/${sessionId}/questions/${questionId}/answer`,
+    MATCHING_DISTRACTOR: '/api/ai/matching-distractor',
   },
   EXAMS: {
     BASE: '/api/exams',
@@ -91,6 +99,7 @@ export const API_ENDPOINTS = {
     SCHEDULE: (id: number) => `/api/exams/${id}/schedule`,
     ASSIGN: (id: number) => `/api/exams/${id}/assign`,
     ASSIGNMENTS: (id: number) => `/api/exams/${id}/assignments`,
+    MONITORING: (id: number) => `/api/exams/${id}/monitoring`,
   },
   CLASSES: {
     BASE: '/api/classes',
@@ -120,12 +129,20 @@ export const API_ENDPOINTS = {
     ROLES: (id: number) => `/api/classes/${id}/roles`,
     LOGS: (id: number) => `/api/classes/${id}/logs`,
     STUDENTS: (id: number) => `/api/classes/${id}/students`,
+    CLASSMATES: (id: number) => `/api/classes/${id}/classmates`,
     AVAILABLE_STUDENTS: (id: number) => `/api/classes/${id}/available-students`,
     CLASS_NAMES: '/api/classes/class-names',
     REMOVE_STUDENT: (classId: number, studentId: number) =>
       `/api/classes/${classId}/students/${studentId}`,
     IMPORT_STUDENTS: (id: number) => `/api/classes/${id}/students/import`,
     IMPORT_TEMPLATE: '/api/classes/import-template',
+  },
+  DISCUSSIONS: {
+    BASE: '/api/discussions',
+    BY_ID: (id: number) => `/api/discussions/${id}`,
+    REPLIES: (id: number) => `/api/discussions/${id}/replies`,
+    REPLY_BY_ID: (replyId: number) => `/api/discussions/replies/${replyId}`,
+    ADMIN_ALL: '/api/discussions/admin/all',
   },
   STUDENT_ANALYTICS: {
     DASHBOARD: '/api/student/dashboard',
