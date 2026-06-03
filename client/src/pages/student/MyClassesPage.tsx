@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
 
 import { Card } from '@/components/ui/Card';
@@ -39,20 +39,24 @@ export default function MyClassesPage() {
   const [submissionText, setSubmissionText] = useState<Record<number, string>>({});
   const [savingId, setSavingId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<StudentClassTab>('course');
+  const hasFetchedRef = useRef(false);
 
   const fetchClasses = useCallback(async () => {
     setLoading(true);
     try {
       const data = await listMyClasses();
-      setClasses(data);
+      setClasses(Array.isArray(data) ? data : []);
+      toast.dismiss('load-my-classes');
     } catch {
-      toast.error('Failed to load your classes.');
+      toast.error('Failed to load your classes.', { id: 'load-my-classes' });
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
+    if (hasFetchedRef.current) return;
+    hasFetchedRef.current = true;
     fetchClasses();
   }, [fetchClasses]);
 
@@ -82,7 +86,7 @@ export default function MyClassesPage() {
 
   const handleResourceOpen = async (resource: ClassResource) => {
     try {
-      if (resource.type === 'FILE') {
+      if (resource.type === 'FILE' || resource.type === 'IMAGE') {
         const url = await getResourceDownloadUrl(resource.id);
         window.open(url, '_blank', 'noopener,noreferrer');
       } else if (resource.url) {
@@ -135,10 +139,10 @@ export default function MyClassesPage() {
     <div className="mx-auto max-w-7xl space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-[var(--color-text-primary)] sm:text-3xl">
-          Lớp của tôi
+          My Classes
         </h1>
         <p className="mt-1 text-sm text-[var(--color-text-muted)]">
-          Các lớp bạn đang tham gia. Chọn một lớp để xem nội dung và bài thi.
+          Classes you are enrolled in. Select a class to view content and exams.
         </p>
       </div>
 
@@ -159,10 +163,10 @@ export default function MyClassesPage() {
               />
             </svg>
             <p className="mt-3 text-sm font-medium text-slate-700">
-              Bạn chưa tham gia lớp nào.
+              You have not joined any class yet.
             </p>
             <p className="mt-1 text-xs text-slate-500">
-              Khi giáo viên thêm bạn vào lớp, lớp sẽ hiển thị ở đây.
+              When a teacher adds you to a class, it will appear here.
             </p>
           </div>
         </Card>
@@ -204,7 +208,7 @@ export default function MyClassesPage() {
                         : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'
                     }`}
                   >
-                    Nội dung khóa học
+                    Course Content
                   </button>
                   <button
                     type="button"
@@ -217,7 +221,7 @@ export default function MyClassesPage() {
                         : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'
                     }`}
                   >
-                    Bài thi
+                    Exams
                   </button>
                 </div>
               </div>
@@ -240,7 +244,7 @@ export default function MyClassesPage() {
                   />
                 ) : (
                   <p className="py-8 text-center text-sm text-[var(--color-text-muted)]">
-                    Không tải được nội dung lớp.
+                    Failed to load class content.
                   </p>
                 )
               ) : (
@@ -289,14 +293,14 @@ function ClassCard({
           {cls.teacher && (
             <InfoRow
               icon={iconUser}
-              label="Giáo viên"
+              label="Teacher"
               value={cls.teacher.fullName}
             />
           )}
           {cls.semester && (
             <InfoRow
               icon={iconCalendar}
-              label="Học kỳ"
+              label="Semester"
               value={
                 cls.semester.academicYear
                   ? `${cls.semester.name} • ${cls.semester.academicYear.name}`
@@ -307,16 +311,16 @@ function ClassCard({
           {typeof cls._count?.classStudents === 'number' && (
             <InfoRow
               icon={iconGroup}
-              label="Sĩ số"
+              label="Class Size"
               value={`${cls._count.classStudents}`}
             />
           )}
           {enrolledLabel && (
-            <InfoRow icon={iconClock} label="Tham gia" value={enrolledLabel} />
+            <InfoRow icon={iconClock} label="Enrolled" value={enrolledLabel} />
           )}
         </div>
         <Button variant={isSelected ? 'outline' : 'primary'} size="sm" onClick={onOpen}>
-          {isSelected ? 'Đóng' : 'Mở lớp'}
+          {isSelected ? 'Close' : 'Open Class'}
         </Button>
       </div>
     </Card>
@@ -378,16 +382,16 @@ function StudentCourseContent({
     <div className="space-y-4">
       <div>
         <h3 className="text-base font-bold tracking-tight text-[var(--color-text-primary)]">
-          Tài liệu và hoạt động
+          Resources and Activities
         </h3>
         <p className="mt-0.5 text-sm text-[var(--color-text-muted)]">
-          Mở tài liệu, nộp bài và xem feedback từ giáo viên
+          Open resources, submit work, and see feedback from your teacher
         </p>
       </div>
 
       {course.standaloneResources.length > 0 || course.standaloneActivities.length > 0 ? (
         <StudentCourseBlock
-          title="Chung"
+          title="General"
           resources={course.standaloneResources}
           activities={course.standaloneActivities}
           completedResources={completedResources}
@@ -402,7 +406,7 @@ function StudentCourseContent({
 
       {isEmpty ? (
         <p className="rounded-xl border-2 border-dashed border-[var(--color-border)] py-10 text-center text-sm text-[var(--color-text-muted)]">
-          Lớp chưa có tài liệu nào được xuất bản.
+          No resources have been published in this class yet.
         </p>
       ) : (
         course.sections.map((section) => (
@@ -460,7 +464,7 @@ function StudentCourseBlock({
       <div className="space-y-4">
         {resources.length > 0 && (
           <div>
-            <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)]">Tài liệu</p>
+            <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)]">Resources</p>
             <div className="grid gap-2 sm:grid-cols-2">
               {resources.map((resource) => (
                 <button
@@ -472,7 +476,7 @@ function StudentCourseBlock({
                   <div className="flex items-center justify-between gap-2">
                     <span className="truncate text-sm font-semibold text-[var(--color-text-primary)]">{resource.title}</span>
                     <Badge variant={completedResources.has(resource.id) ? 'success' : 'info'} size="sm">
-                      {completedResources.has(resource.id) ? 'Đã xem' : resource.type}
+                      {completedResources.has(resource.id) ? 'Viewed' : resource.type}
                     </Badge>
                   </div>
                   {resource.description && (
@@ -485,7 +489,7 @@ function StudentCourseBlock({
         )}
         {activities.length > 0 && (
           <div>
-            <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)]">Hoạt động</p>
+            <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)]">Activities</p>
             <div className="space-y-3">
               {activities.map((activity) => {
                 const submission = submissions.get(activity.id);
@@ -496,7 +500,7 @@ function StudentCourseBlock({
                       <div>
                         <p className="text-sm font-semibold text-[var(--color-text-primary)]">{activity.title}</p>
                         <p className="text-xs text-[var(--color-text-muted)]">
-                          {activity.dueAt ? `Hạn ${new Date(activity.dueAt).toLocaleString()}` : 'Không có hạn'}
+                          {activity.dueAt ? `Due ${new Date(activity.dueAt).toLocaleString()}` : 'No due date'}
                         </p>
                       </div>
                       <Badge variant={submission ? 'success' : 'info'} size="sm">
@@ -508,7 +512,7 @@ function StudentCourseBlock({
                     )}
                     {submission?.score !== null && submission?.score !== undefined && activity.showGrades && (
                       <p className="mt-2 text-sm font-medium text-[var(--color-text-primary)]">
-                        Điểm: {submission.score}
+                        Score: {submission.score}
                         {submission.feedback ? ` - ${submission.feedback}` : ''}
                       </p>
                     )}
@@ -517,7 +521,7 @@ function StudentCourseBlock({
                         <textarea
                           className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] px-3 py-2 text-sm text-[var(--color-text-primary)] shadow-sm focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-soft-strong)]"
                           rows={3}
-                          placeholder="Nội dung bài nộp"
+                          placeholder="Submission content"
                           value={submissionText[activity.id] ?? ''}
                           onChange={(e) => onSubmissionChange(activity.id, e.target.value)}
                         />
@@ -527,7 +531,7 @@ function StudentCourseBlock({
                           isLoading={savingId === activity.id}
                           onClick={() => onSubmitActivity(activity)}
                         >
-                          Nộp bài
+                          Submit
                         </Button>
                       </div>
                     )}

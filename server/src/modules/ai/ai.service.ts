@@ -33,7 +33,7 @@ function getGeminiClient(): GoogleGenerativeAI {
   if (!env.gemini.apiKey) {
     throw new AppError(
       'GEMINI_API_KEY is not configured on the server',
-      500,
+      503,
     );
   }
   return new GoogleGenerativeAI(env.gemini.apiKey);
@@ -85,33 +85,33 @@ function buildPrompt(
       ? a.question.options.find((o) => o.id === a.selectedOptionId)
       : null;
     const optionsText = a.question.options
-      .map((o) => `${o.label}. ${o.content}${o.isCorrect ? ' [ĐÚNG]' : ''}`)
+      .map((o) => `${o.label}. ${o.content}${o.isCorrect ? ' [CORRECT]' : ''}`)
       .join('\n   ');
 
-    return `Câu ${i + 1}:
-- Môn: ${a.question.subject.name}
-- Chương: ${a.question.chapter.name}
-- Chủ đề: ${a.question.topic.name}
-- Độ khó (1-5): ${a.question.difficulty}
-- Nội dung: ${a.question.content}
-- Các lựa chọn:
+    return `Question ${i + 1}:
+- Subject: ${a.question.subject.name}
+- Chapter: ${a.question.chapter.name}
+- Topic: ${a.question.topic.name}
+- Difficulty (1-5): ${a.question.difficulty}
+- Content: ${a.question.content}
+- Options:
    ${optionsText}
-- Đáp án đúng: ${correct ? `${correct.label}. ${correct.content}` : 'N/A'}
-- Học sinh đã chọn: ${chosen ? `${chosen.label}. ${chosen.content}` : 'BỎ TRỐNG'}`;
+- Correct answer: ${correct ? `${correct.label}. ${correct.content}` : 'N/A'}
+- Student chose: ${chosen ? `${chosen.label}. ${chosen.content}` : 'BLANK'}`;
   }).join('\n\n');
 
-  return `Bạn là một giáo viên chuyên gia. Dưới đây là danh sách các câu hỏi trắc nghiệm mà học sinh đã làm SAI. Mỗi câu kèm theo đáp án đúng và đáp án sai mà học sinh đã chọn — đây là manh mối về sự HIỂU LẦM (misconception) của học sinh.
+  return `You are an expert teacher. Below is a list of multiple-choice questions that the student answered INCORRECTLY. Each question includes the correct answer and the wrong answer the student chose — these are clues to the student's MISCONCEPTIONS.
 
 ${cases}
 
-Hãy sinh ra CHÍNH XÁC ${desiredCount} câu hỏi trắc nghiệm MỚI để giúp học sinh khắc phục các lỗi tư duy trên. Yêu cầu:
-1. Cùng chủ đề, cùng độ khó (±1 mức) so với các câu sai.
-2. Tập trung kiểm tra cùng khái niệm cốt lõi mà học sinh đã nhầm lẫn.
-3. KHÔNG được sao chép hoặc paraphrase y hệt câu hỏi cũ — phải là câu hỏi mới.
-4. Mỗi câu có 4 lựa chọn A/B/C/D, CHÍNH XÁC một đáp án đúng.
-5. Có giải thích ngắn gọn (1-3 câu) lý do đáp án đúng.
+Generate EXACTLY ${desiredCount} NEW multiple-choice questions to help the student overcome the above misconceptions. Requirements:
+1. Same topic, same difficulty (±1 level) as the incorrect questions.
+2. Focus on testing the same core concepts the student got wrong.
+3. DO NOT copy or directly paraphrase the original questions — they must be new questions.
+4. Each question has 4 options A/B/C/D, with EXACTLY one correct answer.
+5. Include a brief explanation (1-3 sentences) of why the correct answer is correct.
 
-Trả về DUY NHẤT một mảng JSON hợp lệ (không markdown, không code fence, không text giải thích trước/sau), theo schema sau:
+Return ONLY a valid JSON array (no markdown, no code fence, no explanatory text before/after), following this schema:
 [
   {
     "content": "string",
@@ -203,23 +203,23 @@ function buildDistractorPrompt(input: {
     .join('\n');
 
   const contextParts: string[] = [];
-  if (input.subjectName) contextParts.push(`Môn học: ${input.subjectName}`);
-  if (input.topicName) contextParts.push(`Chủ đề: ${input.topicName}`);
-  if (input.questionContent) contextParts.push(`Đề bài: ${input.questionContent}`);
+  if (input.subjectName) contextParts.push(`Subject: ${input.subjectName}`);
+  if (input.topicName) contextParts.push(`Topic: ${input.topicName}`);
+  if (input.questionContent) contextParts.push(`Question: ${input.questionContent}`);
   const context = contextParts.length > 0 ? `\n${contextParts.join('\n')}\n` : '';
 
-  return `Bạn là một giáo viên chuyên gia đang soạn câu hỏi MATCHING (ghép cặp).${context}
-Dưới đây là các cặp ĐÚNG (vế trái <=> vế phải) đã có trong câu hỏi:
+  return `You are an expert teacher composing a MATCHING question.${context}
+Below are the CORRECT pairs (left <=> right) already in the question:
 ${pairsText}
 
-Hãy sinh ra CHÍNH XÁC MỘT đáp án "vế phải" GÂY NHIỄU (distractor) sao cho:
-1. Cùng định dạng, cùng đơn vị, cùng kiểu giá trị với các vế phải hiện có (ví dụ: nếu các vế phải là phân số/lượng giác → distractor cũng là phân số/lượng giác hợp lệ).
-2. KHÔNG trùng với bất kỳ vế phải nào ở trên (so sánh không phân biệt khoảng trắng).
-3. KHÔNG là đáp án đúng cho bất kỳ vế trái nào ở trên.
-4. Hợp lý — có thể khiến học sinh nhầm lẫn nhưng vẫn nằm trong cùng phạm vi kiến thức.
-5. Ngắn gọn (tối đa ~60 ký tự).
+Generate EXACTLY ONE distractor "right side" answer such that:
+1. Same format, same unit, same value type as the existing right sides (e.g., if the right sides are fractions/trigonometric values → the distractor should also be a valid fraction/trigonometric value).
+2. DOES NOT match any of the right sides above (whitespace-insensitive comparison).
+3. IS NOT a correct answer for any of the left sides above.
+4. Plausible — could trick the student but still within the same knowledge area.
+5. Concise (max ~60 characters).
 
-Chỉ trả về DUY NHẤT một chuỗi JSON hợp lệ, không kèm markdown, không giải thích, theo schema:
+Return ONLY a single valid JSON string, no markdown, no explanation, following the schema:
 { "distractor": "string" }`;
 }
 

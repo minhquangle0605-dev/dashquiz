@@ -21,16 +21,24 @@ import {
   bulkDeleteQuestions,
   exportQuestionsGift,
 } from '@/services/question.api';
-import type { Question, QuestionFilter } from '@/types/question';
+import type { Question, QuestionFilter, QuestionKind } from '@/types/question';
 import type { PaginatedResponse } from '@/types/api';
 
 const PAGE_SIZE = 12;
+const QUESTION_TYPE_OPTIONS: Array<{ value: QuestionKind; label: string }> = [
+  { value: 'SINGLE_CHOICE', label: 'Single Choice' },
+  { value: 'MULTIPLE_CHOICE', label: 'Multiple Choice' },
+  { value: 'TRUE_FALSE', label: 'True / False' },
+  { value: 'SHORT_ANSWER', label: 'Short Answer' },
+  { value: 'MATCHING', label: 'Matching' },
+];
 
 export default function QuestionBankPage() {
   // ── Filter state ──────────────────────────────────
   const [curriculum, setCurriculum] = useState<CurriculumSelection>(
     emptyCurriculumSelection(),
   );
+  const [questionTypeFilter, setQuestionTypeFilter] = useState<QuestionKind | ''>('');
   const [difficultyFilter, setDifficultyFilter] = useState<string>('');
   const [searchText, setSearchText] = useState('');
   const debouncedSearch = useDebounce(searchText, 400);
@@ -63,8 +71,9 @@ export default function QuestionBankPage() {
         sortOrder: 'desc',
       };
       if (curriculum.subjectId) params.subjectId = Number(curriculum.subjectId);
+      if (curriculum.gradeLevel) params.gradeLevel = Number(curriculum.gradeLevel);
       if (curriculum.chapterId) params.chapterId = Number(curriculum.chapterId);
-      if (curriculum.topicId) params.topicId = Number(curriculum.topicId);
+      if (questionTypeFilter) params.questionType = questionTypeFilter;
       if (difficultyFilter) params.difficulty = Number(difficultyFilter);
       if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
 
@@ -75,7 +84,7 @@ export default function QuestionBankPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, curriculum, difficultyFilter, debouncedSearch]);
+  }, [page, curriculum, questionTypeFilter, difficultyFilter, debouncedSearch]);
 
   useEffect(() => {
     fetchQuestions();
@@ -85,7 +94,7 @@ export default function QuestionBankPage() {
   useEffect(() => {
     setPage(1);
     setSelectedIds([]);
-  }, [curriculum, difficultyFilter, debouncedSearch]);
+  }, [curriculum, questionTypeFilter, difficultyFilter, debouncedSearch]);
 
   // ── Handlers ──────────────────────────────────────
   const handleDelete = async (q: Question) => {
@@ -96,8 +105,13 @@ export default function QuestionBankPage() {
       await deleteQuestion(q.id);
       toast.success('Question deleted.');
       fetchQuestions();
-    } catch {
-      toast.error('Failed to delete question.');
+    } catch (err) {
+      const e = err as { response?: { data?: { message?: string; error?: string } } };
+      toast.error(
+        e?.response?.data?.message ||
+          e?.response?.data?.error ||
+          'Failed to delete question.',
+      );
     } finally {
       setDeleting(null);
     }
@@ -113,8 +127,13 @@ export default function QuestionBankPage() {
       toast.success(`Deleted ${selectedIds.length} question(s).`);
       setSelectedIds([]);
       fetchQuestions();
-    } catch {
-      toast.error('Failed to delete questions.');
+    } catch (err) {
+      const e = err as { response?: { data?: { message?: string; error?: string } } };
+      toast.error(
+        e?.response?.data?.message ||
+          e?.response?.data?.error ||
+          'Failed to delete questions.',
+      );
     } finally {
       setBulkDeleting(false);
     }
@@ -144,6 +163,7 @@ export default function QuestionBankPage() {
 
   const handleClearFilters = () => {
     setCurriculum(emptyCurriculumSelection());
+    setQuestionTypeFilter('');
     setDifficultyFilter('');
     setSearchText('');
     setPage(1);
@@ -155,6 +175,9 @@ export default function QuestionBankPage() {
 
   const hasFilters =
     curriculum.subjectId !== '' ||
+    curriculum.gradeLevel !== '' ||
+    curriculum.chapterId !== '' ||
+    questionTypeFilter !== '' ||
     difficultyFilter !== '' ||
     searchText.trim() !== '';
 
@@ -212,7 +235,27 @@ export default function QuestionBankPage() {
               onChange={setCurriculum}
               layout="column"
               allowEmpty
+              showTopic={false}
             />
+
+            {/* Question type filter */}
+            <div className="mt-5">
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                Question type
+              </label>
+              <select
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                value={questionTypeFilter}
+                onChange={(e) => setQuestionTypeFilter(e.target.value as QuestionKind | '')}
+              >
+                <option value="">All question types</option>
+                {QUESTION_TYPE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
 
             {/* Difficulty filter */}
             <div className="mt-5">
@@ -443,7 +486,20 @@ export default function QuestionBankPage() {
                   onChange={setCurriculum}
                   layout="row"
                   allowEmpty
+                  showTopic={false}
                 />
+                <select
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  value={questionTypeFilter}
+                  onChange={(e) => setQuestionTypeFilter(e.target.value as QuestionKind | '')}
+                >
+                  <option value="">All question types</option>
+                  {QUESTION_TYPE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </div>
             </Card>
           </div>
@@ -554,6 +610,11 @@ export default function QuestionBankPage() {
                               {q.subject.name}
                             </span>
                           )}
+                          {q.chapter?.gradeLevel && (
+                            <span className="rounded bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700">
+                              Grade {q.chapter.gradeLevel}
+                            </span>
+                          )}
                           {q.chapter && (
                             <span className="rounded bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
                               {q.chapter.name}
@@ -653,6 +714,12 @@ export default function QuestionBankPage() {
 
                         {/* Meta info */}
                         <div className="mb-4 flex flex-wrap gap-4 text-xs text-slate-500">
+                          {q.chapter?.gradeLevel && (
+                            <span>
+                              Grade:{' '}
+                              <strong className="text-slate-700">{q.chapter.gradeLevel}</strong>
+                            </span>
+                          )}
                           {q.topic && (
                             <span>
                               Topic:{' '}

@@ -1,9 +1,10 @@
 import { Router } from 'express';
+import multer from 'multer';
 import * as controller from './discussion.controller';
 import { authenticate, authorize } from '../../middlewares/auth';
 import { validate } from '../../middlewares/validate';
 import { activityLogger } from '../../middlewares/activityLogger';
-import { ROLES } from '../../utils/constants';
+import { FILE_UPLOAD, ROLES } from '../../utils/constants';
 import {
   listDiscussionsQuerySchema,
   createDiscussionSchema,
@@ -13,6 +14,14 @@ import {
 } from './discussion.validation';
 
 const router = Router();
+
+const attachmentUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: FILE_UPLOAD.MAX_DISCUSSION_ATTACHMENT_SIZE,
+    files: FILE_UPLOAD.MAX_DISCUSSION_ATTACHMENTS,
+  },
+});
 
 router.get(
   '/admin/all',
@@ -27,9 +36,16 @@ router.get('/', authenticate, validate(listDiscussionsQuerySchema, 'query'), con
 router.post(
   '/',
   authenticate,
+  attachmentUpload.array('attachments', FILE_UPLOAD.MAX_DISCUSSION_ATTACHMENTS),
   validate(createDiscussionSchema),
   activityLogger('CREATE_DISCUSSION', 'discussion'),
   controller.createDiscussion,
+);
+
+router.get(
+  '/attachments/:attachmentId/download-url',
+  authenticate,
+  controller.getAttachmentDownloadUrl,
 );
 
 router.get('/:id', authenticate, controller.getDiscussion);
@@ -52,6 +68,7 @@ router.delete(
 router.post(
   '/:id/replies',
   authenticate,
+  attachmentUpload.array('attachments', FILE_UPLOAD.MAX_DISCUSSION_ATTACHMENTS),
   validate(createReplySchema),
   activityLogger('CREATE_DISCUSSION_REPLY', 'discussion_reply'),
   controller.createReply,

@@ -16,11 +16,11 @@ function phaseBadge(phase: StudentExamItem['phase']): {
 } {
   switch (phase) {
     case 'upcoming':
-      return { variant: 'info', label: 'Sắp diễn ra' };
+      return { variant: 'info', label: 'Upcoming' };
     case 'in_progress':
-      return { variant: 'warning', label: 'Đang làm' };
+      return { variant: 'warning', label: 'In Progress' };
     case 'completed':
-      return { variant: 'success', label: 'Đã hoàn thành' };
+      return { variant: 'success', label: 'Completed' };
     default:
       return { variant: 'neutral', label: phase };
   }
@@ -45,7 +45,7 @@ export function StudentClassExamsTab({ selectedClass }: StudentClassExamsTabProp
       });
       setExams(res.data ?? []);
     } catch {
-      toast.error('Không tải được danh sách Exam.');
+      toast.error('Failed to load exam list.');
       setExams([]);
     } finally {
       setLoading(false);
@@ -57,12 +57,17 @@ export function StudentClassExamsTab({ selectedClass }: StudentClassExamsTabProp
   }, [fetchExams]);
 
   const handleStart = async (exam: StudentExamItem) => {
+    // Password-protected exams are unlocked inside TakeExamPage.
+    if (exam.hasPassword) {
+      navigate(`/student/exams/${exam.id}/take`);
+      return;
+    }
     setStartingId(exam.id);
     try {
       await startStudentExam(exam.id);
       navigate(`/student/exams/${exam.id}/take`);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Không bắt đầu được bài thi';
+      const msg = err instanceof Error ? err.message : 'Could not start the exam';
       toast.error(msg);
     } finally {
       setStartingId(null);
@@ -73,10 +78,10 @@ export function StudentClassExamsTab({ selectedClass }: StudentClassExamsTabProp
     <div className="space-y-4">
       <div>
         <h3 className="text-base font-bold tracking-tight text-[var(--color-text-primary)]">
-          Bài thi của lớp
+          Class Exams
         </h3>
         <p className="mt-0.5 text-sm text-[var(--color-text-muted)]">
-          Tất cả Exam được giao cho lớp{' '}
+          All exams assigned to class{' '}
           <span className="font-semibold text-[var(--color-text-primary)]">
             {selectedClass.name}
           </span>
@@ -95,10 +100,10 @@ export function StudentClassExamsTab({ selectedClass }: StudentClassExamsTabProp
             </svg>
           </div>
           <p className="text-sm font-bold text-[var(--color-text-primary)]">
-            Lớp chưa có bài thi nào
+            This class has no exams yet
           </p>
           <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-            Khi giáo viên giao bài, bài thi sẽ xuất hiện ở đây.
+            When your teacher assigns exams, they will appear here.
           </p>
         </div>
       ) : (
@@ -124,13 +129,13 @@ export function StudentClassExamsTab({ selectedClass }: StudentClassExamsTabProp
                         <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
-                        {exam.durationMin} phút
+                        {exam.durationMin} min
                       </span>
                       <span className="inline-flex items-center gap-1">
                         <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
-                        {exam._count.examQuestions} câu
+                        {exam._count.examQuestions} questions
                       </span>
                       {schedule && (
                         <span className="inline-flex items-center gap-1">
@@ -145,12 +150,12 @@ export function StudentClassExamsTab({ selectedClass }: StudentClassExamsTabProp
                           })}
                         </span>
                       )}
-                      {exam.phase === 'completed' && exam.bestScore !== null && (
+                      {exam.completedCount > 0 && (exam.finalScore ?? exam.bestScore) !== null && (
                         <span className="inline-flex items-center gap-1 font-semibold text-[var(--color-success)]">
                           <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20">
                             <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                           </svg>
-                          {exam.bestScore} điểm
+                          {exam.finalScore ?? exam.bestScore} pts
                         </span>
                       )}
                     </div>
@@ -162,7 +167,7 @@ export function StudentClassExamsTab({ selectedClass }: StudentClassExamsTabProp
                         size="sm"
                         onClick={() => navigate(`/student/exams/${exam.id}/take`)}
                       >
-                        Tiếp tục
+                        Resume
                       </Button>
                     ) : exam.canStart ? (
                       <Button
@@ -171,7 +176,7 @@ export function StudentClassExamsTab({ selectedClass }: StudentClassExamsTabProp
                         isLoading={startingId === exam.id}
                         onClick={() => handleStart(exam)}
                       >
-                        Vào thi
+                        Start
                       </Button>
                     ) : exam.phase === 'completed' ? (
                       <Button
@@ -179,11 +184,11 @@ export function StudentClassExamsTab({ selectedClass }: StudentClassExamsTabProp
                         size="sm"
                         onClick={() => navigate(`/student/exams`)}
                       >
-                        Xem kết quả
+                        View Results
                       </Button>
                     ) : (
                       <Button variant="secondary" size="sm" disabled>
-                        Chưa khả dụng
+                        Not yet available
                       </Button>
                     )}
                   </div>

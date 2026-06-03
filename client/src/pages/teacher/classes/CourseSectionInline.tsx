@@ -1,6 +1,6 @@
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
-import type { ClassCourseOverview } from '@/types/exam';
+import type { ClassCourseOverview, ClassResource, ClassSection } from '@/types/exam';
 
 import { CourseBlock } from './CourseBlock';
 
@@ -10,6 +10,11 @@ interface CourseSectionInlineProps {
   onAddSection: () => void;
   onAddResource: () => void;
   onAddActivity: () => void;
+  deletingSectionId?: number | null;
+  deletingResourceId?: number | null;
+  onDeleteSection?: (section: ClassSection) => void;
+  onOpenResource?: (resource: ClassResource) => void;
+  onDeleteResource?: (resource: ClassResource) => void;
 }
 
 export function CourseSectionInline({
@@ -18,6 +23,11 @@ export function CourseSectionInline({
   onAddSection,
   onAddResource,
   onAddActivity,
+  deletingSectionId,
+  deletingResourceId,
+  onDeleteSection,
+  onOpenResource,
+  onDeleteResource,
 }: CourseSectionInlineProps) {
   const hasContent =
     course &&
@@ -30,10 +40,10 @@ export function CourseSectionInline({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h3 className="text-base font-bold tracking-tight text-[var(--color-text-primary)]">
-            Nội dung khóa học
+            Course Content
           </h3>
           <p className="mt-0.5 text-sm text-[var(--color-text-muted)]">
-            Sections, tài liệu, hoạt động và bài nộp
+            Sections, resources, activities, and submissions
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -65,11 +75,14 @@ export function CourseSectionInline({
               title="General"
               resources={course.standaloneResources}
               activities={course.standaloneActivities}
+              deletingResourceId={deletingResourceId}
+              onOpenResource={onOpenResource}
+              onDeleteResource={onDeleteResource}
             />
           )}
           {!hasContent ? (
             <p className="rounded-xl border-2 border-dashed border-[var(--color-border)] py-10 text-center text-sm text-[var(--color-text-muted)]">
-              Chưa có nội dung. Thêm section đầu tiên để bắt đầu.
+              No content yet. Add the first section to get started.
             </p>
           ) : (
             course.sections.map((section) => (
@@ -80,6 +93,13 @@ export function CourseSectionInline({
                 resources={section.resources}
                 activities={section.activities}
                 hidden={!section.isPublished}
+                deletingSection={deletingSectionId === section.id}
+                deletingResourceId={deletingResourceId}
+                onDeleteSection={
+                  onDeleteSection ? () => onDeleteSection(section) : undefined
+                }
+                onOpenResource={onOpenResource}
+                onDeleteResource={onDeleteResource}
               />
             ))
           )}

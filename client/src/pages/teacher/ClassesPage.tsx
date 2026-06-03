@@ -10,7 +10,10 @@ import {
   createClass,
   createResource,
   createSection,
+  deleteResource,
+  deleteSection,
   getClassCourse,
+  getResourceDownloadUrl,
   importStudents,
   listAvailableStudents,
   listClassNames,
@@ -26,6 +29,8 @@ import { listSubjects } from '@/services/question.api';
 import type {
   ClassCourseOverview,
   ClassItem,
+  ClassResource,
+  ClassSection,
   ClassStudent,
 } from '@/types/exam';
 import type { CurriculumSubject } from '@/types/question';
@@ -70,6 +75,13 @@ const initialResourceForm: ResourceFormValues = {
   file: null,
   isPublished: true,
 };
+const MAX_IMAGE_RESOURCE_SIZE_BYTES = 10 * 1024 * 1024;
+const ALLOWED_IMAGE_RESOURCE_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+]);
 const initialActivityForm: ActivityFormValues = {
   title: '',
   type: 'ASSIGNMENT',
@@ -78,6 +90,7 @@ const initialActivityForm: ActivityFormValues = {
   dueAt: '',
   maxScore: '',
   status: 'PUBLISHED',
+  gradeComponentType: '',
 };
 
 export default function ClassesPage() {
@@ -119,6 +132,8 @@ export default function ClassesPage() {
   const [resourceForm, setResourceForm] = useState<ResourceFormValues>(initialResourceForm);
   const [activityForm, setActivityForm] = useState<ActivityFormValues>(initialActivityForm);
   const [courseSaving, setCourseSaving] = useState(false);
+  const [deletingSectionId, setDeletingSectionId] = useState<number | null>(null);
+  const [deletingResourceId, setDeletingResourceId] = useState<number | null>(null);
 
   const [removingId, setRemovingId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<ClassDetailTab>('course');
@@ -187,18 +202,18 @@ export default function ClassesPage() {
 
   const handleCreateClass = async () => {
     if (!createForm.name.trim() || !createForm.subjectId || !createForm.academicYearString) {
-      toast.error('Vui lòng điền đầy đủ thông tin.');
+      toast.error('Please fill in all required fields.');
       return;
     }
     setCreateSaving(true);
     try {
       await createClass(createForm);
-      toast.success('Tạo lớp thành công!');
+      toast.success('Class created successfully!');
       setShowCreateModal(false);
       setCreateForm(initialClassForm);
       fetchClasses();
     } catch {
-      toast.error('Không tạo được lớp.');
+      toast.error('Failed to create class.');
     } finally {
       setCreateSaving(false);
     }
@@ -209,11 +224,11 @@ export default function ClassesPage() {
     setCreateSaving(true);
     try {
       await updateClass(editingClass.id, createForm);
-      toast.success('Đã cập nhật lớp!');
+      toast.success('Class updated!');
       setEditingClass(null);
       fetchClasses();
     } catch {
-      toast.error('Không cập nhật được.');
+      toast.error('Update failed.');
     } finally {
       setCreateSaving(false);
     }
@@ -323,14 +338,14 @@ export default function ClassesPage() {
 
   const handleAddStudents = async () => {
     if (!selectedClass || selectedStudentIds.size === 0) {
-      toast.error('Hãy chọn ít nhất một học sinh.');
+      toast.error('Please select at least one student.');
       return;
     }
     const ids = Array.from(selectedStudentIds);
     setAddingSaving(true);
     try {
       await addStudents(selectedClass.id, ids);
-      toast.success(`Đã thêm ${ids.length} học sinh!`);
+      toast.success(`Added ${ids.length} students!`);
       setShowAddStudentModal(false);
       setSelectedStudentIds(new Set());
       setAddStudentSearch('');
@@ -338,7 +353,7 @@ export default function ClassesPage() {
       setStudents(Array.isArray(data) ? data : []);
       fetchClasses();
     } catch {
-      toast.error('Không thêm được học sinh.');
+      toast.error('Failed to add students.');
     } finally {
       setAddingSaving(false);
     }
@@ -346,15 +361,15 @@ export default function ClassesPage() {
 
   const handleRemoveStudent = async (studentId: number) => {
     if (!selectedClass) return;
-    if (!window.confirm('Xóa học sinh này khỏi lớp?')) return;
+    if (!window.confirm('Remove this student from the class?')) return;
     setRemovingId(studentId);
     try {
       await removeStudent(selectedClass.id, studentId);
-      toast.success('Đã xóa học sinh.');
+      toast.success('Student removed.');
       setStudents((prev) => prev.filter((s) => s.studentId !== studentId));
       fetchClasses();
     } catch {
-      toast.error('Không xóa được học sinh.');
+      toast.error('Failed to remove student.');
     } finally {
       setRemovingId(null);
     }
@@ -366,8 +381,8 @@ export default function ClassesPage() {
     try {
       const result = await importStudents(selectedClass.id, importFile);
       toast.success(
-        `Đã import ${result.imported} học sinh.${
-          result.failed > 0 ? ` ${result.failed} thất bại.` : ''
+        `Imported ${result.imported} students.${
+          result.failed > 0 ? ` ${result.failed} failed.` : ''
         }`,
       );
       setShowImportModal(false);
@@ -376,7 +391,7 @@ export default function ClassesPage() {
       setStudents(Array.isArray(data) ? data : []);
       fetchClasses();
     } catch {
-      toast.error('Import thất bại. Kiểm tra format file.');
+      toast.error('Import failed. Check the file format.');
     } finally {
       setImporting(false);
     }
@@ -387,29 +402,82 @@ export default function ClassesPage() {
     setCourseSaving(true);
     try {
       await createSection(selectedClass.id, sectionForm);
-      toast.success('Đã tạo section.');
+      toast.success('Section created.');
       setShowSectionModal(false);
       setSectionForm(initialSectionForm);
       fetchCourse(selectedClass.id);
     } catch {
-      toast.error('Không tạo được section.');
+      toast.error('Failed to create section.');
     } finally {
       setCourseSaving(false);
     }
   };
 
+  const handleDeleteSection = async (section: ClassSection) => {
+    if (!selectedClass) return;
+    const hasChildren = section.resources.length > 0 || section.activities.length > 0;
+    const message = hasChildren
+      ? `Delete section "${section.title}"? Resources in this section will be deleted. Activities will move to General.`
+      : `Delete section "${section.title}"?`;
+    if (!window.confirm(message)) return;
+    setDeletingSectionId(section.id);
+    try {
+      await deleteSection(selectedClass.id, section.id);
+      toast.success('Section deleted.');
+      await fetchCourse(selectedClass.id);
+    } catch {
+      toast.error('Failed to delete section.');
+    } finally {
+      setDeletingSectionId(null);
+    }
+  };
+
   const handleCreateResource = async () => {
-    if (!selectedClass || !resourceForm.title.trim()) return;
+    if (!selectedClass) return;
+    if (!resourceForm.title.trim()) {
+      toast.error('Please enter a resource title.');
+      return;
+    }
+    const needsUrl = resourceForm.type === 'LINK' || resourceForm.type === 'VIDEO';
+    if (needsUrl && !resourceForm.url.trim()) {
+      toast.error('Please enter a URL.');
+      return;
+    }
+    if (needsUrl) {
+      try {
+        new URL(resourceForm.url.trim());
+      } catch {
+        toast.error('Please enter a valid URL.');
+        return;
+      }
+    }
     setCourseSaving(true);
     try {
       const sectionId = resourceForm.sectionId === '' ? null : resourceForm.sectionId;
-      if (resourceForm.type === 'FILE') {
+      if (resourceForm.type === 'FILE' || resourceForm.type === 'IMAGE') {
         if (!resourceForm.file) {
-          toast.error('Hãy chọn file.');
+          toast.error(
+            resourceForm.type === 'IMAGE' ? 'Please choose an image.' : 'Please choose a file.',
+          );
+          return;
+        }
+        if (
+          resourceForm.type === 'IMAGE' &&
+          !ALLOWED_IMAGE_RESOURCE_TYPES.has(resourceForm.file.type)
+        ) {
+          toast.error('Images must be JPG, PNG, WebP, or GIF.');
+          return;
+        }
+        if (
+          resourceForm.type === 'IMAGE' &&
+          resourceForm.file.size > MAX_IMAGE_RESOURCE_SIZE_BYTES
+        ) {
+          toast.error('Images must be 10MB or smaller.');
           return;
         }
         await uploadResourceFile(selectedClass.id, {
           file: resourceForm.file,
+          type: resourceForm.type,
           title: resourceForm.title,
           description: resourceForm.description || undefined,
           sectionId,
@@ -421,19 +489,51 @@ export default function ClassesPage() {
           description: resourceForm.description || undefined,
           type: resourceForm.type,
           sectionId,
-          url: resourceForm.url || undefined,
+          url: resourceForm.url.trim() || undefined,
           content: resourceForm.content || undefined,
           isPublished: resourceForm.isPublished,
         });
       }
-      toast.success('Đã thêm resource.');
+      toast.success('Resource added.');
       setShowResourceModal(false);
       setResourceForm(initialResourceForm);
       fetchCourse(selectedClass.id);
     } catch {
-      toast.error('Không thêm được resource.');
+      toast.error('Failed to add resource.');
     } finally {
       setCourseSaving(false);
+    }
+  };
+
+  const handleOpenResource = async (resource: ClassResource) => {
+    try {
+      if (resource.type === 'FILE' || resource.type === 'IMAGE') {
+        const url = await getResourceDownloadUrl(resource.id);
+        window.open(url, '_blank', 'noopener,noreferrer');
+        return;
+      }
+      if ((resource.type === 'LINK' || resource.type === 'VIDEO') && resource.url) {
+        window.open(resource.url, '_blank', 'noopener,noreferrer');
+        return;
+      }
+      toast.error('This resource does not have a file or URL.');
+    } catch {
+      toast.error('Failed to open resource.');
+    }
+  };
+
+  const handleDeleteResource = async (resource: ClassResource) => {
+    if (!selectedClass) return;
+    if (!window.confirm(`Delete resource "${resource.title}"?`)) return;
+    setDeletingResourceId(resource.id);
+    try {
+      await deleteResource(selectedClass.id, resource.id);
+      toast.success('Resource deleted.');
+      await fetchCourse(selectedClass.id);
+    } catch {
+      toast.error('Failed to delete resource.');
+    } finally {
+      setDeletingResourceId(null);
     }
   };
 
@@ -449,13 +549,15 @@ export default function ClassesPage() {
         dueAt: activityForm.dueAt || undefined,
         maxScore: activityForm.maxScore ? Number(activityForm.maxScore) : undefined,
         status: activityForm.status,
+        gradeComponentType:
+          activityForm.gradeComponentType === '' ? null : activityForm.gradeComponentType,
       });
-      toast.success('Đã tạo activity.');
+      toast.success('Activity created.');
       setShowActivityModal(false);
       setActivityForm(initialActivityForm);
       fetchCourse(selectedClass.id);
     } catch {
-      toast.error('Không tạo được activity.');
+      toast.error('Failed to create activity.');
     } finally {
       setCourseSaving(false);
     }
@@ -472,10 +574,10 @@ export default function ClassesPage() {
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-[var(--color-text-primary)] sm:text-3xl">
-            Lớp học
+            Classes
           </h1>
           <p className="mt-1 text-sm text-[var(--color-text-muted)]">
-            Quản lý lớp, học sinh, nội dung khóa học và bài thi
+            Manage classes, students, course content, and exams
           </p>
         </div>
         <Button
@@ -492,7 +594,7 @@ export default function ClassesPage() {
             </svg>
           }
         >
-          Lớp mới
+          New Class
         </Button>
       </div>
 
@@ -508,10 +610,10 @@ export default function ClassesPage() {
             </svg>
           </div>
           <p className="text-base font-bold text-[var(--color-text-primary)]">
-            Chưa có lớp nào
+            No classes yet
           </p>
           <p className="mt-1 text-sm text-[var(--color-text-muted)]">
-            Tạo lớp đầu tiên để bắt đầu.
+            Create your first class to get started.
           </p>
           <Button
             variant="primary"
@@ -519,7 +621,7 @@ export default function ClassesPage() {
             className="mt-5"
             onClick={() => setShowCreateModal(true)}
           >
-            Tạo lớp
+            Create Class
           </Button>
         </div>
       ) : (
@@ -560,7 +662,7 @@ export default function ClassesPage() {
                         : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'
                     }`}
                   >
-                    Nội dung khóa học
+                    Course Content
                   </button>
                   <button
                     type="button"
@@ -573,7 +675,7 @@ export default function ClassesPage() {
                         : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'
                     }`}
                   >
-                    Bài thi
+                    Exams
                   </button>
                 </div>
               </div>
@@ -583,8 +685,16 @@ export default function ClassesPage() {
                   course={course}
                   loading={courseLoading}
                   onAddSection={() => setShowSectionModal(true)}
-                  onAddResource={() => setShowResourceModal(true)}
+                  onAddResource={() => {
+                    setResourceForm(initialResourceForm);
+                    setShowResourceModal(true);
+                  }}
                   onAddActivity={() => setShowActivityModal(true)}
+                  deletingSectionId={deletingSectionId}
+                  deletingResourceId={deletingResourceId}
+                  onDeleteSection={handleDeleteSection}
+                  onOpenResource={handleOpenResource}
+                  onDeleteResource={handleDeleteResource}
                 />
               ) : (
                 <ClassExamsTab selectedClass={selectedClass} />

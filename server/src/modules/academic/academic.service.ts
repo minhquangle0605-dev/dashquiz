@@ -96,12 +96,12 @@ export class AcademicService {
         semesters: {
           create: [
             {
-              name: 'Học kỳ 1',
+              name: 'Semester 1',
               startDate: data.startDate,
               endDate: midDate,
             },
             {
-              name: 'Học kỳ 2',
+              name: 'Semester 2',
               startDate: midDate,
               endDate: data.endDate,
             },

@@ -53,8 +53,8 @@ export const handlers = [
       data: [
         {
           id: 1,
-          title: 'Math Exam',
-          subject: { name: 'Math' },
+          title: 'Mathematics Exam',
+          subject: { name: 'Mathematics' },
           durationMin: 60,
           status: 'PUBLISHED',
         },
@@ -68,11 +68,11 @@ export const handlers = [
       success: true,
       data: {
         id: Number(params.id),
-        title: 'Math Exam',
+        title: 'Mathematics Exam',
         durationMin: 60,
         totalQuestions: 10,
         status: 'PUBLISHED',
-        subject: { id: 1, name: 'Math', code: 'MATH' },
+        subject: { id: 1, name: 'Mathematics', code: 'MATH' },
       },
     });
   }),

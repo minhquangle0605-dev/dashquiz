@@ -120,10 +120,15 @@ interface StartExamResponse {
   data: StartExamData;
 }
 
+export interface StartStudentExamVars {
+  examId: number;
+  password?: string;
+}
+
 export function useStartStudentExam() {
   const qc = useQueryClient();
-  return useMutation<StartExamResponse, Error, number>({
-    mutationFn: (examId) => startStudentExam(examId),
+  return useMutation<StartExamResponse, Error, StartStudentExamVars>({
+    mutationFn: ({ examId, password }) => startStudentExam(examId, password),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: studentExamKeys.all });
     },

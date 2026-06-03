@@ -80,7 +80,7 @@ export const listStudentsQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(100).default(50),
 });
 
-const resourceTypeSchema = z.enum(['FILE', 'VIDEO', 'LINK', 'LESSON']);
+const resourceTypeSchema = z.enum(['FILE', 'IMAGE', 'VIDEO', 'LINK', 'LESSON']);
 const activityTypeSchema = z.enum([
   'QUIZ',
   'ASSIGNMENT',
@@ -102,13 +102,13 @@ export const createSectionSchema = z.object({
 
 export const updateSectionSchema = createSectionSchema.partial();
 
-export const createResourceSchema = z.object({
+const resourceSchemaBase = z.object({
   sectionId: z.coerce.number().int().positive().nullable().optional(),
   type: resourceTypeSchema,
   title: z.string().min(1).max(200),
   description: z.string().max(5000).optional(),
   content: z.string().max(50000).optional(),
-  url: z.string().max(2000).optional(),
+  url: z.string().url().max(2000).optional(),
   fileName: z.string().max(255).optional(),
   mimeType: z.string().max(120).optional(),
   fileSizeBytes: z.coerce.number().int().positive().optional(),
@@ -116,10 +116,29 @@ export const createResourceSchema = z.object({
   orderIndex: z.coerce.number().int().min(0).optional(),
 });
 
-export const updateResourceSchema = createResourceSchema.partial();
+export const createResourceSchema = resourceSchemaBase.superRefine((value, ctx) => {
+  if ((value.type === 'LINK' || value.type === 'VIDEO') && !value.url) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['url'],
+      message: 'URL is required for link and video resources',
+    });
+  }
+});
+
+export const updateResourceSchema = resourceSchemaBase.partial().superRefine((value, ctx) => {
+  if ((value.type === 'LINK' || value.type === 'VIDEO') && !value.url) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['url'],
+      message: 'URL is required when changing to link or video resources',
+    });
+  }
+});
 
 export const createActivitySchema = z.object({
   sectionId: z.coerce.number().int().positive().nullable().optional(),
+  gradeComponentType: z.enum(['REGULAR', 'MIDTERM', 'FINAL']).nullable().optional(),
   type: activityTypeSchema,
   title: z.string().min(1).max(200),
   instructions: z.string().max(50000).optional(),
@@ -175,6 +194,43 @@ export const assignClassRoleSchema = z.object({
 });
 
 // ═══════════════════════════════════════════════
+// MOET-STYLE GRADEBOOK (Circular 22)
+// ═══════════════════════════════════════════════
+
+export const gradeComponentTypeSchema = z.enum(['REGULAR', 'MIDTERM', 'FINAL']);
+
+export const createManualGradeSchema = z.object({
+  studentId: z.coerce.number().int().positive(),
+  componentType: gradeComponentTypeSchema,
+  score: z.coerce.number().min(0).max(10),
+  label: z.string().max(200).optional(),
+  reason: z.string().max(500).optional(),
+});
+
+export const updateGradeScoreSchema = z
+  .object({
+    score: z.coerce.number().min(0).max(10).optional(),
+    componentType: gradeComponentTypeSchema.optional(),
+    label: z.string().max(200).nullable().optional(),
+    reason: z.string().max(500).optional(),
+  })
+  .refine(
+    (val) =>
+      val.score !== undefined ||
+      val.componentType !== undefined ||
+      val.label !== undefined,
+    { message: 'Provide at least one field to update' },
+  );
+
+export const deleteGradeSchema = z.object({
+  reason: z.string().max(500).optional(),
+});
+
+export const linkClassSchema = z.object({
+  linkedClassId: z.coerce.number().int().positive().nullable(),
+});
+
+// ═══════════════════════════════════════════════
 // TYPE EXPORTS
 // ═══════════════════════════════════════════════
 
@@ -197,3 +253,8 @@ export type CreateForumPostInput = z.infer<typeof createForumPostSchema>;
 export type RecordAttendanceInput = z.infer<typeof recordAttendanceSchema>;
 export type MarkCompletionInput = z.infer<typeof markCompletionSchema>;
 export type AssignClassRoleInput = z.infer<typeof assignClassRoleSchema>;
+export type CreateManualGradeInput = z.infer<typeof createManualGradeSchema>;
+export type UpdateGradeScoreInput = z.infer<typeof updateGradeScoreSchema>;
+export type DeleteGradeInput = z.infer<typeof deleteGradeSchema>;
+export type LinkClassInput = z.infer<typeof linkClassSchema>;
+export type GradeComponentTypeInput = z.infer<typeof gradeComponentTypeSchema>;

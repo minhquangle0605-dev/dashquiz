@@ -8,7 +8,9 @@ export const listStudentExamsQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(50).default(20),
 });
 
-export const startExamSchema = z.object({}).optional();
+export const startExamSchema = z
+  .object({ password: z.string().max(100).optional() })
+  .optional();
 
 const answerValueSchema = z.union([
   z.number().int().positive(),

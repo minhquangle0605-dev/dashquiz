@@ -11,6 +11,7 @@ import {
   createReply,
   deleteDiscussion,
   deleteReply,
+  getDiscussionAttachmentUrl,
   getDiscussion,
   listDiscussions,
   updateDiscussion,
@@ -19,6 +20,7 @@ import {
 import { listClasses, listMyClasses } from '@/services/class.api';
 import type {
   Discussion,
+  DiscussionAttachment,
   DiscussionReply,
   DiscussionScope,
   DiscussionType,
@@ -33,19 +35,22 @@ interface DiscussionsPanelProps {
 
 type TabKey = 'announcement' | 'discussion';
 type ScopeFilter = 'all' | 'global' | 'class';
+type DraftLink = { url: string; title?: string };
+
+const MAX_ATTACHMENTS = 5;
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
   const now = new Date();
   const diffMs = now.getTime() - d.getTime();
   const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 1) return 'Vừa xong';
-  if (diffMin < 60) return `${diffMin} phút trước`;
+  if (diffMin < 1) return 'Just now';
+  if (diffMin < 60) return `${diffMin}m ago`;
   const diffH = Math.floor(diffMin / 60);
-  if (diffH < 24) return `${diffH} giờ trước`;
+  if (diffH < 24) return `${diffH}h ago`;
   const diffD = Math.floor(diffH / 24);
-  if (diffD < 7) return `${diffD} ngày trước`;
-  return d.toLocaleDateString('vi-VN');
+  if (diffD < 7) return `${diffD}d ago`;
+  return d.toLocaleDateString('en-US');
 }
 
 function authorName(d: { fullName: string | null; username: string }): string {
@@ -61,12 +66,213 @@ function authorInitials(name: string): string {
     .join('');
 }
 
+function formatFileSize(bytes: number | null | undefined): string {
+  if (!bytes) return '';
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function attachmentLabel(attachment: DiscussionAttachment): string {
+  if (attachment.title) return attachment.title;
+  if (attachment.fileName) return attachment.fileName;
+  return attachment.type === 'LINK' ? attachment.url : 'Attachment';
+}
+
+function isValidUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 function RoleBadge({ role }: { role: string }) {
   const r = role.toUpperCase();
   if (r === 'ADMIN') return <Badge variant="danger" size="sm">Admin</Badge>;
-  if (r === 'TEACHER') return <Badge variant="brand" size="sm">Giáo viên</Badge>;
-  if (r === 'STUDENT') return <Badge variant="info" size="sm">Học sinh</Badge>;
+  if (r === 'TEACHER') return <Badge variant="brand" size="sm">Teacher</Badge>;
+  if (r === 'STUDENT') return <Badge variant="info" size="sm">Student</Badge>;
   return <Badge variant="neutral" size="sm">{r}</Badge>;
+}
+
+function AttachmentComposer({
+  prefix,
+  linkInput,
+  setLinkInput,
+  onAddLink,
+  links,
+  onRemoveLink,
+  files,
+  onAddFiles,
+  onRemoveFile,
+}: {
+  prefix: string;
+  linkInput: string;
+  setLinkInput: (value: string) => void;
+  onAddLink: () => void;
+  links: DraftLink[];
+  onRemoveLink: (index: number) => void;
+  files: File[];
+  onAddFiles: (files: FileList | null) => void;
+  onRemoveFile: (index: number) => void;
+}) {
+  const canAddFiles = files.length < MAX_ATTACHMENTS;
+
+  return (
+    <div className="rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-bg-subtle)] p-3">
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <div className="flex min-w-0 flex-1 gap-2">
+          <Input
+            placeholder="Paste a link..."
+            value={linkInput}
+            onChange={(e) => setLinkInput(e.target.value)}
+            className="text-sm"
+          />
+          <Button variant="outline" size="sm" onClick={onAddLink} disabled={!linkInput.trim()}>
+            Link
+          </Button>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { key: 'file', label: 'File', accept: undefined },
+            { key: 'image', label: 'Image', accept: 'image/*' },
+            { key: 'video', label: 'Video', accept: 'video/*' },
+          ].map((item) => (
+            <label
+              key={item.key}
+              htmlFor={`${prefix}-${item.key}`}
+              className={`inline-flex cursor-pointer items-center rounded-lg border border-[var(--color-border)] px-3 py-1.5 text-sm font-medium transition-colors ${
+                canAddFiles
+                  ? 'hover:bg-[var(--color-bg-muted)]'
+                  : 'pointer-events-none opacity-50'
+              }`}
+            >
+              {item.label}
+              <input
+                id={`${prefix}-${item.key}`}
+                type="file"
+                multiple
+                accept={item.accept}
+                className="hidden"
+                disabled={!canAddFiles}
+                onChange={(e) => {
+                  onAddFiles(e.target.files);
+                  e.target.value = '';
+                }}
+              />
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {(links.length > 0 || files.length > 0) && (
+        <div className="mt-3 flex flex-col gap-2 text-xs">
+          {links.map((link, index) => (
+            <div
+              key={`${link.url}-${index}`}
+              className="flex items-center gap-2 rounded-md bg-[var(--color-bg-card)] px-2 py-1.5"
+            >
+              <span className="font-semibold text-[var(--color-primary)]">Link</span>
+              <span className="min-w-0 flex-1 truncate text-[var(--color-text-secondary)]">
+                {link.url}
+              </span>
+              <button
+                type="button"
+                onClick={() => onRemoveLink(index)}
+                className="text-[var(--color-danger)] hover:underline"
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+          {files.map((file, index) => (
+            <div
+              key={`${file.name}-${file.size}-${index}`}
+              className="flex items-center gap-2 rounded-md bg-[var(--color-bg-card)] px-2 py-1.5"
+            >
+              <span className="font-semibold text-[var(--color-text-muted)]">
+                {file.type.startsWith('image/')
+                  ? 'Image'
+                  : file.type.startsWith('video/')
+                    ? 'Video'
+                    : 'File'}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-[var(--color-text-secondary)]">
+                {file.name}
+              </span>
+              <span className="text-[var(--color-text-muted)]">{formatFileSize(file.size)}</span>
+              <button
+                type="button"
+                onClick={() => onRemoveFile(index)}
+                className="text-[var(--color-danger)] hover:underline"
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <p className="mt-2 text-[11px] text-[var(--color-text-muted)]">
+        Up to {MAX_ATTACHMENTS} files, 100MB each.
+      </p>
+    </div>
+  );
+}
+
+function AttachmentList({ attachments }: { attachments?: DiscussionAttachment[] }) {
+  if (!attachments || attachments.length === 0) return null;
+
+  const openAttachment = async (attachment: DiscussionAttachment) => {
+    try {
+      const url = await getDiscussionAttachmentUrl(attachment.id);
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to open attachment';
+      window.alert(message);
+    }
+  };
+
+  return (
+    <div className="mt-3 flex flex-col gap-2">
+      {attachments.map((attachment) => (
+        <button
+          key={attachment.id}
+          type="button"
+          onClick={() => openAttachment(attachment)}
+          className="flex items-center gap-2 rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-bg-subtle)] px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--color-bg-muted)]"
+        >
+          <Badge
+            variant={
+              attachment.type === 'LINK'
+                ? 'accent'
+                : attachment.type === 'IMAGE'
+                  ? 'success'
+                  : attachment.type === 'VIDEO'
+                    ? 'warning'
+                    : 'neutral'
+            }
+            size="sm"
+          >
+            {attachment.type === 'LINK'
+              ? 'Link'
+              : attachment.type === 'IMAGE'
+                ? 'Image'
+                : attachment.type === 'VIDEO'
+                  ? 'Video'
+                  : 'File'}
+          </Badge>
+          <span className="min-w-0 flex-1 truncate text-[var(--color-text-primary)]">
+            {attachmentLabel(attachment)}
+          </span>
+          {attachment.fileSizeBytes && (
+            <span className="text-xs text-[var(--color-text-muted)]">
+              {formatFileSize(attachment.fileSizeBytes)}
+            </span>
+          )}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 export function DiscussionsPanel({ adminMode = false }: DiscussionsPanelProps) {
@@ -95,10 +301,16 @@ export function DiscussionsPanel({ adminMode = false }: DiscussionsPanelProps) {
     classId: undefined as number | undefined,
     title: '',
     content: '',
+    links: [] as DraftLink[],
+    files: [] as File[],
   });
   const [submitting, setSubmitting] = useState(false);
+  const [createLinkInput, setCreateLinkInput] = useState('');
 
   const [replyContent, setReplyContent] = useState('');
+  const [replyLinks, setReplyLinks] = useState<DraftLink[]>([]);
+  const [replyFiles, setReplyFiles] = useState<File[]>([]);
+  const [replyLinkInput, setReplyLinkInput] = useState('');
 
   // Debounce search
   useEffect(() => {
@@ -147,7 +359,7 @@ export function DiscussionsPanel({ adminMode = false }: DiscussionsPanelProps) {
       const res = await listDiscussions(params);
       setItems(res.data);
     } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : 'Không tải được danh sách';
+      const message = e instanceof Error ? e.message : 'Failed to load list';
       setError(message);
     } finally {
       setLoading(false);
@@ -176,16 +388,58 @@ export function DiscussionsPanel({ adminMode = false }: DiscussionsPanelProps) {
   const handleSelect = async (d: Discussion) => {
     setSelected(d);
     setReplyContent('');
+    setReplyLinks([]);
+    setReplyFiles([]);
+    setReplyLinkInput('');
     await refreshSelected(d.id);
   };
 
+  const addCreateFiles = (files: FileList | null) => {
+    if (!files) return;
+    setCreateForm((f) => ({
+      ...f,
+      files: [...f.files, ...Array.from(files)].slice(0, MAX_ATTACHMENTS),
+    }));
+  };
+
+  const addReplyFiles = (files: FileList | null) => {
+    if (!files) return;
+    setReplyFiles((current) => [...current, ...Array.from(files)].slice(0, MAX_ATTACHMENTS));
+  };
+
+  const addCreateLink = () => {
+    const url = createLinkInput.trim();
+    if (!isValidUrl(url)) {
+      setError('Please enter a valid http(s) link');
+      return;
+    }
+    setCreateForm((f) => ({ ...f, links: [...f.links, { url }] }));
+    setCreateLinkInput('');
+    setError(null);
+  };
+
+  const addReplyLink = () => {
+    const url = replyLinkInput.trim();
+    if (!isValidUrl(url)) {
+      setError('Please enter a valid http(s) link');
+      return;
+    }
+    setReplyLinks((current) => [...current, { url }]);
+    setReplyLinkInput('');
+    setError(null);
+  };
+
   const handleCreate = async () => {
-    if (!createForm.title.trim() || !createForm.content.trim()) {
-      setError('Vui lòng nhập tiêu đề và nội dung');
+    if (!createForm.title.trim()) {
+      setError('Please enter a title');
+      return;
+    }
+    if (!createForm.content.trim() && createForm.links.length === 0 && createForm.files.length === 0) {
+      setError('Please enter content, add a link, or attach a file');
       return;
     }
     if (createForm.scope === 'CLASS' && !createForm.classId) {
-      setError('Vui lòng chọn lớp');
+      setError('Please select a class');
       return;
     }
     setSubmitting(true);
@@ -197,6 +451,8 @@ export function DiscussionsPanel({ adminMode = false }: DiscussionsPanelProps) {
         classId: createForm.scope === 'CLASS' ? createForm.classId : undefined,
         title: createForm.title.trim(),
         content: createForm.content.trim(),
+        links: createForm.links,
+        files: createForm.files,
       });
       setCreating(false);
       setCreateForm({
@@ -205,11 +461,14 @@ export function DiscussionsPanel({ adminMode = false }: DiscussionsPanelProps) {
         classId: undefined,
         title: '',
         content: '',
+        links: [],
+        files: [],
       });
+      setCreateLinkInput('');
       await reload();
       await handleSelect(created);
     } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : 'Không tạo được bài viết';
+      const message = e instanceof Error ? e.message : 'Failed to create post';
       setError(message);
     } finally {
       setSubmitting(false);
@@ -217,11 +476,14 @@ export function DiscussionsPanel({ adminMode = false }: DiscussionsPanelProps) {
   };
 
   const handleSendReply = async () => {
-    if (!selected || !replyContent.trim()) return;
+    if (!selected || (!replyContent.trim() && replyLinks.length === 0 && replyFiles.length === 0)) return;
     setSubmitting(true);
     try {
-      await createReply(selected.id, replyContent.trim());
+      await createReply(selected.id, replyContent.trim(), replyLinks, replyFiles);
       setReplyContent('');
+      setReplyLinks([]);
+      setReplyFiles([]);
+      setReplyLinkInput('');
       await refreshSelected(selected.id);
       await reload();
     } catch (e) {
@@ -233,7 +495,7 @@ export function DiscussionsPanel({ adminMode = false }: DiscussionsPanelProps) {
 
   const handleDeleteReply = async (reply: DiscussionReply) => {
     if (!selected) return;
-    if (!window.confirm('Xóa reply này?')) return;
+    if (!window.confirm('Delete this reply?')) return;
     try {
       await deleteReply(reply.id);
       await refreshSelected(selected.id);
@@ -243,25 +505,25 @@ export function DiscussionsPanel({ adminMode = false }: DiscussionsPanelProps) {
   };
 
   const handleEditReply = async (reply: DiscussionReply) => {
-    const next = window.prompt('Sửa nội dung:', reply.content);
+    const next = window.prompt('Edit content:', reply.content);
     if (!next || !next.trim() || next === reply.content) return;
     try {
       await updateReply(reply.id, next.trim());
       if (selected) await refreshSelected(selected.id);
     } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : 'Không sửa được';
+      const message = e instanceof Error ? e.message : 'Failed to edit';
       window.alert(message);
     }
   };
 
   const handleDeleteDiscussion = async (d: Discussion) => {
-    if (!window.confirm(`Xóa "${d.title}"?`)) return;
+    if (!window.confirm(`Delete "${d.title}"?`)) return;
     try {
       await deleteDiscussion(d.id);
       if (selected?.id === d.id) setSelected(null);
       await reload();
     } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : 'Không xóa được';
+      const message = e instanceof Error ? e.message : 'Failed to delete';
       window.alert(message);
     }
   };
@@ -272,7 +534,7 @@ export function DiscussionsPanel({ adminMode = false }: DiscussionsPanelProps) {
       if (selected?.id === d.id) setSelected({ ...selected, isPinned: updated.isPinned });
       await reload();
     } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : 'Không cập nhật được';
+      const message = e instanceof Error ? e.message : 'Failed to update';
       window.alert(message);
     }
   };
@@ -283,7 +545,7 @@ export function DiscussionsPanel({ adminMode = false }: DiscussionsPanelProps) {
       if (selected?.id === d.id) setSelected({ ...selected, isLocked: updated.isLocked });
       await reload();
     } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : 'Không cập nhật được';
+      const message = e instanceof Error ? e.message : 'Failed to update';
       window.alert(message);
     }
   };
@@ -366,7 +628,7 @@ export function DiscussionsPanel({ adminMode = false }: DiscussionsPanelProps) {
                 : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'
             }`}
           >
-            💬 Thảo luận
+            💬 Discussions
           </button>
           <button
             type="button"
@@ -380,7 +642,7 @@ export function DiscussionsPanel({ adminMode = false }: DiscussionsPanelProps) {
                 : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'
             }`}
           >
-            📢 Thông báo
+            📢 Announcements
           </button>
         </div>
 
@@ -391,10 +653,19 @@ export function DiscussionsPanel({ adminMode = false }: DiscussionsPanelProps) {
             onClick={() => {
               setCreating(true);
               setSelected(null);
-              setCreateForm((f) => ({ ...f, type: tab === 'announcement' ? 'ANNOUNCEMENT' : 'DISCUSSION' }));
+              setCreateForm({
+                type: tab === 'announcement' ? 'ANNOUNCEMENT' : 'DISCUSSION',
+                scope: 'CLASS',
+                classId: undefined,
+                title: '',
+                content: '',
+                links: [],
+                files: [],
+              });
+              setCreateLinkInput('');
             }}
           >
-            + Tạo {tab === 'announcement' ? 'thông báo' : 'thảo luận'}
+            + New {tab === 'announcement' ? 'announcement' : 'discussion'}
           </Button>
         )}
       </div>
@@ -417,7 +688,7 @@ export function DiscussionsPanel({ adminMode = false }: DiscussionsPanelProps) {
                       : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'
                   }`}
                 >
-                  {s === 'all' ? 'Tất cả' : s === 'global' ? 'Toàn trường' : 'Theo lớp'}
+                  {s === 'all' ? 'All' : s === 'global' ? 'School-wide' : 'By class'}
                 </button>
               ))}
             </div>
@@ -428,17 +699,17 @@ export function DiscussionsPanel({ adminMode = false }: DiscussionsPanelProps) {
                 onChange={(e) => setClassFilter(e.target.value ? Number(e.target.value) : undefined)}
                 className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] px-3 py-1.5 text-sm focus-ring-brand"
               >
-                <option value="">Tất cả lớp của tôi</option>
+                <option value="">All my classes</option>
                 {classes.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.name} {c.gradeLevel ? `(K${c.gradeLevel})` : ''}
+                    {c.name} {c.gradeLevel ? `(G${c.gradeLevel})` : ''}
                   </option>
                 ))}
               </select>
             )}
 
             <Input
-              placeholder="Tìm kiếm…"
+              placeholder="Search…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="text-sm"
@@ -454,7 +725,7 @@ export function DiscussionsPanel({ adminMode = false }: DiscussionsPanelProps) {
             ) : items.length === 0 ? (
               <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-sm text-[var(--color-text-muted)]">
                 <span className="text-3xl">🗒️</span>
-                <p>Chưa có {tab === 'announcement' ? 'thông báo' : 'thảo luận'} nào</p>
+                <p>No {tab === 'announcement' ? 'announcements' : 'discussions'} yet</p>
               </div>
             ) : (
               <ul className="divide-y divide-[var(--color-border-subtle)]">
@@ -478,15 +749,20 @@ export function DiscussionsPanel({ adminMode = false }: DiscussionsPanelProps) {
                         </div>
                         <div className="flex w-full flex-wrap items-center gap-1.5 text-[11px] text-[var(--color-text-muted)]">
                           {d.scope === 'GLOBAL' ? (
-                            <Badge variant="accent" size="sm">Toàn trường</Badge>
+                            <Badge variant="accent" size="sm">School-wide</Badge>
                           ) : (
-                            <Badge variant="brand" size="sm">{d.class?.name ?? 'Lớp'}</Badge>
+                            <Badge variant="brand" size="sm">{d.class?.name ?? 'Class'}</Badge>
                           )}
                           <span>•</span>
                           <span>{authorName(d.author)}</span>
                           <span>•</span>
                           <span>{formatDate(d.createdAt)}</span>
-                          <span className="ml-auto">💬 {d._count?.replies ?? 0}</span>
+                          <span className="ml-auto">
+                            {(d.attachments?.length ?? 0) > 0
+                              ? `${d.attachments?.length} attachments - `
+                              : ''}
+                            💬 {d._count?.replies ?? 0}
+                          </span>
                         </div>
                       </button>
                     </li>
@@ -509,17 +785,17 @@ export function DiscussionsPanel({ adminMode = false }: DiscussionsPanelProps) {
             <div className="flex h-full flex-col overflow-y-auto p-5">
               <div className="mb-4 flex items-center justify-between">
                 <h3 className="text-base font-semibold">
-                  Tạo {createForm.type === 'ANNOUNCEMENT' ? 'thông báo' : 'thảo luận'}
+                  New {createForm.type === 'ANNOUNCEMENT' ? 'announcement' : 'discussion'}
                 </h3>
                 <Button variant="ghost" size="sm" onClick={() => setCreating(false)}>
-                  Hủy
+                  Cancel
                 </Button>
               </div>
               <div className="flex flex-col gap-3">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="mb-1 block text-xs font-medium text-[var(--color-text-muted)]">
-                      Loại
+                      Type
                     </label>
                     <select
                       value={createForm.type}
@@ -533,7 +809,7 @@ export function DiscussionsPanel({ adminMode = false }: DiscussionsPanelProps) {
                     >
                       {availableTypes.map((t) => (
                         <option key={t} value={t}>
-                          {t === 'ANNOUNCEMENT' ? 'Thông báo' : 'Thảo luận'}
+                          {t === 'ANNOUNCEMENT' ? 'Announcement' : 'Discussion'}
                         </option>
                       ))}
                     </select>
@@ -541,7 +817,7 @@ export function DiscussionsPanel({ adminMode = false }: DiscussionsPanelProps) {
 
                   <div>
                     <label className="mb-1 block text-xs font-medium text-[var(--color-text-muted)]">
-                      Phạm vi
+                      Scope
                     </label>
                     <select
                       value={createForm.scope}
@@ -556,7 +832,7 @@ export function DiscussionsPanel({ adminMode = false }: DiscussionsPanelProps) {
                     >
                       {availableScopes.map((s) => (
                         <option key={s} value={s}>
-                          {s === 'GLOBAL' ? 'Toàn trường' : 'Theo lớp'}
+                          {s === 'GLOBAL' ? 'School-wide' : 'By class'}
                         </option>
                       ))}
                     </select>
@@ -566,7 +842,7 @@ export function DiscussionsPanel({ adminMode = false }: DiscussionsPanelProps) {
                 {createForm.scope === 'CLASS' && (
                   <div>
                     <label className="mb-1 block text-xs font-medium text-[var(--color-text-muted)]">
-                      Lớp
+                      Class
                     </label>
                     <select
                       value={createForm.classId ?? ''}
@@ -578,7 +854,7 @@ export function DiscussionsPanel({ adminMode = false }: DiscussionsPanelProps) {
                       }
                       className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] px-3 py-2 text-sm focus-ring-brand"
                     >
-                      <option value="">-- Chọn lớp --</option>
+                      <option value="">-- Select a class --</option>
                       {classes.map((c) => (
                         <option key={c.id} value={c.id}>
                           {c.name}
@@ -589,31 +865,53 @@ export function DiscussionsPanel({ adminMode = false }: DiscussionsPanelProps) {
                 )}
 
                 <Input
-                  label="Tiêu đề"
-                  placeholder="Ví dụ: Câu hỏi về bài tập chương 3"
+                  label="Title"
+                  placeholder="e.g. Question about chapter 3 exercises"
                   value={createForm.title}
                   onChange={(e) => setCreateForm((f) => ({ ...f, title: e.target.value }))}
                 />
 
                 <div>
                   <label className="mb-1 block text-xs font-medium text-[var(--color-text-muted)]">
-                    Nội dung
+                    Content
                   </label>
                   <textarea
                     rows={8}
                     value={createForm.content}
                     onChange={(e) => setCreateForm((f) => ({ ...f, content: e.target.value }))}
-                    placeholder="Mô tả chi tiết câu hỏi/thông báo của bạn…"
+                    placeholder="Describe your question / announcement in detail…"
                     className="w-full resize-y rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] px-3 py-2 text-sm focus-ring-brand"
                   />
                 </div>
 
+                <AttachmentComposer
+                  prefix="discussion-create"
+                  linkInput={createLinkInput}
+                  setLinkInput={setCreateLinkInput}
+                  onAddLink={addCreateLink}
+                  links={createForm.links}
+                  onRemoveLink={(index) =>
+                    setCreateForm((f) => ({
+                      ...f,
+                      links: f.links.filter((_, i) => i !== index),
+                    }))
+                  }
+                  files={createForm.files}
+                  onAddFiles={addCreateFiles}
+                  onRemoveFile={(index) =>
+                    setCreateForm((f) => ({
+                      ...f,
+                      files: f.files.filter((_, i) => i !== index),
+                    }))
+                  }
+                />
+
                 <div className="flex justify-end gap-2">
                   <Button variant="ghost" onClick={() => setCreating(false)} disabled={submitting}>
-                    Hủy
+                    Cancel
                   </Button>
                   <Button variant="primary" onClick={handleCreate} isLoading={submitting}>
-                    Đăng
+                    Post
                   </Button>
                 </div>
               </div>
@@ -624,6 +922,18 @@ export function DiscussionsPanel({ adminMode = false }: DiscussionsPanelProps) {
               loading={selectedLoading}
               replyContent={replyContent}
               setReplyContent={setReplyContent}
+              replyLinks={replyLinks}
+              replyLinkInput={replyLinkInput}
+              setReplyLinkInput={setReplyLinkInput}
+              onAddReplyLink={addReplyLink}
+              onRemoveReplyLink={(index) =>
+                setReplyLinks((current) => current.filter((_, i) => i !== index))
+              }
+              replyFiles={replyFiles}
+              onAddReplyFiles={addReplyFiles}
+              onRemoveReplyFile={(index) =>
+                setReplyFiles((current) => current.filter((_, i) => i !== index))
+              }
               onSendReply={handleSendReply}
               onDeleteReply={handleDeleteReply}
               onEditReply={handleEditReply}
@@ -641,8 +951,8 @@ export function DiscussionsPanel({ adminMode = false }: DiscussionsPanelProps) {
           ) : (
             <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center text-sm text-[var(--color-text-muted)]">
               <span className="text-4xl">💬</span>
-              <p>Chọn một mục để xem chi tiết</p>
-              <p className="text-xs">hoặc nhấn "Tạo" để bắt đầu bài viết mới</p>
+              <p>Select an item to view details</p>
+              <p className="text-xs">or click "New" to start a new post</p>
             </div>
           )}
         </div>
@@ -656,6 +966,14 @@ interface DiscussionDetailProps {
   loading: boolean;
   replyContent: string;
   setReplyContent: (v: string) => void;
+  replyLinks: DraftLink[];
+  replyLinkInput: string;
+  setReplyLinkInput: (v: string) => void;
+  onAddReplyLink: () => void;
+  onRemoveReplyLink: (index: number) => void;
+  replyFiles: File[];
+  onAddReplyFiles: (files: FileList | null) => void;
+  onRemoveReplyFile: (index: number) => void;
   onSendReply: () => void;
   onDeleteReply: (r: DiscussionReply) => void;
   onEditReply: (r: DiscussionReply) => void;
@@ -676,6 +994,14 @@ function DiscussionDetail({
   loading,
   replyContent,
   setReplyContent,
+  replyLinks,
+  replyLinkInput,
+  setReplyLinkInput,
+  onAddReplyLink,
+  onRemoveReplyLink,
+  replyFiles,
+  onAddReplyFiles,
+  onRemoveReplyFile,
   onSendReply,
   onDeleteReply,
   onEditReply,
@@ -700,12 +1026,12 @@ function DiscussionDetail({
           <div className="min-w-0 flex-1">
             <div className="mb-2 flex flex-wrap items-center gap-2">
               <Badge variant={discussion.type === 'ANNOUNCEMENT' ? 'warning' : 'info'} size="sm">
-                {discussion.type === 'ANNOUNCEMENT' ? '📢 Thông báo' : '💬 Thảo luận'}
+                {discussion.type === 'ANNOUNCEMENT' ? '📢 Announcement' : '💬 Discussion'}
               </Badge>
               {discussion.scope === 'GLOBAL' ? (
-                <Badge variant="accent" size="sm">Toàn trường</Badge>
+                <Badge variant="accent" size="sm">School-wide</Badge>
               ) : (
-                <Badge variant="brand" size="sm">{discussion.class?.name ?? 'Lớp'}</Badge>
+                <Badge variant="brand" size="sm">{discussion.class?.name ?? 'Class'}</Badge>
               )}
               {discussion.isPinned && <Badge variant="success" size="sm">📌 Pinned</Badge>}
               {discussion.isLocked && <Badge variant="neutral" size="sm">🔒 Locked</Badge>}
@@ -716,16 +1042,16 @@ function DiscussionDetail({
             {canModerate && (
               <>
                 <Button variant="outline" size="sm" onClick={onTogglePin}>
-                  {discussion.isPinned ? 'Bỏ pin' : 'Pin'}
+                  {discussion.isPinned ? 'Unpin' : 'Pin'}
                 </Button>
                 <Button variant="outline" size="sm" onClick={onToggleLock}>
-                  {discussion.isLocked ? 'Mở khóa' : 'Khóa'}
+                  {discussion.isLocked ? 'Unlock' : 'Lock'}
                 </Button>
               </>
             )}
             {canDeleteDiscussion && (
               <Button variant="danger" size="sm" onClick={onDeleteDiscussion}>
-                Xóa
+                Delete
               </Button>
             )}
           </div>
@@ -756,20 +1082,25 @@ function DiscussionDetail({
           {loading ? (
             <Spinner />
           ) : (
-            <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--color-text-primary)]">
-              {discussion.content}
-            </p>
+            <>
+              {discussion.content && (
+                <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--color-text-primary)]">
+                  {discussion.content}
+                </p>
+              )}
+              <AttachmentList attachments={discussion.attachments} />
+            </>
           )}
         </div>
 
         {/* Replies */}
         <div className="p-5">
           <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--color-text-secondary)]">
-            💬 {replies.length} phản hồi
+            💬 {replies.length} replies
           </div>
           {replies.length === 0 ? (
             <div className="rounded-lg border border-dashed border-[var(--color-border)] p-6 text-center text-sm text-[var(--color-text-muted)]">
-              Chưa có phản hồi. Hãy là người đầu tiên!
+              No replies yet. Be the first!
             </div>
           ) : (
             <ul className="flex flex-col gap-3">
@@ -794,7 +1125,7 @@ function DiscussionDetail({
                             {formatDate(r.createdAt)}
                           </span>
                           {r.updatedAt !== r.createdAt && (
-                            <span className="italic text-[var(--color-text-muted)]">(đã sửa)</span>
+                            <span className="italic text-[var(--color-text-muted)]">(edited)</span>
                           )}
                           <div className="ml-auto flex gap-1">
                             {canEditReply(r) && (
@@ -803,7 +1134,7 @@ function DiscussionDetail({
                                 onClick={() => onEditReply(r)}
                                 className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-primary)]"
                               >
-                                Sửa
+                                Edit
                               </button>
                             )}
                             {canDeleteReply(r) && (
@@ -812,14 +1143,17 @@ function DiscussionDetail({
                                 onClick={() => onDeleteReply(r)}
                                 className="text-xs text-[var(--color-danger)] hover:underline"
                               >
-                                Xóa
+                                Delete
                               </button>
                             )}
                           </div>
                         </div>
-                        <p className="mt-1 whitespace-pre-wrap text-sm text-[var(--color-text-primary)]">
-                          {r.content}
-                        </p>
+                        {r.content && (
+                          <p className="mt-1 whitespace-pre-wrap text-sm text-[var(--color-text-primary)]">
+                            {r.content}
+                          </p>
+                        )}
+                        <AttachmentList attachments={r.attachments} />
                       </div>
                     </div>
                   </li>
@@ -833,21 +1167,36 @@ function DiscussionDetail({
       {/* Reply input */}
       {!discussion.isLocked && (
         <div className="border-t border-[var(--color-border-subtle)] p-4">
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2">
             <textarea
               rows={2}
               value={replyContent}
               onChange={(e) => setReplyContent(e.target.value)}
-              placeholder="Viết phản hồi…"
-              className="flex-1 resize-none rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] px-3 py-2 text-sm focus-ring-brand"
+              placeholder="Write a reply…"
+              className="w-full resize-none rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] px-3 py-2 text-sm focus-ring-brand"
+            />
+            <AttachmentComposer
+              prefix={`discussion-reply-${discussion.id}`}
+              linkInput={replyLinkInput}
+              setLinkInput={setReplyLinkInput}
+              onAddLink={onAddReplyLink}
+              links={replyLinks}
+              onRemoveLink={onRemoveReplyLink}
+              files={replyFiles}
+              onAddFiles={onAddReplyFiles}
+              onRemoveFile={onRemoveReplyFile}
             />
             <Button
               variant="primary"
               onClick={onSendReply}
-              disabled={!replyContent.trim() || submitting}
+              disabled={
+                (!replyContent.trim() && replyLinks.length === 0 && replyFiles.length === 0) ||
+                submitting
+              }
               isLoading={submitting}
+              className="self-end"
             >
-              Gửi
+              Send
             </Button>
           </div>
         </div>

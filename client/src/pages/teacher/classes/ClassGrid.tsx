@@ -55,7 +55,7 @@ export function ClassGrid({ classes, selectedClassId, onSelect, onEdit }: ClassG
               <div className="mt-4 grid grid-cols-2 gap-2 border-t border-[var(--color-border-subtle)] pt-3 text-xs">
                 <div>
                   <p className="text-[10px] uppercase tracking-wider text-[var(--color-text-muted)]">
-                    Học sinh
+                    Students
                   </p>
                   <p className="mt-0.5 text-lg font-bold tabular-nums text-[var(--color-text-primary)]">
                     {cls._count?.classStudents ?? 0}
@@ -64,7 +64,7 @@ export function ClassGrid({ classes, selectedClassId, onSelect, onEdit }: ClassG
                 {cls.semester && (
                   <div className="min-w-0">
                     <p className="text-[10px] uppercase tracking-wider text-[var(--color-text-muted)]">
-                      Năm học
+                      Academic Year
                     </p>
                     <p className="mt-0.5 truncate text-sm font-semibold text-[var(--color-text-primary)]">
                       {cls.semester.academicYear?.name ?? cls.semester.name}
@@ -92,7 +92,7 @@ export function ClassGrid({ classes, selectedClassId, onSelect, onEdit }: ClassG
                   <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
                   </svg>
-                  Sửa
+                  Edit
                 </span>
               </div>
             </div>

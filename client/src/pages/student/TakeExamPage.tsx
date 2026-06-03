@@ -76,6 +76,10 @@ export default function TakeExamPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [tabSwitchCount, setTabSwitchCount] = useState(0);
   const [showTabWarning, setShowTabWarning] = useState(false);
+  const [needsPassword, setNeedsPassword] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordSubmitting, setPasswordSubmitting] = useState(false);
 
   const pendingSave = useRef<Record<string, StudentAnswerValue>>({});
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -147,27 +151,56 @@ export default function TakeExamPage() {
   const sendMonitoringEventRef = useRef(sendMonitoringEvent);
   sendMonitoringEventRef.current = sendMonitoringEvent;
 
-  // Start or resume exam
-  useEffect(() => {
-    if (!examId || isNaN(examId)) {
-      setError('Invalid exam ID');
-      setLoading(false);
-      return;
-    }
+  // Start or resume exam (re-runnable with a password for protected exams)
+  const runStart = useCallback(
+    (password?: string) => {
+      if (!examId || isNaN(examId)) {
+        setError('Invalid exam ID');
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      if (password !== undefined) setPasswordSubmitting(true);
 
-    startMutation.mutate(examId, {
-      onSuccess: (res) => {
-        const d = res.data;
-        setExamData(d);
-        setAnswers(d.savedAnswers ?? {});
-        setTimeLeft(d.attempt.timeRemainingsSec);
-        setLoading(false);
-      },
-      onError: (err) => {
-        setError(err.message || 'Failed to start exam');
-        setLoading(false);
-      },
-    });
+      startMutation.mutate(
+        { examId, password },
+        {
+          onSuccess: (res) => {
+            const d = res.data;
+            setExamData(d);
+            setAnswers(d.savedAnswers ?? {});
+            setTimeLeft(d.attempt.timeRemainingsSec);
+            setNeedsPassword(false);
+            setPasswordError(null);
+            setPasswordSubmitting(false);
+            setLoading(false);
+          },
+          onError: (err) => {
+            const resp = (
+              err as { response?: { data?: { message?: string; data?: { code?: string } } } }
+            ).response;
+            const code = resp?.data?.data?.code;
+            const message = resp?.data?.message;
+            setPasswordSubmitting(false);
+            setLoading(false);
+            if (code === 'PASSWORD_REQUIRED' || code === 'PASSWORD_INCORRECT') {
+              setNeedsPassword(true);
+              setPasswordError(
+                code === 'PASSWORD_INCORRECT' ? message ?? 'Incorrect password' : null,
+              );
+              return;
+            }
+            setError(message || err.message || 'Failed to start exam');
+          },
+        },
+      );
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [examId],
+  );
+
+  useEffect(() => {
+    runStart();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [examId]);
 
@@ -484,6 +517,63 @@ export default function TakeExamPage() {
     );
   }
 
+  // Password gate (§9): exam requires a password before a fresh attempt
+  if (needsPassword && !examData) {
+    return (
+      <div className="mx-auto mt-16 max-w-md animate-fade-in-up">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (passwordInput.trim()) runStart(passwordInput);
+          }}
+          className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-8 text-center shadow-[var(--shadow-md)]"
+        >
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--color-primary-soft)]">
+            <svg className="h-7 w-7 text-[var(--color-primary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 00-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+            </svg>
+          </div>
+          <h2 className="text-lg font-bold tracking-tight text-[var(--color-text-primary)]">
+            This exam requires a password
+          </h2>
+          <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
+            Enter the password provided by your teacher to start the exam.
+          </p>
+          <input
+            type="password"
+            autoFocus
+            value={passwordInput}
+            onChange={(e) => setPasswordInput(e.target.value)}
+            placeholder="Password"
+            className="mt-5 w-full rounded-xl border-2 border-[var(--color-border)] bg-[var(--color-bg-input)] px-4 py-2.5 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-primary)] focus:outline-none"
+          />
+          {passwordError && (
+            <p className="mt-2 text-sm font-medium text-[var(--color-danger)]">{passwordError}</p>
+          )}
+          <div className="mt-5 flex gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              fullWidth
+              onClick={() => navigate('/student/exams')}
+            >
+              Back
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              fullWidth
+              isLoading={passwordSubmitting}
+              disabled={!passwordInput.trim()}
+            >
+              Start exam
+            </Button>
+          </div>
+        </form>
+      </div>
+    );
+  }
+
   // Error state
   if (error || !examData) {
     return (
@@ -513,6 +603,22 @@ export default function TakeExamPage() {
   const isWarning = timeLeft <= WARNING_THRESHOLD && timeLeft > CRITICAL_THRESHOLD;
   const isCritical = timeLeft <= CRITICAL_THRESHOLD;
 
+  // Pagination (§7): group questions into pages; default 1 question/page.
+  const navigationMode = examData.exam.navigationMode ?? 'FREE';
+  const isSequential = navigationMode === 'SEQUENTIAL';
+  const perPage =
+    examData.exam.questionsPerPage && examData.exam.questionsPerPage > 0
+      ? examData.exam.questionsPerPage
+      : 1;
+  const totalPages = Math.max(1, Math.ceil(questions.length / perPage));
+  const currentPage = Math.floor(currentIndex / perPage);
+  const pageStart = currentPage * perPage;
+  const pageQuestions = questions.slice(pageStart, pageStart + perPage);
+  const canPrev = currentPage > 0 && !isSequential;
+  const canNext = currentPage < totalPages - 1;
+  const canSelectQuestion = (i: number) =>
+    !isSequential || Math.floor(i / perPage) === currentPage;
+
   return (
     <div className="-m-4 flex h-[calc(100vh-4rem)] flex-col sm:-m-6 lg:-m-8">
       <ExamBanners
@@ -534,17 +640,26 @@ export default function TakeExamPage() {
 
       <div className="flex flex-1 overflow-hidden">
         <div className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
-            <QuestionPanel
-              question={currentQuestion}
-              currentIndex={currentIndex}
-              total={questions.length}
-              answer={answers[String(currentQuestion?.questionId ?? 0)]}
-              onSingleSelect={selectAnswer}
-              onMultiSelect={toggleMultiAnswer}
-              onTextAnswer={setTextAnswer}
-              onMatchingAnswer={setMatchingAnswer}
-            />
+          <div className="mx-auto max-w-3xl space-y-8 px-4 py-6 sm:px-6">
+            {pageQuestions.map((q, idx) => {
+              const globalIndex = pageStart + idx;
+              return (
+                <QuestionPanel
+                  key={q.questionId}
+                  question={q}
+                  currentIndex={globalIndex}
+                  total={questions.length}
+                  compact={perPage > 1}
+                  isFlagged={flagged.has(globalIndex)}
+                  onToggleFlag={() => toggleFlag(globalIndex)}
+                  answer={answers[String(q.questionId)]}
+                  onSingleSelect={selectAnswer}
+                  onMultiSelect={toggleMultiAnswer}
+                  onTextAnswer={setTextAnswer}
+                  onMatchingAnswer={setMatchingAnswer}
+                />
+              );
+            })}
           </div>
         </div>
 
@@ -555,6 +670,7 @@ export default function TakeExamPage() {
           currentIndex={currentIndex}
           sidebarOpen={sidebarOpen}
           unansweredCount={unansweredCount}
+          canSelect={canSelectQuestion}
           onSelect={(i) => {
             setCurrentIndex(i);
             setSidebarOpen(false);
@@ -564,13 +680,16 @@ export default function TakeExamPage() {
       </div>
 
       <ExamFooter
-        currentIndex={currentIndex}
-        total={questions.length}
-        isFlagged={flagged.has(currentIndex)}
+        canPrev={canPrev}
+        canNext={canNext}
+        pageLabel={
+          perPage > 1
+            ? `Page ${currentPage + 1}/${totalPages}`
+            : `Question ${currentPage + 1}/${totalPages}`
+        }
         isSubmitting={submitMutation.isPending}
-        onPrev={() => setCurrentIndex((i) => Math.max(0, i - 1))}
-        onNext={() => setCurrentIndex((i) => Math.min(questions.length - 1, i + 1))}
-        onToggleFlag={() => toggleFlag(currentIndex)}
+        onPrev={() => setCurrentIndex(Math.max(0, pageStart - perPage))}
+        onNext={() => setCurrentIndex(Math.min(questions.length - 1, pageStart + perPage))}
         onOpenSubmit={() => setShowSubmitDialog(true)}
       />
 

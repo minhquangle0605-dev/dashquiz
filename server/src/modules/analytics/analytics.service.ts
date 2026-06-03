@@ -306,17 +306,26 @@ export class StudentAnalyticsService {
   /**
    * UC14 – Knowledge Graph
    * Nodes (topics + mastery) + edges (topic_relations)
+   * Enriched with chapter clustering, mastery summary, and study recommendations.
    */
   async getKnowledgeGraph(studentId: number, subjectId?: number) {
     const topicWhere: Prisma.TopicWhereInput = subjectId ? { chapter: { subjectId } } : {};
 
-    const [topics, relations, strengths] = await Promise.all([
+    const [topics, relations, strengths, allSubjects] = await Promise.all([
       prisma.topic.findMany({
         where: topicWhere,
         select: {
           id: true,
           name: true,
-          chapter: { select: { name: true, subject: { select: { id: true, name: true } } } },
+          chapterId: true,
+          chapter: {
+            select: {
+              id: true,
+              name: true,
+              orderIndex: true,
+              subject: { select: { id: true, name: true } },
+            },
+          },
         },
       }),
 
@@ -328,36 +337,66 @@ export class StudentAnalyticsService {
       }),
 
       this.getStrengths(studentId, subjectId),
+
+      prisma.subject.findMany({
+        where: { status: 1 },
+        select: { id: true, name: true },
+        orderBy: { id: 'asc' },
+      }),
     ]);
 
+    const strengthList = strengths as Array<{
+      topicId: number;
+      accuracy: number;
+      correctCount: number;
+      totalQuestions: number;
+    }>;
+
     const masteryMap = new Map<number, number>();
-    for (const s of strengths as Array<{ topicId: number; accuracy: number }>) {
+    const attemptsMap = new Map<number, number>();
+    for (const s of strengthList) {
       masteryMap.set(s.topicId, s.accuracy);
+      attemptsMap.set(s.topicId, s.totalQuestions);
     }
 
-    const getMasteryColor = (accuracy: number) => {
+    const getMasteryColor = (accuracy: number, attempted: boolean) => {
+      if (!attempted) return 'gray';
       if (accuracy < 40) return 'red';
       if (accuracy <= 70) return 'yellow';
       return 'green';
     };
 
-    const getMasteryLevel = (accuracy: number) => {
+    const getMasteryLevel = (accuracy: number, attempted: boolean) => {
+      if (!attempted) return 'untouched';
       if (accuracy < 40) return 'weak';
       if (accuracy <= 70) return 'developing';
       return 'strong';
     };
 
+    // Color palette per chapter (stable across renders by chapter id)
+    const chapterPalette = [
+      '#6366f1', '#8b5cf6', '#ec4899', '#f97316', '#14b8a6',
+      '#0ea5e9', '#22c55e', '#eab308', '#ef4444', '#a855f7',
+      '#06b6d4', '#84cc16',
+    ];
+    const chapterColor = (chapterId: number) => chapterPalette[chapterId % chapterPalette.length];
+
     const nodes = topics.map((t) => {
+      const attempted = attemptsMap.has(t.id);
       const mastery = masteryMap.get(t.id) ?? 0;
+      const attempts = attemptsMap.get(t.id) ?? 0;
       return {
         id: t.id,
         name: t.name,
+        chapterId: t.chapter.id,
         chapterName: t.chapter.name,
+        chapterColor: chapterColor(t.chapter.id),
         subjectId: t.chapter.subject.id,
         subjectName: t.chapter.subject.name,
         mastery,
-        masteryLevel: getMasteryLevel(mastery),
-        color: getMasteryColor(mastery),
+        masteryLevel: getMasteryLevel(mastery, attempted),
+        color: getMasteryColor(mastery, attempted),
+        attempts,
       };
     });
 
@@ -371,7 +410,164 @@ export class StudentAnalyticsService {
         relationType: r.relationType,
       }));
 
-    return { nodes, edges };
+    // Chapter aggregation
+    const chapterMap = new Map<
+      number,
+      {
+        id: number;
+        name: string;
+        subjectId: number;
+        subjectName: string;
+        orderIndex: number;
+        color: string;
+        topicCount: number;
+        masterySum: number;
+        masteredCount: number;
+        attemptedCount: number;
+      }
+    >();
+    for (const t of topics) {
+      const existing = chapterMap.get(t.chapter.id);
+      const mastery = masteryMap.get(t.id) ?? 0;
+      const attempted = attemptsMap.has(t.id);
+      if (existing) {
+        existing.topicCount++;
+        existing.masterySum += attempted ? mastery : 0;
+        if (attempted) existing.attemptedCount++;
+        if (mastery > 70) existing.masteredCount++;
+      } else {
+        chapterMap.set(t.chapter.id, {
+          id: t.chapter.id,
+          name: t.chapter.name,
+          subjectId: t.chapter.subject.id,
+          subjectName: t.chapter.subject.name,
+          orderIndex: t.chapter.orderIndex,
+          color: chapterColor(t.chapter.id),
+          topicCount: 1,
+          masterySum: attempted ? mastery : 0,
+          masteredCount: mastery > 70 ? 1 : 0,
+          attemptedCount: attempted ? 1 : 0,
+        });
+      }
+    }
+    const chapters = Array.from(chapterMap.values())
+      .map((c) => ({
+        id: c.id,
+        name: c.name,
+        subjectId: c.subjectId,
+        subjectName: c.subjectName,
+        orderIndex: c.orderIndex,
+        color: c.color,
+        topicCount: c.topicCount,
+        masteredCount: c.masteredCount,
+        attemptedCount: c.attemptedCount,
+        avgMastery:
+          c.attemptedCount > 0
+            ? Math.round((c.masterySum / c.attemptedCount) * 100) / 100
+            : 0,
+      }))
+      .sort((a, b) => a.subjectId - b.subjectId || a.orderIndex - b.orderIndex);
+
+    // Mastery summary
+    let strongCount = 0;
+    let developingCount = 0;
+    let weakCount = 0;
+    let untouchedCount = 0;
+    let weightedSum = 0;
+    let weightedTotal = 0;
+    for (const n of nodes) {
+      if (n.masteryLevel === 'strong') strongCount++;
+      else if (n.masteryLevel === 'developing') developingCount++;
+      else if (n.masteryLevel === 'weak') weakCount++;
+      else untouchedCount++;
+      if (n.attempts > 0) {
+        weightedSum += n.mastery * n.attempts;
+        weightedTotal += n.attempts;
+      }
+    }
+    const overallMastery =
+      weightedTotal > 0 ? Math.round((weightedSum / weightedTotal) * 100) / 100 : 0;
+
+    // Build outgoing-edges map (this topic is a prerequisite to others)
+    const outgoing = new Map<number, number[]>();
+    for (const e of edges) {
+      const arr = outgoing.get(e.source) ?? [];
+      arr.push(e.target);
+      outgoing.set(e.source, arr);
+    }
+
+    // Recommendations
+    // 1) Next to study: weak topics with most attempts (struggling the most)
+    const nextToStudy = nodes
+      .filter((n) => n.masteryLevel === 'weak' && n.attempts > 0)
+      .sort((a, b) => b.attempts - a.attempts || a.mastery - b.mastery)
+      .slice(0, 5)
+      .map((n) => ({
+        topicId: n.id,
+        topicName: n.name,
+        chapterName: n.chapterName,
+        subjectName: n.subjectName,
+        mastery: n.mastery,
+        attempts: n.attempts,
+        reason: 'Weak topic with multiple attempts — focus here',
+      }));
+
+    // 2) Quick wins: developing topics close to strong (mastery 55-70)
+    const quickWins = nodes
+      .filter((n) => n.masteryLevel === 'developing' && n.mastery >= 55)
+      .sort((a, b) => b.mastery - a.mastery)
+      .slice(0, 5)
+      .map((n) => ({
+        topicId: n.id,
+        topicName: n.name,
+        chapterName: n.chapterName,
+        subjectName: n.subjectName,
+        mastery: n.mastery,
+        reason: 'Close to mastery — a little push gets you there',
+      }));
+
+    // 3) Key prerequisites: weak/untouched topics that unlock the most others
+    const keyPrerequisites = nodes
+      .filter(
+        (n) =>
+          (n.masteryLevel === 'weak' || n.masteryLevel === 'untouched') &&
+          (outgoing.get(n.id)?.length ?? 0) > 0,
+      )
+      .map((n) => ({
+        topicId: n.id,
+        topicName: n.name,
+        chapterName: n.chapterName,
+        subjectName: n.subjectName,
+        mastery: n.mastery,
+        unlocks: outgoing.get(n.id)?.length ?? 0,
+      }))
+      .sort((a, b) => b.unlocks - a.unlocks)
+      .slice(0, 5);
+
+    const subjects = subjectId
+      ? allSubjects.filter((s) => s.id === subjectId)
+      : allSubjects;
+
+    return {
+      nodes,
+      edges,
+      chapters,
+      subjects,
+      summary: {
+        totalTopics: nodes.length,
+        attemptedTopics: nodes.filter((n) => n.attempts > 0).length,
+        strongCount,
+        developingCount,
+        weakCount,
+        untouchedCount,
+        overallMastery,
+      },
+      recommendations: {
+        nextToStudy,
+        quickWins,
+        keyPrerequisites,
+      },
+    };
   }
 
   /**
@@ -912,16 +1108,16 @@ export class TeacherAnalyticsService {
     if (!result) return { title: 'Exam Results', headers: [], rows: [] as (string | number)[][] };
 
     return {
-      title: `Kết quả kiểm tra: ${result.exam.title}`,
-      headers: ['STT', 'Họ tên', 'Tên đăng nhập', 'Điểm', 'Đạt/Không', 'Thời gian (phút)', 'Nộp lúc'],
+      title: `Exam Results: ${result.exam.title}`,
+      headers: ['No.', 'Full Name', 'Username', 'Score', 'Pass/Fail', 'Time (minutes)', 'Submitted At'],
       rows: result.results.map((r, i) => [
         i + 1,
         r.studentName || '',
         r.studentUsername || '',
         r.score,
-        r.passed === null ? '-' : r.passed ? 'Đạt' : 'Không đạt',
+        r.passed === null ? '-' : r.passed ? 'Pass' : 'Fail',
         r.timeSpentSec ? Math.round(r.timeSpentSec / 60) : 0,
-        r.submittedAt ? new Date(r.submittedAt).toLocaleString('vi-VN') : '',
+        r.submittedAt ? new Date(r.submittedAt).toLocaleString('en-US') : '',
       ]),
     };
   }
@@ -948,8 +1144,8 @@ export class TeacherAnalyticsService {
     });
 
     return {
-      title: `Tổng hợp lớp: ${dashboard.class.name}`,
-      headers: ['STT', 'Họ tên', 'Tên đăng nhập', 'Số bài đã làm', 'Điểm TB', 'Điểm cao nhất', 'Điểm thấp nhất'],
+      title: `Class Summary: ${dashboard.class.name}`,
+      headers: ['No.', 'Full Name', 'Username', 'Attempts', 'Avg Score', 'Max Score', 'Min Score'],
       rows: students.map((s, i) => {
         const scores = s.student.examAttempts.map((a) => Number(a.totalScore ?? 0));
         const avg = scores.length > 0 ? Math.round((scores.reduce((sum, v) => sum + v, 0) / scores.length) * 100) / 100 : 0;

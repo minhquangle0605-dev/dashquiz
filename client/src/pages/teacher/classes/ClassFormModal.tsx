@@ -34,20 +34,20 @@ export function ClassFormModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={isEditing ? 'Chỉnh sửa lớp' : 'Tạo lớp mới'}
-      description={isEditing ? 'Cập nhật thông tin lớp học.' : 'Điền thông tin để tạo lớp.'}
+      title={isEditing ? 'Edit Class' : 'Create New Class'}
+      description={isEditing ? 'Update class information.' : 'Fill in the details to create a class.'}
       size="md"
     >
       <div className="space-y-4">
         <Input
-          label="Tên lớp"
-          placeholder="vd. 10A1"
+          label="Class Name"
+          placeholder="e.g. 10A1"
           value={form.name}
           onChange={(e) => onChange({ ...form, name: e.target.value })}
         />
         <div>
           <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
-            Khối
+            Grade
           </label>
           <select
             className={selectBase}
@@ -56,21 +56,21 @@ export function ClassFormModal({
           >
             {[10, 11, 12].map((g) => (
               <option key={g} value={g}>
-                Khối {g}
+                Grade {g}
               </option>
             ))}
           </select>
         </div>
         <div>
           <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
-            Môn học
+            Subject
           </label>
           <select
             className={selectBase}
             value={form.subjectId || ''}
             onChange={(e) => onChange({ ...form, subjectId: Number(e.target.value) })}
           >
-            <option value="">Chọn môn học</option>
+            <option value="">Select a subject</option>
             {subjects.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
@@ -79,9 +79,9 @@ export function ClassFormModal({
           </select>
         </div>
         <Input
-          label="Năm học"
-          placeholder="vd. 2024 - 2025"
-          hint="Gõ 4 chữ số để tự động format"
+          label="Academic Year"
+          placeholder="e.g. 2024 - 2025"
+          hint="Type 4 digits to auto-format"
           value={form.academicYearString || ''}
           onChange={(e) => {
             let val = e.target.value;
@@ -94,10 +94,10 @@ export function ClassFormModal({
         />
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="outline" onClick={onClose}>
-            Hủy
+            Cancel
           </Button>
           <Button variant="primary" isLoading={saving} onClick={onSubmit}>
-            {isEditing ? 'Lưu thay đổi' : 'Tạo lớp'}
+            {isEditing ? 'Save Changes' : 'Create Class'}
           </Button>
         </div>
       </div>

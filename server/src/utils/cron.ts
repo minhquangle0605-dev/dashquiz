@@ -31,7 +31,7 @@ async function checkTimeWarnings(): Promise<void> {
       emitExamTimeWarning(row.exam_id, {
         examId: row.exam_id,
         minutesRemaining: WARNING_MINUTES,
-        message: `Còn ${WARNING_MINUTES} phút để hoàn thành bài kiểm tra "${row.title}"!`,
+        message: `${WARNING_MINUTES} minutes remaining to finish the exam "${row.title}"!`,
       });
     }
 

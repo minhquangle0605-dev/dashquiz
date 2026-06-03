@@ -100,6 +100,11 @@ export const API_ENDPOINTS = {
     ASSIGN: (id: number) => `/api/exams/${id}/assign`,
     ASSIGNMENTS: (id: number) => `/api/exams/${id}/assignments`,
     MONITORING: (id: number) => `/api/exams/${id}/monitoring`,
+    REPORTS: (id: number) => `/api/exams/${id}/reports`,
+    GRADE_ANSWER: (id: number, attemptId: number, answerId: number) =>
+      `/api/exams/${id}/attempts/${attemptId}/answers/${answerId}/grade`,
+    DELETE_ATTEMPT: (id: number, attemptId: number) =>
+      `/api/exams/${id}/attempts/${attemptId}`,
   },
   CLASSES: {
     BASE: '/api/classes',
@@ -126,6 +131,16 @@ export const API_ENDPOINTS = {
     ATTENDANCE: (activityId: number) =>
       `/api/classes/activities/${activityId}/attendance`,
     COMPLETIONS: (id: number) => `/api/classes/${id}/completions`,
+    GRADEBOOKS: '/api/classes/gradebooks',
+    GRADEBOOK: (id: number) => `/api/classes/${id}/gradebook`,
+    MY_GRADEBOOK: (id: number) => `/api/classes/${id}/gradebook/my`,
+    GRADEBOOK_GRADES: (id: number) => `/api/classes/${id}/gradebook/grades`,
+    GRADEBOOK_GRADE_BY_ID: (classId: number, gradeId: number) =>
+      `/api/classes/${classId}/gradebook/grades/${gradeId}`,
+    GRADEBOOK_GRADE_HISTORY: (classId: number, gradeId: number) =>
+      `/api/classes/${classId}/gradebook/grades/${gradeId}/history`,
+    GRADEBOOK_HISTORY: (id: number) => `/api/classes/${id}/gradebook/history`,
+    GRADEBOOK_LINK: (id: number) => `/api/classes/${id}/gradebook/link`,
     ROLES: (id: number) => `/api/classes/${id}/roles`,
     LOGS: (id: number) => `/api/classes/${id}/logs`,
     STUDENTS: (id: number) => `/api/classes/${id}/students`,
@@ -137,11 +152,22 @@ export const API_ENDPOINTS = {
     IMPORT_STUDENTS: (id: number) => `/api/classes/${id}/students/import`,
     IMPORT_TEMPLATE: '/api/classes/import-template',
   },
+  TIMETABLE: {
+    CLASS: (classId: number) => `/api/timetable/classes/${classId}`,
+    SLOTS: (classId: number) => `/api/timetable/classes/${classId}/slots`,
+    SLOT_BY_ID: (classId: number, slotId: number) =>
+      `/api/timetable/classes/${classId}/slots/${slotId}`,
+    CHECK_CONFLICTS: '/api/timetable/check-conflicts',
+    IMPORT: (classId: number) => `/api/timetable/classes/${classId}/import`,
+    IMPORT_TEMPLATE: '/api/timetable/import-template',
+  },
   DISCUSSIONS: {
     BASE: '/api/discussions',
     BY_ID: (id: number) => `/api/discussions/${id}`,
     REPLIES: (id: number) => `/api/discussions/${id}/replies`,
     REPLY_BY_ID: (replyId: number) => `/api/discussions/replies/${replyId}`,
+    ATTACHMENT_DOWNLOAD_URL: (attachmentId: number) =>
+      `/api/discussions/attachments/${attachmentId}/download-url`,
     ADMIN_ALL: '/api/discussions/admin/all',
   },
   STUDENT_ANALYTICS: {

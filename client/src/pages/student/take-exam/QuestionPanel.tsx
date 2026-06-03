@@ -14,6 +14,11 @@ interface QuestionPanelProps {
   onMultiSelect: (questionId: number, optionId: number) => void;
   onTextAnswer: (questionId: number, value: string) => void;
   onMatchingAnswer: (questionId: number, label: string, value: string) => void;
+  /** When provided, renders an inline flag toggle in the question header. */
+  isFlagged?: boolean;
+  onToggleFlag?: () => void;
+  /** Hide the big progress bar — used when several questions share one page. */
+  compact?: boolean;
 }
 
 export function QuestionPanel({
@@ -25,6 +30,9 @@ export function QuestionPanel({
   onMultiSelect,
   onTextAnswer,
   onMatchingAnswer,
+  isFlagged,
+  onToggleFlag,
+  compact = false,
 }: QuestionPanelProps) {
   if (!question) {
     return (
@@ -60,20 +68,43 @@ export function QuestionPanel({
             </span>
           )}
         </div>
-        <span className="text-xs font-medium text-[var(--color-text-muted)]">
-          {Math.round(progress)}% complete
-        </span>
+        <div className="flex items-center gap-2">
+          {onToggleFlag && (
+            <button
+              type="button"
+              onClick={onToggleFlag}
+              aria-pressed={isFlagged}
+              className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold transition-colors ${
+                isFlagged
+                  ? 'bg-[var(--color-warning-soft)] text-[var(--color-warning)]'
+                  : 'text-[var(--color-text-muted)] hover:bg-[var(--color-bg-muted)]'
+              }`}
+            >
+              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill={isFlagged ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={1.75}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 3v1.5M3 21v-6m0 0l2.77-.693a9 9 0 016.208.682l.108.054a9 9 0 006.086.71l3.114-.732a48.524 48.524 0 01-.005-10.499l-3.11.732a9 9 0 01-6.085-.711l-.108-.054a9 9 0 00-6.208-.682L3 4.5M3 15V4.5" />
+              </svg>
+              {isFlagged ? 'Flagged' : 'Flag'}
+            </button>
+          )}
+          {!compact && (
+            <span className="text-xs font-medium text-[var(--color-text-muted)]">
+              {Math.round(progress)}% complete
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Progress bar */}
-      <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--color-bg-muted)]">
-        <motion.div
-          className="h-full rounded-full bg-gradient-brand shadow-[var(--shadow-brand)]"
-          initial={false}
-          animate={{ width: `${progress}%` }}
-          transition={{ duration: 0.35, ease: 'easeOut' }}
-        />
-      </div>
+      {!compact && (
+        <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--color-bg-muted)]">
+          <motion.div
+            className="h-full rounded-full bg-gradient-brand shadow-[var(--shadow-brand)]"
+            initial={false}
+            animate={{ width: `${progress}%` }}
+            transition={{ duration: 0.35, ease: 'easeOut' }}
+          />
+        </div>
+      )}
 
       {/* Question content */}
       <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-6 shadow-[var(--shadow-sm)]">

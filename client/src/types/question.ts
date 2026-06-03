@@ -33,13 +33,14 @@ export interface Question {
   options: QuestionOption[];
   tags: QuestionTag[];
   subject?: { id: number; name: string; code: string };
-  chapter?: { id: number; name: string } | null;
+  chapter?: { id: number; name: string; gradeLevel?: number } | null;
   topic?: { id: number; name: string } | null;
   creator?: { id: number; fullName: string };
 }
 
 export interface QuestionFilter {
   subjectId?: number | string;
+  gradeLevel?: number | string;
   chapterId?: number | string;
   topicId?: number | string;
   difficulty?: number | string;
@@ -123,6 +124,7 @@ export interface CurriculumChapter {
   id: number;
   subjectId: number;
   name: string;
+  gradeLevel: number;
   orderIndex: number;
 }
 

@@ -196,7 +196,7 @@ export default function DashboardPage() {
     <div className="space-y-6">
       {/* Hero banner — personalized greeting + at-a-glance meta */}
       <GreetingBanner
-        subtitle="Theo dõi tiến độ học tập, phân tích điểm mạnh – yếu, và tiếp tục luyện tập với AI."
+        subtitle="Track your learning progress, analyze strengths and weaknesses, and keep practicing with AI."
         meta={[
           { label: 'Avg score', value: avgScore.toFixed(1), tone: 'success' },
           { label: 'Streak', value: streak, tone: 'warning' },

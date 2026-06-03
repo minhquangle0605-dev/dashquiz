@@ -22,10 +22,10 @@ const mockQuestion = {
   content: 'What is 2+2?',
   questionType: 'SINGLE_CHOICE' as const,
   difficulty: 1,
-  explanation: 'Basic math',
+  explanation: 'Basic arithmetic',
   createdBy: 10,
   createdAt: new Date(),
-  subject: { id: 1, name: 'Math', code: 'MATH' },
+  subject: { id: 1, name: 'Mathematics', code: 'MATH' },
   chapter: { id: 1, name: 'Arithmetic' },
   topic: { id: 1, name: 'Addition' },
   options: [
@@ -46,8 +46,8 @@ afterEach(() => {
 describe('QuestionService', () => {
   describe('createQuestion', () => {
     it('should create a question with options', async () => {
-      prismaMock.subject.findUnique.mockResolvedValue({ id: 1, name: 'Math', code: 'MATH', description: '', status: 1 });
-      prismaMock.chapter.findUnique.mockResolvedValue({ id: 1, subjectId: 1, name: 'Arithmetic', orderIndex: 1 });
+      prismaMock.subject.findUnique.mockResolvedValue({ id: 1, name: 'Mathematics', code: 'MATH', description: '', status: 1 });
+      prismaMock.chapter.findUnique.mockResolvedValue({ id: 1, subjectId: 1, name: 'Arithmetic', gradeLevel: 10, orderIndex: 1 });
       prismaMock.topic.findUnique.mockResolvedValue({ id: 1, chapterId: 1, name: 'Addition', description: '' });
       prismaMock.question.create.mockResolvedValue(mockQuestion);
 
@@ -59,7 +59,7 @@ describe('QuestionService', () => {
           content: 'What is 2+2?',
           questionType: 'SINGLE_CHOICE',
           difficulty: 1,
-          explanation: 'Basic math',
+          explanation: 'Basic arithmetic',
           options: [
             { label: 'A', content: '3', isCorrect: false },
             { label: 'B', content: '4', isCorrect: true },
@@ -76,7 +76,7 @@ describe('QuestionService', () => {
 
     it('should throw 404 if subject not found', async () => {
       prismaMock.subject.findUnique.mockResolvedValue(null);
-      prismaMock.chapter.findUnique.mockResolvedValue({ id: 1, subjectId: 1, name: 'Ch1', orderIndex: 1 });
+      prismaMock.chapter.findUnique.mockResolvedValue({ id: 1, subjectId: 1, name: 'Ch1', gradeLevel: 10, orderIndex: 1 });
       prismaMock.topic.findUnique.mockResolvedValue({ id: 1, chapterId: 1, name: 'T1', description: '' });
 
       await expect(
@@ -101,8 +101,8 @@ describe('QuestionService', () => {
     });
 
     it('should throw 400 if chapter does not belong to subject', async () => {
-      prismaMock.subject.findUnique.mockResolvedValue({ id: 1, name: 'Math', code: 'MATH', description: '', status: 1 });
-      prismaMock.chapter.findUnique.mockResolvedValue({ id: 2, subjectId: 2, name: 'Physics Ch', orderIndex: 1 });
+      prismaMock.subject.findUnique.mockResolvedValue({ id: 1, name: 'Mathematics', code: 'MATH', description: '', status: 1 });
+      prismaMock.chapter.findUnique.mockResolvedValue({ id: 2, subjectId: 2, name: 'Physics Ch', gradeLevel: 10, orderIndex: 1 });
       prismaMock.topic.findUnique.mockResolvedValue({ id: 1, chapterId: 2, name: 'T1', description: '' });
 
       await expect(
@@ -213,6 +213,24 @@ describe('QuestionService', () => {
       );
     });
 
+    it('should filter by question type', async () => {
+      prismaMock.question.findMany.mockResolvedValue([]);
+      prismaMock.question.count.mockResolvedValue(0);
+
+      await questionService.listQuestions({
+        page: 1,
+        limit: 20,
+        difficulty: undefined,
+        questionType: 'MULTIPLE_CHOICE',
+      });
+
+      expect(prismaMock.question.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ questionType: 'MULTIPLE_CHOICE' }),
+        }),
+      );
+    });
+
     it('should support keyword search', async () => {
       prismaMock.question.findMany.mockResolvedValue([]);
       prismaMock.question.count.mockResolvedValue(0);
@@ -246,6 +264,63 @@ describe('QuestionService', () => {
       await expect(
         questionService.addTags(999, { tags: ['tag1'] }),
       ).rejects.toThrow('Question not found');
+    });
+  });
+
+  describe('bulkCreate', () => {
+    it('should use the General topic when topicId is omitted', async () => {
+      prismaMock.subject.findUnique.mockResolvedValue({
+        id: 1,
+        name: 'Mathematics',
+        code: 'MATH',
+        description: '',
+        status: 1,
+      });
+      prismaMock.chapter.findUnique.mockResolvedValue({
+        id: 1,
+        subjectId: 1,
+        name: 'Arithmetic',
+        gradeLevel: 10,
+        orderIndex: 1,
+      });
+      prismaMock.topic.findFirst.mockResolvedValue({
+        id: 9,
+        chapterId: 1,
+        name: 'General',
+        description: '',
+      });
+      prismaMock.question.create.mockResolvedValue({
+        ...mockQuestion,
+        topicId: 9,
+      });
+
+      const result = await questionService.bulkCreate(
+        [
+          {
+            content: 'What is 2+2?',
+            questionType: 'SINGLE_CHOICE',
+            difficulty: 1,
+            explanation: null,
+            options: [
+              { label: 'A', content: '3', isCorrect: false },
+              { label: 'B', content: '4', isCorrect: true },
+            ],
+          },
+        ],
+        { subjectId: 1, chapterId: 1 },
+        10,
+      );
+
+      expect(result.data.imported).toBe(1);
+      expect(prismaMock.topic.findFirst).toHaveBeenCalledWith({
+        where: { chapterId: 1, name: 'General' },
+        orderBy: { id: 'asc' },
+      });
+      expect(prismaMock.question.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ topicId: 9 }),
+        }),
+      );
     });
   });
 

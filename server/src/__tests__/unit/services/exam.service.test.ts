@@ -30,7 +30,7 @@ const examService = new ExamService();
 
 const mockExam = {
   id: 1,
-  title: 'Math Exam 1',
+  title: 'Mathematics Exam 1',
   subjectId: 1,
   createdBy: 10,
   durationMin: 60,
@@ -39,9 +39,15 @@ const mockExam = {
   shuffle: false,
   showResult: true,
   maxAttempts: 1,
+  gradingMethod: 'HIGHEST' as const,
+  shuffleAnswers: false,
+  navigationMode: 'FREE' as const,
+  questionsPerPage: null,
+  accessPassword: null,
+  reviewOptions: null,
   status: 'DRAFT' as const,
   createdAt: new Date(),
-  subject: { id: 1, name: 'Math', code: 'MATH' },
+  subject: { id: 1, name: 'Mathematics', code: 'MATH' },
   creator: { id: 10, fullName: 'Teacher One' },
 };
 
@@ -52,18 +58,21 @@ afterEach(() => {
 describe('ExamService', () => {
   describe('createExam', () => {
     it('should create an exam in DRAFT status', async () => {
-      prismaMock.subject.findUnique.mockResolvedValue({ id: 1, name: 'Math', code: 'MATH' });
+      prismaMock.subject.findUnique.mockResolvedValue({ id: 1, name: 'Mathematics', code: 'MATH' });
       prismaMock.exam.create.mockResolvedValue(mockExam);
 
       const result = await examService.createExam(
         {
-          title: 'Math Exam 1',
+          title: 'Mathematics Exam 1',
           subjectId: 1,
           durationMin: 60,
           totalQuestions: 10,
           shuffle: false,
           showResult: true,
           maxAttempts: 1,
+          gradingMethod: 'HIGHEST',
+          shuffleAnswers: false,
+          navigationMode: 'FREE',
         },
         10,
       );
@@ -90,6 +99,9 @@ describe('ExamService', () => {
             shuffle: false,
             showResult: true,
             maxAttempts: 1,
+            gradingMethod: 'HIGHEST',
+            shuffleAnswers: false,
+            navigationMode: 'FREE',
           },
           10,
         ),
@@ -280,6 +292,70 @@ describe('ExamService', () => {
         expect.objectContaining({
           where: expect.objectContaining({ createdBy: 10 }),
         }),
+      );
+    });
+  });
+
+  describe('deleteExam', () => {
+    it('lets a teacher delete their own non-DRAFT exam without attempts', async () => {
+      prismaMock.exam.findUnique.mockResolvedValue({
+        ...mockExam,
+        status: 'PUBLISHED',
+        _count: { examAttempts: 0 },
+      });
+      prismaMock.exam.delete.mockResolvedValue(mockExam);
+
+      const result = await examService.deleteExam(1, 10, 'teacher');
+
+      expect(result.success).toBe(true);
+      expect(prismaMock.exam.delete).toHaveBeenCalledWith({ where: { id: 1 } });
+    });
+
+    it('forbids a teacher from deleting an exam they do not own', async () => {
+      prismaMock.exam.findUnique.mockResolvedValue({
+        ...mockExam,
+        createdBy: 99,
+        _count: { examAttempts: 0 },
+      });
+
+      await expect(examService.deleteExam(1, 10, 'teacher')).rejects.toThrow(
+        'You can only delete your own exams',
+      );
+      expect(prismaMock.exam.delete).not.toHaveBeenCalled();
+    });
+
+    it('blocks a teacher from deleting an exam that already has attempts', async () => {
+      prismaMock.exam.findUnique.mockResolvedValue({
+        ...mockExam,
+        _count: { examAttempts: 3 },
+      });
+
+      await expect(examService.deleteExam(1, 10, 'teacher')).rejects.toThrow(
+        'Cannot delete an exam that already has attempts',
+      );
+      expect(prismaMock.exam.delete).not.toHaveBeenCalled();
+    });
+
+    it('lets an admin force-delete any exam even when it has attempts', async () => {
+      prismaMock.exam.findUnique.mockResolvedValue({
+        ...mockExam,
+        createdBy: 99,
+        status: 'CLOSED',
+        _count: { examAttempts: 5 },
+      });
+      prismaMock.exam.delete.mockResolvedValue(mockExam);
+
+      const result = await examService.deleteExam(1, 1, 'admin');
+
+      expect(result.success).toBe(true);
+      expect(prismaMock.exam.delete).toHaveBeenCalledWith({ where: { id: 1 } });
+    });
+
+    it('throws 404 when the exam does not exist', async () => {
+      prismaMock.exam.findUnique.mockResolvedValue(null);
+
+      await expect(examService.deleteExam(999, 10, 'teacher')).rejects.toThrow(
+        'Exam not found',
       );
     });
   });

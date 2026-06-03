@@ -269,6 +269,7 @@ export async function uploadResource(req: Request, res: Response, next: NextFunc
       classId,
       {
         ...req.body,
+        type: req.body.type === 'IMAGE' ? 'IMAGE' : 'FILE',
         sectionId: req.body.sectionId ? Number(req.body.sectionId) : undefined,
         orderIndex: req.body.orderIndex ? Number(req.body.orderIndex) : undefined,
         isPublished: req.body.isPublished === undefined ? undefined : req.body.isPublished === 'true',

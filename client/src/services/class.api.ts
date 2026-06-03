@@ -8,7 +8,14 @@ import type {
   ClassCourseOverview,
   ClassResource,
   ClassSection,
+  ClassGradebook,
+  ClassGradeChangeLogItem,
   CreateClassPayload,
+  GradeChangeLogItem,
+  GradeComponentType,
+  GradebookEntry,
+  GradebookCollection,
+  MyGradebook,
   UpdateClassPayload,
   ImportStudentsResult,
 } from '@/types/exam';
@@ -164,6 +171,13 @@ export async function createSection(
   return data.data ?? data;
 }
 
+export async function deleteSection(
+  classId: number,
+  sectionId: number,
+): Promise<void> {
+  await api.delete(API_ENDPOINTS.CLASSES.SECTION_BY_ID(classId, sectionId));
+}
+
 export async function createResource(
   classId: number,
   payload: Partial<ClassResource> & { title: string; type: ClassResource['type'] },
@@ -176,6 +190,7 @@ export async function uploadResourceFile(
   classId: number,
   payload: {
     file: File;
+    type?: 'FILE' | 'IMAGE';
     title?: string;
     description?: string;
     sectionId?: number | null;
@@ -184,12 +199,20 @@ export async function uploadResourceFile(
 ): Promise<ClassResource> {
   const formData = new FormData();
   formData.append('file', payload.file);
+  if (payload.type) formData.append('type', payload.type);
   if (payload.title) formData.append('title', payload.title);
   if (payload.description) formData.append('description', payload.description);
   if (payload.sectionId) formData.append('sectionId', String(payload.sectionId));
   if (payload.isPublished !== undefined) formData.append('isPublished', String(payload.isPublished));
   const { data } = await api.post(API_ENDPOINTS.CLASSES.RESOURCE_UPLOAD(classId), formData);
   return data.data ?? data;
+}
+
+export async function deleteResource(
+  classId: number,
+  resourceId: number,
+): Promise<void> {
+  await api.delete(API_ENDPOINTS.CLASSES.RESOURCE_BY_ID(classId, resourceId));
 }
 
 export async function getResourceDownloadUrl(resourceId: number): Promise<string> {
@@ -217,4 +240,95 @@ export async function markCompletion(
   payload: { resourceId?: number; activityId?: number },
 ): Promise<void> {
   await api.post(API_ENDPOINTS.CLASSES.COMPLETIONS(classId), payload);
+}
+
+export async function getClassGradebook(classId: number): Promise<ClassGradebook> {
+  const { data } = await api.get(API_ENDPOINTS.CLASSES.GRADEBOOK(classId));
+  return data.data ?? data;
+}
+
+export async function getAccessibleGradebooks(): Promise<GradebookCollection> {
+  const { data } = await api.get(API_ENDPOINTS.CLASSES.GRADEBOOKS);
+  const payload = data.data ?? data;
+  if (Array.isArray(payload)) {
+    return { scope: 'teacher', gradebooks: payload };
+  }
+  return payload;
+}
+
+export async function getMyGradebook(classId: number): Promise<MyGradebook> {
+  const { data } = await api.get(API_ENDPOINTS.CLASSES.MY_GRADEBOOK(classId));
+  return data.data ?? data;
+}
+
+export interface CreateManualGradePayload {
+  studentId: number;
+  componentType: GradeComponentType;
+  score: number;
+  label?: string;
+  reason?: string;
+}
+
+export async function createManualGrade(
+  classId: number,
+  payload: CreateManualGradePayload,
+): Promise<GradebookEntry> {
+  const { data } = await api.post(API_ENDPOINTS.CLASSES.GRADEBOOK_GRADES(classId), payload);
+  return data.data ?? data;
+}
+
+export interface UpdateGradePayload {
+  score?: number;
+  componentType?: GradeComponentType;
+  label?: string | null;
+  reason?: string;
+}
+
+export async function updateGradeScore(
+  classId: number,
+  gradeId: number,
+  payload: UpdateGradePayload,
+): Promise<GradebookEntry> {
+  const { data } = await api.put(
+    API_ENDPOINTS.CLASSES.GRADEBOOK_GRADE_BY_ID(classId, gradeId),
+    payload,
+  );
+  return data.data ?? data;
+}
+
+export async function deleteGrade(
+  classId: number,
+  gradeId: number,
+  reason?: string,
+): Promise<void> {
+  await api.delete(API_ENDPOINTS.CLASSES.GRADEBOOK_GRADE_BY_ID(classId, gradeId), {
+    data: reason ? { reason } : undefined,
+  });
+}
+
+export async function getGradeHistory(
+  classId: number,
+  gradeId: number,
+): Promise<GradeChangeLogItem[]> {
+  const { data } = await api.get(
+    API_ENDPOINTS.CLASSES.GRADEBOOK_GRADE_HISTORY(classId, gradeId),
+  );
+  return data.data ?? data;
+}
+
+export async function getClassGradebookHistory(
+  classId: number,
+): Promise<ClassGradeChangeLogItem[]> {
+  const { data } = await api.get(API_ENDPOINTS.CLASSES.GRADEBOOK_HISTORY(classId));
+  return data.data ?? data;
+}
+
+export async function linkClassToSemester(
+  classId: number,
+  linkedClassId: number | null,
+): Promise<{ classId: number; linkedClassId: number | null }> {
+  const { data } = await api.put(API_ENDPOINTS.CLASSES.GRADEBOOK_LINK(classId), {
+    linkedClassId,
+  });
+  return data.data ?? data;
 }

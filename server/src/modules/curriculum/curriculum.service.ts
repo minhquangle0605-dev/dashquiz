@@ -39,7 +39,7 @@ export class CurriculumService {
       include: {
         _count: { select: { topics: true, questions: true } },
       },
-      orderBy: { orderIndex: 'asc' },
+      orderBy: [{ gradeLevel: 'asc' }, { orderIndex: 'asc' }, { name: 'asc' }],
     });
 
     return {
@@ -82,6 +82,7 @@ export class CurriculumService {
         chapter: {
           id: chapter.id,
           name: chapter.name,
+          gradeLevel: chapter.gradeLevel,
           subject: chapter.subject,
         },
         topics,
@@ -100,7 +101,7 @@ export class CurriculumService {
     }
 
     const existing = await prisma.chapter.findFirst({
-      where: { subjectId: data.subjectId, name: data.name },
+      where: { subjectId: data.subjectId, gradeLevel: data.gradeLevel, name: data.name },
     });
     if (existing) {
       throw new AppError(`Chapter "${data.name}" already exists in this subject`, 409);
@@ -109,6 +110,7 @@ export class CurriculumService {
     const chapter = await prisma.chapter.create({
       data: {
         subjectId: data.subjectId,
+        gradeLevel: data.gradeLevel,
         name: data.name,
         orderIndex: data.orderIndex,
       },

@@ -3,6 +3,8 @@ import { prisma } from '../../config/database';
 import { env } from '../../config/env';
 import { getMinioClient } from '../../config/minio';
 import { AppError } from '../../middlewares/errorHandler';
+import { FILE_UPLOAD } from '../../utils/constants';
+import { logger } from '../../utils/logger';
 import type {
   AssignClassRoleInput,
   CreateActivityInput,
@@ -115,6 +117,10 @@ export class ClassCourseService {
 
   private sanitizeFilename(filename: string): string {
     return filename.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-160);
+  }
+
+  private isStoredObjectResource(type: ClassResourceType): boolean {
+    return type === 'FILE' || type === 'IMAGE';
   }
 
   async getCourse(classId: number, userId: number, role: string) {
@@ -230,8 +236,37 @@ export class ClassCourseService {
     await this.assertCanManageContent(classId, userId, role);
     const existing = await prisma.classSection.findUnique({ where: { id: sectionId } });
     if (!existing || existing.classId !== classId) throw new AppError('Section not found', 404);
-    await prisma.classSection.delete({ where: { id: sectionId } });
-    await this.log(classId, userId, 'DELETE_SECTION', 'class_section', sectionId);
+    const resources = await prisma.classResource.findMany({
+      where: { classId, sectionId },
+      select: { id: true, type: true, url: true },
+    });
+
+    await prisma.$transaction([
+      prisma.classResource.deleteMany({ where: { classId, sectionId } }),
+      prisma.classSection.delete({ where: { id: sectionId } }),
+    ]);
+
+    await Promise.all(
+      resources
+        .filter((resource) => this.isStoredObjectResource(resource.type) && resource.url)
+        .map(async (resource) => {
+          try {
+            await getMinioClient().removeObject(env.minio.bucket, resource.url!);
+          } catch (error) {
+            logger.warn('Failed to remove class resource object after section delete', {
+              classId,
+              sectionId,
+              resourceId: resource.id,
+              objectName: resource.url,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }),
+    );
+
+    await this.log(classId, userId, 'DELETE_SECTION', 'class_section', sectionId, {
+      deletedResourceCount: resources.length,
+    });
     return { success: true, message: 'Section deleted successfully', data: null };
   }
 
@@ -268,6 +303,16 @@ export class ClassCourseService {
   ) {
     await this.assertCanManageContent(classId, userId, role);
     await this.ensureSectionBelongsToClass(body.sectionId, classId);
+    const type = body.type === 'IMAGE' ? 'IMAGE' : 'FILE';
+    if (type === 'IMAGE') {
+      const allowedImageTypes: readonly string[] = FILE_UPLOAD.ALLOWED_CLASS_IMAGE_TYPES;
+      if (!allowedImageTypes.includes(file.mimetype)) {
+        throw new AppError('Only JPG, PNG, WebP, and GIF images are allowed', 400);
+      }
+      if (file.size > FILE_UPLOAD.MAX_CLASS_IMAGE_RESOURCE_SIZE) {
+        throw new AppError('Image resources must be 10MB or smaller', 400);
+      }
+    }
     const objectName = `classes/${classId}/${Date.now()}-${this.sanitizeFilename(file.originalname)}`;
     await getMinioClient().putObject(env.minio.bucket, objectName, file.buffer, file.size, {
       'Content-Type': file.mimetype,
@@ -276,7 +321,7 @@ export class ClassCourseService {
       data: {
         classId,
         sectionId: body.sectionId ?? null,
-        type: 'FILE',
+        type,
         title: body.title || file.originalname,
         description: body.description,
         url: objectName,
@@ -328,6 +373,18 @@ export class ClassCourseService {
     const existing = await prisma.classResource.findUnique({ where: { id: resourceId } });
     if (!existing || existing.classId !== classId) throw new AppError('Resource not found', 404);
     await prisma.classResource.delete({ where: { id: resourceId } });
+    if (this.isStoredObjectResource(existing.type) && existing.url) {
+      try {
+        await getMinioClient().removeObject(env.minio.bucket, existing.url);
+      } catch (error) {
+        logger.warn('Failed to remove class resource object after database delete', {
+          classId,
+          resourceId,
+          objectName: existing.url,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
     await this.log(classId, userId, 'DELETE_RESOURCE', 'class_resource', resourceId);
     return { success: true, message: 'Resource deleted successfully', data: null };
   }
@@ -336,7 +393,7 @@ export class ClassCourseService {
     const resource = await prisma.classResource.findUnique({ where: { id: resourceId } });
     if (!resource) throw new AppError('Resource not found', 404);
     await this.getClassAccess(resource.classId, userId, role);
-    if (resource.type !== 'FILE' || !resource.url) {
+    if (!this.isStoredObjectResource(resource.type) || !resource.url) {
       throw new AppError('Resource is not a downloadable file', 400);
     }
     const url = await getMinioClient().presignedGetObject(env.minio.bucket, resource.url, 10 * 60);
@@ -351,6 +408,7 @@ export class ClassCourseService {
       data: {
         classId,
         sectionId: data.sectionId ?? null,
+        gradeComponentType: data.gradeComponentType ?? null,
         type: data.type,
         title: data.title,
         instructions: data.instructions,
@@ -383,6 +441,7 @@ export class ClassCourseService {
       where: { id: activityId },
       data: {
         ...(data.sectionId !== undefined && { sectionId: data.sectionId }),
+        ...(data.gradeComponentType !== undefined && { gradeComponentType: data.gradeComponentType }),
         ...(data.type !== undefined && { type: data.type }),
         ...(data.title !== undefined && { title: data.title }),
         ...(data.instructions !== undefined && { instructions: data.instructions }),

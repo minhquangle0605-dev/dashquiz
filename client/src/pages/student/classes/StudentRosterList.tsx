@@ -53,14 +53,14 @@ export function StudentRosterList({ selectedClass, students, loading }: StudentR
                 {students.length}
               </span>
             </div>
-            <p className="text-xs text-[var(--color-text-muted)]">Thành viên lớp</p>
+            <p className="text-xs text-[var(--color-text-muted)]">Class members</p>
           </div>
           <div className="flex flex-col gap-1.5">
             <button
               type="button"
               onClick={() => scrollBy(-SCROLL_STEP)}
               disabled={!canScrollUp}
-              aria-label="Cuộn lên"
+              aria-label="Scroll up"
               className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-primary-soft)] hover:text-[var(--color-primary)] disabled:opacity-40 disabled:hover:bg-[var(--color-bg-card)] disabled:hover:text-[var(--color-text-secondary)]"
             >
               <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -71,7 +71,7 @@ export function StudentRosterList({ selectedClass, students, loading }: StudentR
               type="button"
               onClick={() => scrollBy(SCROLL_STEP)}
               disabled={!canScrollDown}
-              aria-label="Cuộn xuống"
+              aria-label="Scroll down"
               className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-primary-soft)] hover:text-[var(--color-primary)] disabled:opacity-40 disabled:hover:bg-[var(--color-bg-card)] disabled:hover:text-[var(--color-text-secondary)]"
             >
               <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -83,7 +83,7 @@ export function StudentRosterList({ selectedClass, students, loading }: StudentR
 
         {selectedClass.teacher && (
           <p className="mt-2 truncate text-xs text-[var(--color-text-secondary)]">
-            <span className="font-semibold">GV:</span> {selectedClass.teacher.fullName}
+            <span className="font-semibold">Teacher:</span> {selectedClass.teacher.fullName}
           </p>
         )}
       </div>
@@ -100,10 +100,10 @@ export function StudentRosterList({ selectedClass, students, loading }: StudentR
         ) : students.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-[var(--color-border)] py-10 text-center">
             <p className="text-sm font-semibold text-[var(--color-text-primary)]">
-              Chưa có thành viên
+              No members yet
             </p>
             <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-              Danh sách lớp đang trống.
+              The class roster is empty.
             </p>
           </div>
         ) : (

@@ -1,7 +1,12 @@
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
-import type { ClassActivity, ClassCourseOverview } from '@/types/exam';
+import type {
+  ClassActivity,
+  ClassCourseOverview,
+  GradeComponentType,
+} from '@/types/exam';
+import { GRADE_COMPONENT_INFO } from '@/types/exam';
 
 export interface ActivityFormValues {
   title: string;
@@ -11,6 +16,7 @@ export interface ActivityFormValues {
   dueAt: string;
   maxScore: string;
   status: ClassActivity['status'];
+  gradeComponentType: GradeComponentType | '';
 }
 
 interface ActivityModalProps {
@@ -39,17 +45,17 @@ export function ActivityModal({
   onSubmit,
 }: ActivityModalProps) {
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Thêm Activity" size="lg">
+    <Modal isOpen={isOpen} onClose={onClose} title="Add Activity" size="lg">
       <div className="space-y-4">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Input
-            label="Tiêu đề"
+            label="Title"
             value={form.title}
             onChange={(e) => onChange({ ...form, title: e.target.value })}
           />
           <div>
             <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
-              Loại
+              Type
             </label>
             <select
               className={selectBase}
@@ -91,7 +97,7 @@ export function ActivityModal({
             </select>
           </div>
           <Input
-            label="Hạn nộp"
+            label="Due date"
             type="datetime-local"
             value={form.dueAt}
             onChange={(e) => onChange({ ...form, dueAt: e.target.value })}
@@ -99,28 +105,56 @@ export function ActivityModal({
           <Input
             label="Max score"
             type="number"
-            placeholder="vd. 10"
+            placeholder="e.g. 10"
             value={form.maxScore}
             onChange={(e) => onChange({ ...form, maxScore: e.target.value })}
           />
         </div>
         <div>
           <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
-            Hướng dẫn
+            Count toward gradebook
+          </label>
+          <p className="mb-1.5 text-xs text-[var(--color-text-muted)]">
+            Choose a grade component (per Circular 22). Leave blank if the activity is not graded.
+          </p>
+          <select
+            className={selectBase}
+            value={form.gradeComponentType}
+            onChange={(e) =>
+              onChange({
+                ...form,
+                gradeComponentType: (e.target.value || '') as GradeComponentType | '',
+              })
+            }
+          >
+            <option value="">Not graded</option>
+            {(Object.keys(GRADE_COMPONENT_INFO) as GradeComponentType[]).map((key) => {
+              const info = GRADE_COMPONENT_INFO[key];
+              return (
+                <option key={key} value={key}>
+                  {info.abbr} — {info.label} (coefficient {info.coefficient})
+                </option>
+              );
+            })}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
+            Instructions
           </label>
           <textarea
             className={textareaBase}
-            placeholder="Mô tả / hướng dẫn cho học sinh…"
+            placeholder="Description / instructions for students…"
             value={form.instructions}
             onChange={(e) => onChange({ ...form, instructions: e.target.value })}
           />
         </div>
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={onClose}>
-            Hủy
+            Cancel
           </Button>
           <Button variant="primary" isLoading={saving} onClick={onSubmit}>
-            Tạo
+            Create
           </Button>
         </div>
       </div>

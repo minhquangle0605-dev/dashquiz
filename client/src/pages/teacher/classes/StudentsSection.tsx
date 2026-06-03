@@ -42,7 +42,7 @@ export function StudentsSection({
               {students.length}
             </span>
           </div>
-          <p className="text-sm text-[var(--color-text-muted)]">Học sinh đang trong lớp</p>
+          <p className="text-sm text-[var(--color-text-muted)]">Students enrolled in this class</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button
@@ -67,7 +67,7 @@ export function StudentsSection({
               </svg>
             }
           >
-            Thêm học sinh
+            Add Students
           </Button>
         </div>
       </div>
@@ -84,10 +84,10 @@ export function StudentsSection({
             </svg>
           </div>
           <p className="text-sm font-semibold text-[var(--color-text-primary)]">
-            Chưa có học sinh
+            No students yet
           </p>
           <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-            Nhấn "Thêm học sinh" hoặc import Excel để bắt đầu.
+            Click "Add Students" or import an Excel file to get started.
           </p>
         </div>
       ) : (
@@ -95,10 +95,10 @@ export function StudentsSection({
           <TableHead>
             <TableRow>
               <TableHeaderCell>#</TableHeaderCell>
-              <TableHeaderCell>Họ tên</TableHeaderCell>
+              <TableHeaderCell>Full Name</TableHeaderCell>
               <TableHeaderCell>Username</TableHeaderCell>
-              <TableHeaderCell>Ngày vào lớp</TableHeaderCell>
-              <TableHeaderCell className="text-right">Hành động</TableHeaderCell>
+              <TableHeaderCell>Enrolled At</TableHeaderCell>
+              <TableHeaderCell className="text-right">Actions</TableHeaderCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -132,7 +132,7 @@ export function StudentsSection({
                     onClick={() => onRemove(s.studentId)}
                     className="text-[var(--color-danger)] hover:bg-[var(--color-danger-soft)]"
                   >
-                    Xóa
+                    Remove
                   </Button>
                 </TableCell>
               </TableRow>

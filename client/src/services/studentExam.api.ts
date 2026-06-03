@@ -44,9 +44,11 @@ export async function listStudentExams(
 
 export async function startStudentExam(
   examId: number,
+  password?: string,
 ): Promise<ServerResponse<StartExamData>> {
   const { data } = await api.post<ServerResponse<StartExamData>>(
     API_ENDPOINTS.STUDENT_EXAMS.START(examId),
+    password !== undefined ? { password } : undefined,
   );
   return data;
 }

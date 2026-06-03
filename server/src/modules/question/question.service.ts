@@ -117,8 +117,10 @@ export class QuestionService {
       p: page,
       l: limit,
       s: query.subjectId ?? null,
+      g: query.gradeLevel ?? null,
       c: query.chapterId ?? null,
       t: query.topicId ?? null,
+      qt: query.questionType ?? null,
       d: diff,
       k: query.keyword ?? null,
     })}`;
@@ -151,8 +153,10 @@ export class QuestionService {
     const where: Prisma.QuestionWhereInput = {};
 
     if (query.subjectId) where.subjectId = query.subjectId;
+    if (query.gradeLevel) where.chapter = { gradeLevel: query.gradeLevel };
     if (query.chapterId) where.chapterId = query.chapterId;
     if (query.topicId) where.topicId = query.topicId;
+    if (query.questionType) where.questionType = query.questionType;
 
     if (query.difficulty && Array.isArray(query.difficulty) && query.difficulty.length > 0) {
       where.difficulty = { in: query.difficulty };
@@ -181,7 +185,7 @@ export class QuestionService {
           createdBy: true,
           createdAt: true,
           subject: { select: { id: true, name: true, code: true } },
-          chapter: { select: { id: true, name: true } },
+          chapter: { select: { id: true, name: true, gradeLevel: true } },
           topic: { select: { id: true, name: true } },
           options: {
             orderBy: { label: 'asc' },
@@ -223,7 +227,7 @@ export class QuestionService {
       where: { id },
       include: {
         subject: { select: { id: true, name: true, code: true } },
-        chapter: { select: { id: true, name: true } },
+        chapter: { select: { id: true, name: true, gradeLevel: true } },
         topic: { select: { id: true, name: true } },
         options: { orderBy: { label: 'asc' } },
         tags: { select: { id: true, tagName: true } },
@@ -248,13 +252,17 @@ export class QuestionService {
   // ═══════════════════════════════════════════════
 
   async createQuestion(data: CreateQuestionInput, userId: number) {
-    await this.validateCurriculumRefs(data.subjectId, data.chapterId, data.topicId);
+    const topicId = await this.resolveImportTopicId(
+      data.subjectId,
+      data.chapterId,
+      data.topicId,
+    );
 
     const question = await prisma.question.create({
       data: {
         subjectId: data.subjectId,
         chapterId: data.chapterId,
-        topicId: data.topicId,
+        topicId,
         content: sanitizeRichQuestionHtml(data.content),
         questionType: data.questionType,
         difficulty: data.difficulty,
@@ -270,7 +278,7 @@ export class QuestionService {
       },
       include: {
         subject: { select: { id: true, name: true, code: true } },
-        chapter: { select: { id: true, name: true } },
+        chapter: { select: { id: true, name: true, gradeLevel: true } },
         topic: { select: { id: true, name: true } },
         options: { orderBy: { label: 'asc' } },
         tags: true,
@@ -298,10 +306,14 @@ export class QuestionService {
 
     const subjectId = data.subjectId ?? existing.subjectId;
     const chapterId = data.chapterId ?? existing.chapterId;
-    const topicId = data.topicId ?? existing.topicId;
+    let topicId = existing.topicId;
+    const curriculumChanged =
+      data.subjectId !== undefined ||
+      data.chapterId !== undefined ||
+      data.topicId !== undefined;
 
-    if (data.subjectId || data.chapterId || data.topicId) {
-      await this.validateCurriculumRefs(subjectId, chapterId, topicId);
+    if (curriculumChanged) {
+      topicId = await this.resolveImportTopicId(subjectId, chapterId, data.topicId);
     }
 
     const question = await prisma.$transaction(async (tx) => {
@@ -328,11 +340,11 @@ export class QuestionService {
           }),
           ...(data.subjectId !== undefined && { subjectId: data.subjectId }),
           ...(data.chapterId !== undefined && { chapterId: data.chapterId }),
-          ...(data.topicId !== undefined && { topicId: data.topicId }),
+          ...(curriculumChanged && { topicId }),
         },
         include: {
           subject: { select: { id: true, name: true, code: true } },
-          chapter: { select: { id: true, name: true } },
+          chapter: { select: { id: true, name: true, gradeLevel: true } },
           topic: { select: { id: true, name: true } },
           options: { orderBy: { label: 'asc' } },
           tags: { select: { id: true, tagName: true } },
@@ -446,10 +458,14 @@ export class QuestionService {
 
   async bulkCreate(
     questions: BulkQuestionPayload[],
-    meta: { subjectId: number; chapterId: number; topicId: number },
+    meta: { subjectId: number; chapterId: number; topicId?: number },
     userId: number,
   ) {
-    await this.validateCurriculumRefs(meta.subjectId, meta.chapterId, meta.topicId);
+    const topicId = await this.resolveImportTopicId(
+      meta.subjectId,
+      meta.chapterId,
+      meta.topicId,
+    );
 
     if (!Array.isArray(questions) || questions.length === 0) {
       throw new AppError('No questions provided', 400);
@@ -550,7 +566,7 @@ export class QuestionService {
           data: {
             subjectId: meta.subjectId,
             chapterId: meta.chapterId,
-            topicId: meta.topicId,
+            topicId,
             content: q.content,
             questionType: q.questionType,
             difficulty: q.difficulty,
@@ -585,7 +601,11 @@ export class QuestionService {
     meta: ImportQuestionsInput,
     userId: number,
   ) {
-    await this.validateCurriculumRefs(meta.subjectId, meta.chapterId, meta.topicId);
+    const topicId = await this.resolveImportTopicId(
+      meta.subjectId,
+      meta.chapterId,
+      meta.topicId,
+    );
 
     const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
     const sheetName = workbook.SheetNames[0];
@@ -691,7 +711,7 @@ export class QuestionService {
           data: {
             subjectId: meta.subjectId,
             chapterId: meta.chapterId,
-            topicId: meta.topicId,
+            topicId,
             content: q.content,
             questionType: 'SINGLE_CHOICE',
             difficulty: q.difficulty,
@@ -724,23 +744,23 @@ export class QuestionService {
   generateImportTemplate(): Buffer {
     const sampleData = [
       {
-        content: 'Phương trình nào sau đây là phương trình bậc hai?',
+        content: 'Which of the following is a quadratic equation?',
         A: 'x + 1 = 0',
         B: 'x² + 2x + 1 = 0',
         C: 'x³ = 8',
         D: '2x = 4',
         correct: 'B',
-        explanation: 'Phương trình bậc hai có dạng ax² + bx + c = 0 với a ≠ 0',
+        explanation: 'A quadratic equation has the form ax² + bx + c = 0 with a ≠ 0',
         difficulty: 2,
       },
       {
-        content: 'Nguyên tố nào có số hiệu nguyên tử là 6?',
-        A: 'Nitơ',
-        B: 'Oxi',
-        C: 'Cacbon',
-        D: 'Bo',
+        content: 'Which element has atomic number 6?',
+        A: 'Nitrogen',
+        B: 'Oxygen',
+        C: 'Carbon',
+        D: 'Boron',
         correct: 'C',
-        explanation: 'Cacbon (C) có Z = 6',
+        explanation: 'Carbon (C) has Z = 6',
         difficulty: 1,
       },
     ];
@@ -763,21 +783,21 @@ export class QuestionService {
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Questions');
 
     const instructionData = [
-      ['Hướng dẫn Import Câu hỏi'],
+      ['Question Import Instructions'],
       [''],
-      ['Cột', 'Mô tả', 'Bắt buộc'],
-      ['content', 'Nội dung câu hỏi', 'Có'],
-      ['A', 'Đáp án A', 'Có'],
-      ['B', 'Đáp án B', 'Có'],
-      ['C', 'Đáp án C', 'Có'],
-      ['D', 'Đáp án D', 'Có'],
-      ['correct', 'Đáp án đúng (A/B/C/D, nhiều đáp án phân cách bằng dấu phẩy)', 'Có'],
-      ['explanation', 'Giải thích đáp án', 'Không'],
-      ['difficulty', 'Độ khó (1-5): 1=Rất dễ, 2=Dễ, 3=Trung bình, 4=Khó, 5=Rất khó', 'Có'],
+      ['Column', 'Description', 'Required'],
+      ['content', 'Question content', 'Yes'],
+      ['A', 'Option A', 'Yes'],
+      ['B', 'Option B', 'Yes'],
+      ['C', 'Option C', 'Yes'],
+      ['D', 'Option D', 'Yes'],
+      ['correct', 'Correct answer (A/B/C/D, multiple answers separated by commas)', 'Yes'],
+      ['explanation', 'Answer explanation', 'No'],
+      ['difficulty', 'Difficulty (1-5): 1=Very Easy, 2=Easy, 3=Medium, 4=Hard, 5=Very Hard', 'Yes'],
     ];
     const instructionSheet = XLSX.utils.aoa_to_sheet(instructionData);
     instructionSheet['!cols'] = [{ wch: 15 }, { wch: 60 }, { wch: 10 }];
-    XLSX.utils.book_append_sheet(workbook, instructionSheet, 'Huong dan');
+    XLSX.utils.book_append_sheet(workbook, instructionSheet, 'Instructions');
 
     return Buffer.from(XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }));
   }
@@ -974,6 +994,45 @@ export class QuestionService {
       throw new AppError('Question image is too large to export to GIFT', 400);
     }
     return `data:${contentType};base64,${Buffer.from(arrayBuffer).toString('base64')}`;
+  }
+
+  private async resolveImportTopicId(
+    subjectId: number,
+    chapterId: number,
+    topicId?: number,
+  ): Promise<number> {
+    const [subject, chapter] = await Promise.all([
+      prisma.subject.findUnique({ where: { id: subjectId } }),
+      prisma.chapter.findUnique({ where: { id: chapterId } }),
+    ]);
+
+    if (!subject) throw new AppError('Subject not found', 404);
+    if (!isCoreSubjectCode(subject.code)) throw new AppError('Subject not found', 404);
+    if (!chapter) throw new AppError('Chapter not found', 404);
+
+    if (chapter.subjectId !== subjectId) {
+      throw new AppError('Chapter does not belong to the specified subject', 400);
+    }
+
+    if (topicId) {
+      const topic = await prisma.topic.findUnique({ where: { id: topicId } });
+      if (!topic) throw new AppError('Topic not found', 404);
+      if (topic.chapterId !== chapterId) {
+        throw new AppError('Topic does not belong to the specified chapter', 400);
+      }
+      return topic.id;
+    }
+
+    const existingDefaultTopic = await prisma.topic.findFirst({
+      where: { chapterId, name: 'General' },
+      orderBy: { id: 'asc' },
+    });
+    if (existingDefaultTopic) return existingDefaultTopic.id;
+
+    const createdDefaultTopic = await prisma.topic.create({
+      data: { chapterId, name: 'General' },
+    });
+    return createdDefaultTopic.id;
   }
 
   private async validateCurriculumRefs(

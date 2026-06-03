@@ -10,6 +10,10 @@ function getQuery(req: Request): ListDiscussionsQuery {
   );
 }
 
+function getUploadedFiles(req: Request): Express.Multer.File[] {
+  return Array.isArray(req.files) ? req.files : [];
+}
+
 export async function listDiscussions(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     if (!req.user) throw new AppError('Authentication required', 401);
@@ -35,7 +39,12 @@ export async function getDiscussion(req: Request, res: Response, next: NextFunct
 export async function createDiscussion(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     if (!req.user) throw new AppError('Authentication required', 401);
-    const data = await discussionService.createDiscussion(req.body, req.user.id, req.user.role);
+    const data = await discussionService.createDiscussion(
+      req.body,
+      req.user.id,
+      req.user.role,
+      getUploadedFiles(req),
+    );
     res.status(201).json({ success: true, data, timestamp: new Date().toISOString() });
   } catch (error) {
     next(error instanceof Error ? error : new Error('Unexpected error'));
@@ -71,7 +80,13 @@ export async function createReply(req: Request, res: Response, next: NextFunctio
     if (!req.user) throw new AppError('Authentication required', 401);
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) throw new AppError('Invalid discussion ID', 400);
-    const data = await discussionService.createReply(id, req.body, req.user.id, req.user.role);
+    const data = await discussionService.createReply(
+      id,
+      req.body,
+      req.user.id,
+      req.user.role,
+      getUploadedFiles(req),
+    );
     res.status(201).json({ success: true, data, timestamp: new Date().toISOString() });
   } catch (error) {
     next(error instanceof Error ? error : new Error('Unexpected error'));
@@ -107,6 +122,22 @@ export async function adminListDiscussions(req: Request, res: Response, next: Ne
     if (!req.user) throw new AppError('Authentication required', 401);
     const result = await discussionService.adminListDiscussions(getQuery(req));
     res.json({ success: true, ...result, timestamp: new Date().toISOString() });
+  } catch (error) {
+    next(error instanceof Error ? error : new Error('Unexpected error'));
+  }
+}
+
+export async function getAttachmentDownloadUrl(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (!req.user) throw new AppError('Authentication required', 401);
+    const id = parseInt(req.params.attachmentId, 10);
+    if (isNaN(id)) throw new AppError('Invalid attachment ID', 400);
+    const data = await discussionService.getAttachmentDownloadUrl(id, req.user.id, req.user.role);
+    res.json({ success: true, data, timestamp: new Date().toISOString() });
   } catch (error) {
     next(error instanceof Error ? error : new Error('Unexpected error'));
   }

@@ -7,6 +7,11 @@ interface CourseBlockProps {
   resources: ClassResource[];
   activities: ClassActivity[];
   hidden?: boolean;
+  deletingSection?: boolean;
+  deletingResourceId?: number | null;
+  onDeleteSection?: () => void;
+  onOpenResource?: (resource: ClassResource) => void;
+  onDeleteResource?: (resource: ClassResource) => void;
 }
 
 export function CourseBlock({
@@ -15,6 +20,11 @@ export function CourseBlock({
   resources,
   activities,
   hidden,
+  deletingSection,
+  deletingResourceId,
+  onDeleteSection,
+  onOpenResource,
+  onDeleteResource,
 }: CourseBlockProps) {
   return (
     <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-5 shadow-[var(--shadow-sm)]">
@@ -27,7 +37,19 @@ export function CourseBlock({
             <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">{subtitle}</p>
           )}
         </div>
-        {hidden && <Badge variant="warning" size="sm">Hidden</Badge>}
+        <div className="flex shrink-0 items-center gap-2">
+          {hidden && <Badge variant="warning" size="sm">Hidden</Badge>}
+          {onDeleteSection && (
+            <button
+              type="button"
+              disabled={deletingSection}
+              onClick={onDeleteSection}
+              className="rounded-md border border-red-200 bg-red-50 px-2 py-1 text-xs font-semibold text-red-600 transition-colors hover:border-red-300 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {deletingSection ? 'Deleting...' : 'Delete Section'}
+            </button>
+          )}
+        </div>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
         <div>
@@ -63,6 +85,29 @@ export function CourseBlock({
                     <p className="mt-1 line-clamp-2 text-xs text-[var(--color-text-muted)]">
                       {resource.description}
                     </p>
+                  )}
+                  {(resource.type === 'FILE' || resource.type === 'IMAGE' || resource.type === 'LINK' || resource.type === 'VIDEO' || onDeleteResource) && (
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      {(resource.type === 'FILE' || resource.type === 'IMAGE' || resource.type === 'LINK' || resource.type === 'VIDEO') && onOpenResource && (
+                        <button
+                          type="button"
+                          onClick={() => onOpenResource(resource)}
+                          className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg-card)] px-2 py-1 text-xs font-semibold text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
+                        >
+                          {resource.type === 'FILE' ? 'Download' : 'Open'}
+                        </button>
+                      )}
+                      {onDeleteResource && (
+                        <button
+                          type="button"
+                          disabled={deletingResourceId === resource.id}
+                          onClick={() => onDeleteResource(resource)}
+                          className="rounded-md border border-red-200 bg-red-50 px-2 py-1 text-xs font-semibold text-red-600 transition-colors hover:border-red-300 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {deletingResourceId === resource.id ? 'Deleting...' : 'Delete'}
+                        </button>
+                      )}
+                    </div>
                   )}
                 </li>
               ))}

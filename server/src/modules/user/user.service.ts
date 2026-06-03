@@ -272,10 +272,10 @@ export class UserService {
       success: true,
       message: 'Roles retrieved successfully',
       data: [
-        { value: 'ADMIN', label: 'Quản trị viên' },
-        { value: 'TEACHER', label: 'Giáo viên' },
-        { value: 'STUDENT', label: 'Học sinh' },
-        { value: 'PARENT', label: 'Phụ huynh' },
+        { value: 'ADMIN', label: 'Administrator' },
+        { value: 'TEACHER', label: 'Teacher' },
+        { value: 'STUDENT', label: 'Student' },
+        { value: 'PARENT', label: 'Parent' },
       ],
     };
   }

@@ -26,15 +26,15 @@ export function SectionModal({
   onSubmit,
 }: SectionModalProps) {
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Thêm Section" size="md">
+    <Modal isOpen={isOpen} onClose={onClose} title="Add Section" size="md">
       <div className="space-y-4">
         <Input
-          label="Tiêu đề"
+          label="Title"
           value={form.title}
           onChange={(e) => onChange({ ...form, title: e.target.value })}
         />
         <Input
-          label="Mô tả"
+          label="Description"
           value={form.description}
           onChange={(e) => onChange({ ...form, description: e.target.value })}
         />
@@ -45,14 +45,14 @@ export function SectionModal({
             checked={form.isPublished}
             onChange={(e) => onChange({ ...form, isPublished: e.target.checked })}
           />
-          Công khai cho học sinh
+          Publish to students
         </label>
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={onClose}>
-            Hủy
+            Cancel
           </Button>
           <Button variant="primary" isLoading={saving} onClick={onSubmit}>
-            Tạo
+            Create
           </Button>
         </div>
       </div>

@@ -59,10 +59,10 @@ export function AddStudentsModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Thêm học sinh"
+      title="Add Students"
       description={
         selectedClass
-          ? `Chọn học sinh để thêm vào lớp "${selectedClass.name}".`
+          ? `Select students to add to class "${selectedClass.name}".`
           : undefined
       }
       size="lg"
@@ -79,10 +79,10 @@ export function AddStudentsModal({
               onClassNameFilterChange('');
             }}
           >
-            <option value="">Tất cả khối</option>
+            <option value="">All grades</option>
             {[10, 11, 12].map((g) => (
               <option key={g} value={g}>
-                Khối {g}
+                Grade {g}
               </option>
             ))}
           </select>
@@ -92,7 +92,7 @@ export function AddStudentsModal({
             value={classNameFilter}
             onChange={(e) => onClassNameFilterChange(e.target.value)}
           >
-            <option value="">Tất cả lớp chủ nhiệm</option>
+            <option value="">All homeroom classes</option>
             {classNameOptions.map((opt) => (
               <option key={`${opt.gradeLevel}-${opt.name}`} value={opt.name}>
                 {opt.name} (K{opt.gradeLevel})
@@ -101,7 +101,7 @@ export function AddStudentsModal({
           </select>
 
           <Input
-            placeholder="Tìm theo tên / username…"
+            placeholder="Search by name / username…"
             value={searchValue}
             onChange={(e) => onSearchChange(e.target.value)}
             leftIcon={
@@ -122,10 +122,10 @@ export function AddStudentsModal({
               disabled={availableStudents.length === 0 || loading}
               onChange={onToggleSelectAll}
             />
-            <span>Chọn tất cả ({availableStudents.length})</span>
+            <span>Select all ({availableStudents.length})</span>
           </label>
           <span className="rounded-full bg-[var(--color-primary-soft)] px-2.5 py-1 text-xs font-bold tabular-nums text-[var(--color-primary)]">
-            {selectedIds.size} đã chọn
+            {selectedIds.size} selected
           </span>
         </div>
 
@@ -137,8 +137,8 @@ export function AddStudentsModal({
           ) : availableStudents.length === 0 ? (
             <p className="py-10 text-center text-sm text-[var(--color-text-muted)]">
               {hasFilter
-                ? 'Không tìm thấy học sinh phù hợp.'
-                : 'Không còn học sinh nào để thêm.'}
+                ? 'No matching students found.'
+                : 'No more students to add.'}
             </p>
           ) : (
             <ul className="divide-y divide-[var(--color-border-subtle)]">
@@ -173,8 +173,8 @@ export function AddStudentsModal({
                           @{s.username}
                           {s.homeroomClassName && (
                             <span className="ml-2">
-                              · Lớp {s.homeroomClassName}
-                              {s.gradeLevel ? ` (K${s.gradeLevel})` : ''}
+                              · Class {s.homeroomClassName}
+                              {s.gradeLevel ? ` (G${s.gradeLevel})` : ''}
                             </span>
                           )}
                         </p>
@@ -189,7 +189,7 @@ export function AddStudentsModal({
 
         <div className="flex items-center justify-end gap-2">
           <Button variant="outline" onClick={onClose}>
-            Hủy
+            Cancel
           </Button>
           <Button
             variant="primary"
@@ -197,7 +197,7 @@ export function AddStudentsModal({
             disabled={selectedIds.size === 0}
             onClick={onSubmit}
           >
-            Thêm {selectedIds.size > 0 ? `(${selectedIds.size})` : ''}
+            Add {selectedIds.size > 0 ? `(${selectedIds.size})` : ''}
           </Button>
         </div>
       </div>

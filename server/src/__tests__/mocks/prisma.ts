@@ -57,6 +57,7 @@ export const prismaMock: MockPrismaClient = {
   examQuestion: createModelMock(),
   examSchedule: createModelMock(),
   examAssignment: createModelMock(),
+  classTimetableSlot: createModelMock(),
   examAttempt: createModelMock(),
   examAttemptEvent: createModelMock(),
   attemptAnswer: createModelMock(),

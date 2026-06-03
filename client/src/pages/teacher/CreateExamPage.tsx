@@ -9,14 +9,12 @@ import { Spinner } from '@/components/ui/Spinner';
 import { Badge } from '@/components/ui/Badge';
 import { DifficultyBadge, DIFFICULTY_OPTIONS } from '@/components/shared/DifficultyBadge';
 import { MathText } from '@/components/shared/MathText';
-import {
-  SubjectChapterTopicSelect,
-  emptyCurriculumSelection,
-  type CurriculumSelection,
-} from '@/components/shared/SubjectChapterTopicSelect';
 import { useDebounce } from '@/hooks/useDebounce';
-import { listQuestions } from '@/services/question.api';
-import { listSubjects } from '@/services/question.api';
+import {
+  getChaptersBySubject,
+  listQuestions,
+  listSubjects,
+} from '@/services/question.api';
 import {
   createExam,
   addExamQuestions,
@@ -25,8 +23,66 @@ import {
   publishExam,
 } from '@/services/exam.api';
 import { listClasses } from '@/services/class.api';
-import type { Question as BankQuestion, CurriculumSubject } from '@/types/question';
-import type { ClassItem } from '@/types/exam';
+import type {
+  Question as BankQuestion,
+  CurriculumChapter,
+  CurriculumSubject,
+} from '@/types/question';
+import type {
+  ClassItem,
+  GradeComponentType,
+  GradingMethod,
+  NavigationMode,
+  ReviewOptions,
+  ReviewWindowFlags,
+  ReviewWindowName,
+} from '@/types/exam';
+import {
+  GRADE_COMPONENT_INFO,
+  GRADING_METHOD_LABELS,
+  REVIEW_ROW_LABELS,
+  REVIEW_WINDOW_LABELS,
+} from '@/types/exam';
+
+const REVIEW_ALL_ON: ReviewWindowFlags = {
+  responses: true,
+  marks: true,
+  correctness: true,
+  correctAnswer: true,
+  generalFeedback: true,
+};
+const REVIEW_ALL_OFF: ReviewWindowFlags = {
+  responses: false,
+  marks: false,
+  correctness: false,
+  correctAnswer: false,
+  generalFeedback: false,
+};
+const REVIEW_MARKS_ONLY: ReviewWindowFlags = { ...REVIEW_ALL_OFF, marks: true };
+
+// Practice preset: full review as soon as the student submits (§14).
+const PRACTICE_REVIEW: ReviewOptions = {
+  duringAttempt: { ...REVIEW_ALL_OFF },
+  afterSubmit: { ...REVIEW_ALL_ON },
+  laterOpen: { ...REVIEW_ALL_ON },
+  afterClosed: { ...REVIEW_ALL_ON },
+};
+// Strict-exam preset: only the score until the exam closes, then full review.
+const STRICT_REVIEW: ReviewOptions = {
+  duringAttempt: { ...REVIEW_ALL_OFF },
+  afterSubmit: { ...REVIEW_MARKS_ONLY },
+  laterOpen: { ...REVIEW_MARKS_ONLY },
+  afterClosed: { ...REVIEW_ALL_ON },
+};
+
+function cloneReview(options: ReviewOptions): ReviewOptions {
+  return {
+    duringAttempt: { ...options.duringAttempt },
+    afterSubmit: { ...options.afterSubmit },
+    laterOpen: { ...options.laterOpen },
+    afterClosed: { ...options.afterClosed },
+  };
+}
 
 const STEPS = [
   { label: 'Basic Info', icon: '1' },
@@ -36,6 +92,14 @@ const STEPS = [
   { label: 'Assign', icon: '5' },
 ] as const;
 
+const GRADE_LEVELS = [10, 11, 12] as const;
+const MAX_ATTEMPTS = 99;
+
+interface BankCurriculumFilters {
+  gradeLevel: string;
+  chapterId: string;
+}
+
 interface ExamFormState {
   title: string;
   subjectId: string;
@@ -44,12 +108,19 @@ interface ExamFormState {
   selectedQuestionIds: number[];
   pointsPerQuestion: number;
   shuffle: boolean;
+  shuffleAnswers: boolean;
+  navigationMode: NavigationMode;
+  questionsPerPage: number;
+  accessPassword: string;
   showResult: boolean;
+  reviewOptions: ReviewOptions;
   maxAttempts: number;
+  gradingMethod: GradingMethod;
   scheduleEnabled: boolean;
   startTime: string;
   endTime: string;
   selectedClassIds: number[];
+  gradeComponentType: GradeComponentType | '';
 }
 
 const defaultForm: ExamFormState = {
@@ -60,12 +131,19 @@ const defaultForm: ExamFormState = {
   selectedQuestionIds: [],
   pointsPerQuestion: 1,
   shuffle: false,
+  shuffleAnswers: false,
+  navigationMode: 'FREE',
+  questionsPerPage: 0,
+  accessPassword: '',
   showResult: true,
+  reviewOptions: cloneReview(PRACTICE_REVIEW),
   maxAttempts: 1,
+  gradingMethod: 'HIGHEST',
   scheduleEnabled: false,
   startTime: '',
   endTime: '',
   selectedClassIds: [],
+  gradeComponentType: '',
 };
 
 export default function CreateExamPage() {
@@ -83,6 +161,7 @@ export default function CreateExamPage() {
   }));
   const [saving, setSaving] = useState(false);
   const [previewMode, setPreviewMode] = useState(false);
+  const [showReviewMatrix, setShowReviewMatrix] = useState(false);
 
   const [subjects, setSubjects] = useState<CurriculumSubject[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
@@ -92,9 +171,12 @@ export default function CreateExamPage() {
   const [bankPage, setBankPage] = useState(1);
   const [bankSearch, setBankSearch] = useState('');
   const debouncedSearch = useDebounce(bankSearch, 400);
-  const [bankCurriculum, setBankCurriculum] = useState<CurriculumSelection>(
-    emptyCurriculumSelection(),
-  );
+  const [bankCurriculum, setBankCurriculum] = useState<BankCurriculumFilters>({
+    gradeLevel: '',
+    chapterId: '',
+  });
+  const [bankChapters, setBankChapters] = useState<CurriculumChapter[]>([]);
+  const [bankChaptersLoading, setBankChaptersLoading] = useState(false);
   const [bankDifficulty, setBankDifficulty] = useState('');
   const [classGradeFilter, setClassGradeFilter] = useState<number | null>(null);
 
@@ -110,6 +192,12 @@ export default function CreateExamPage() {
         : classes.filter((c) => c.gradeLevel === classGradeFilter),
     [classes, classGradeFilter],
   );
+
+  const filteredBankChapters = useMemo(() => {
+    if (!bankCurriculum.gradeLevel) return bankChapters;
+    const gradeLevel = Number(bankCurriculum.gradeLevel);
+    return bankChapters.filter((chapter) => chapter.gradeLevel === gradeLevel);
+  }, [bankChapters, bankCurriculum.gradeLevel]);
 
   const classStripRef = useRef<HTMLDivElement | null>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -146,6 +234,53 @@ export default function CreateExamPage() {
     listClasses({ pageSize: 200 }).then((r) => setClasses(r.items ?? r as unknown as ClassItem[])).catch(() => {});
   }, []);
 
+  useEffect(() => {
+    if (!form.subjectId) {
+      setBankChapters([]);
+      setBankCurriculum((prev) => ({ ...prev, chapterId: '' }));
+      return;
+    }
+
+    let cancelled = false;
+    setBankChaptersLoading(true);
+    getChaptersBySubject(Number(form.subjectId))
+      .then((chapters) => {
+        if (cancelled) return;
+        setBankChapters(chapters);
+        setBankCurriculum((prev) => {
+          const selectedChapterStillValid =
+            prev.chapterId &&
+            chapters.some(
+              (chapter) =>
+                String(chapter.id) === prev.chapterId &&
+                (!prev.gradeLevel || chapter.gradeLevel === Number(prev.gradeLevel)),
+            );
+
+          return selectedChapterStillValid ? prev : { ...prev, chapterId: '' };
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setBankChapters([]);
+      })
+      .finally(() => {
+        if (!cancelled) setBankChaptersLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [form.subjectId]);
+
+  useEffect(() => {
+    if (!bankCurriculum.chapterId || !bankCurriculum.gradeLevel) return;
+    const selectedChapter = bankChapters.find(
+      (chapter) => String(chapter.id) === bankCurriculum.chapterId,
+    );
+    if (selectedChapter && selectedChapter.gradeLevel !== Number(bankCurriculum.gradeLevel)) {
+      setBankCurriculum((prev) => ({ ...prev, chapterId: '' }));
+    }
+  }, [bankChapters, bankCurriculum.chapterId, bankCurriculum.gradeLevel]);
+
   const fetchBankQuestions = useCallback(async () => {
     setBankLoading(true);
     try {
@@ -156,8 +291,8 @@ export default function CreateExamPage() {
         sortOrder: 'desc' as const,
       };
       if (form.subjectId) params.subjectId = Number(form.subjectId);
+      if (bankCurriculum.gradeLevel) params.gradeLevel = Number(bankCurriculum.gradeLevel);
       if (bankCurriculum.chapterId) params.chapterId = Number(bankCurriculum.chapterId);
-      if (bankCurriculum.topicId) params.topicId = Number(bankCurriculum.topicId);
       if (bankDifficulty) params.difficulty = Number(bankDifficulty);
       if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
 
@@ -215,7 +350,7 @@ export default function CreateExamPage() {
       case 1:
         return form.selectedQuestionIds.length > 0;
       case 2:
-        return form.maxAttempts >= 1;
+        return form.maxAttempts >= 1 && form.maxAttempts <= MAX_ATTEMPTS;
       case 3:
         if (!form.scheduleEnabled) return true;
         return form.startTime !== '' && form.endTime !== '' && form.startTime < form.endTime;
@@ -248,8 +383,15 @@ export default function CreateExamPage() {
         // The UI captures it as a percentage (0–100), so convert here.
         passingScore: Number((form.passingScore / 10).toFixed(2)),
         shuffle: form.shuffle,
-        showResult: form.showResult,
+        // Legacy fallback flag — true if anything is shown right after submit.
+        showResult: Object.values(form.reviewOptions.afterSubmit).some(Boolean),
         maxAttempts: form.maxAttempts,
+        gradingMethod: form.maxAttempts > 1 ? form.gradingMethod : 'HIGHEST',
+        shuffleAnswers: form.shuffleAnswers,
+        navigationMode: form.navigationMode,
+        questionsPerPage: form.questionsPerPage > 0 ? form.questionsPerPage : null,
+        accessPassword: form.accessPassword.trim() ? form.accessPassword.trim() : null,
+        reviewOptions: form.reviewOptions,
       });
 
       await addExamQuestions(exam.id, {
@@ -270,7 +412,11 @@ export default function CreateExamPage() {
       }
 
       if (form.selectedClassIds.length > 0) {
-        await assignExam(exam.id, { classIds: form.selectedClassIds });
+        await assignExam(exam.id, {
+          classIds: form.selectedClassIds,
+          gradeComponentType:
+            form.gradeComponentType === '' ? null : form.gradeComponentType,
+        });
       }
 
       toast.success('Exam created successfully!');
@@ -483,12 +629,88 @@ export default function CreateExamPage() {
                   </select>
                 </div>
               </div>
-              <SubjectChapterTopicSelect
-                value={{ ...bankCurriculum, subjectId: form.subjectId || bankCurriculum.subjectId }}
-                onChange={(v) => setBankCurriculum(v)}
-                layout="row"
-                allowEmpty
-              />
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                    Subject
+                  </label>
+                  <select
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                    value={form.subjectId}
+                    onChange={(e) => {
+                      updateForm('subjectId', e.target.value);
+                      setBankCurriculum({ gradeLevel: '', chapterId: '' });
+                    }}
+                  >
+                    <option value="">All subjects</option>
+                    {subjects.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                    Grade
+                  </label>
+                  <select
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                    value={bankCurriculum.gradeLevel}
+                    onChange={(e) => {
+                      const gradeLevel = e.target.value;
+                      setBankCurriculum((prev) => {
+                        const chapterStillValid =
+                          prev.chapterId &&
+                          bankChapters.some(
+                            (chapter) =>
+                              String(chapter.id) === prev.chapterId &&
+                              (!gradeLevel || chapter.gradeLevel === Number(gradeLevel)),
+                          );
+
+                        return {
+                          gradeLevel,
+                          chapterId: chapterStillValid ? prev.chapterId : '',
+                        };
+                      });
+                    }}
+                  >
+                    <option value="">All grades</option>
+                    {GRADE_LEVELS.map((gradeLevel) => (
+                      <option key={gradeLevel} value={gradeLevel}>
+                        Grade {gradeLevel}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                    Chapter
+                  </label>
+                  <select
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:cursor-not-allowed disabled:bg-slate-50"
+                    disabled={!form.subjectId || bankChaptersLoading}
+                    value={bankCurriculum.chapterId}
+                    onChange={(e) =>
+                      setBankCurriculum((prev) => ({
+                        ...prev,
+                        chapterId: e.target.value,
+                      }))
+                    }
+                  >
+                    <option value="">All chapters</option>
+                    {filteredBankChapters.map((chapter) => (
+                      <option key={chapter.id} value={chapter.id}>
+                        {bankCurriculum.gradeLevel
+                          ? chapter.name
+                          : `Grade ${chapter.gradeLevel} - ${chapter.name}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
             </div>
 
             {/* Batch actions */}
@@ -600,11 +822,144 @@ export default function CreateExamPage() {
             />
 
             <ToggleSwitch
-              label="Show Results After Submit"
-              description="Students can view correct answers and explanations after submitting."
-              checked={form.showResult}
-              onChange={(v) => updateForm('showResult', v)}
+              label="Shuffle Answer Order"
+              description="Randomize the order of answer options for each student."
+              checked={form.shuffleAnswers}
+              onChange={(v) => updateForm('shuffleAnswers', v)}
             />
+
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                Question Navigation
+              </label>
+              <p className="mb-2 text-xs text-slate-500">
+                Free: students can go back to previous questions. Sequential: must follow the order, no going back.
+              </p>
+              <div className="flex gap-2">
+                {(['FREE', 'SEQUENTIAL'] as NavigationMode[]).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => updateForm('navigationMode', mode)}
+                    className={`flex h-11 flex-1 items-center justify-center rounded-lg border text-sm font-semibold transition-colors ${
+                      form.navigationMode === mode
+                        ? 'border-indigo-600 bg-indigo-600 text-white shadow-sm'
+                        : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    {mode === 'FREE' ? 'Free' : 'Sequential'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                Questions per Page
+              </label>
+              <p className="mb-2 text-xs text-slate-500">
+                Leave 0 = one question per page (default). Enter a larger number to group multiple questions on one page.
+              </p>
+              <Input
+                className="w-32"
+                type="number"
+                min={0}
+                max={100}
+                value={String(form.questionsPerPage)}
+                onChange={(e) =>
+                  updateForm('questionsPerPage', Math.max(0, Math.min(100, Number(e.target.value))))
+                }
+              />
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                Access Password (optional)
+              </label>
+              <p className="mb-2 text-xs text-slate-500">
+                If set, students must enter the correct password before they can start the exam.
+              </p>
+              <Input
+                className="max-w-xs"
+                type="text"
+                maxLength={100}
+                placeholder="Leave blank = no password required"
+                value={form.accessPassword}
+                onChange={(e) => updateForm('accessPassword', e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                What can students see after submitting? (Review options)
+              </label>
+              <p className="mb-2 text-xs text-slate-500">
+                Pick a preset quickly, or enable advanced customization to control the details for each time window.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => updateForm('reviewOptions', cloneReview(PRACTICE_REVIEW))}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Practice — show right after submit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => updateForm('reviewOptions', cloneReview(STRICT_REVIEW))}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Strict exam — score only until the exam closes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowReviewMatrix((s) => !s)}
+                  className="rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100"
+                >
+                  {showReviewMatrix ? 'Hide customization' : 'Advanced customization'}
+                </button>
+              </div>
+
+              {showReviewMatrix && (
+                <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-slate-50 text-left">
+                        <th className="px-3 py-2 font-semibold text-slate-600">Content</th>
+                        {REVIEW_WINDOW_LABELS.map((win) => (
+                          <th key={win.key} className="px-3 py-2 text-center font-semibold text-slate-600">
+                            {win.label}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {REVIEW_ROW_LABELS.map((row) => (
+                        <tr key={row.key} className="border-t border-slate-100">
+                          <td className="px-3 py-2 text-slate-700">{row.label}</td>
+                          {REVIEW_WINDOW_LABELS.map((win) => (
+                            <td key={win.key} className="px-3 py-2 text-center">
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                checked={form.reviewOptions[win.key as ReviewWindowName][row.key as keyof ReviewWindowFlags]}
+                                onChange={() => {
+                                  const next = cloneReview(form.reviewOptions);
+                                  const w = win.key as ReviewWindowName;
+                                  const r = row.key as keyof ReviewWindowFlags;
+                                  next[w][r] = !next[w][r];
+                                  updateForm('reviewOptions', next);
+                                }}
+                              />
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
 
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-700">
@@ -632,13 +987,40 @@ export default function CreateExamPage() {
                   className="w-24"
                   type="number"
                   min={1}
-                  max={99}
+                  max={MAX_ATTEMPTS}
                   placeholder="Custom"
                   value={![1, 2, 3, 5].includes(form.maxAttempts) ? String(form.maxAttempts) : ''}
-                  onChange={(e) => updateForm('maxAttempts', Math.max(1, Number(e.target.value)))}
+                  onChange={(e) =>
+                    updateForm(
+                      'maxAttempts',
+                      Math.max(1, Math.min(MAX_ATTEMPTS, Number(e.target.value))),
+                    )
+                  }
                 />
               </div>
             </div>
+
+            {form.maxAttempts > 1 && (
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                  Final score calculation
+                </label>
+                <p className="mb-2 text-xs text-slate-500">
+                  When multiple attempts are allowed, the final score is taken using this method.
+                </p>
+                <select
+                  className="h-11 w-full max-w-xs rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                  value={form.gradingMethod}
+                  onChange={(e) => updateForm('gradingMethod', e.target.value as GradingMethod)}
+                >
+                  {(Object.keys(GRADING_METHOD_LABELS) as GradingMethod[]).map((m) => (
+                    <option key={m} value={m}>
+                      {GRADING_METHOD_LABELS[m]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         )}
 
@@ -699,7 +1081,7 @@ export default function CreateExamPage() {
 
               {availableGrades.length > 0 && (
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="mr-1 text-xs font-medium text-slate-500">Khối:</span>
+                  <span className="mr-1 text-xs font-medium text-slate-500">Grade:</span>
                   <button
                     type="button"
                     onClick={() => setClassGradeFilter(null)}
@@ -709,7 +1091,7 @@ export default function CreateExamPage() {
                         : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                     }`}
                   >
-                    Tất cả
+                    All
                   </button>
                   {availableGrades.map((g) => (
                     <button
@@ -722,7 +1104,7 @@ export default function CreateExamPage() {
                           : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                       }`}
                     >
-                      Khối {g}
+                      Grade {g}
                     </button>
                   ))}
                 </div>
@@ -735,7 +1117,7 @@ export default function CreateExamPage() {
               </div>
             ) : filteredClasses.length === 0 ? (
               <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 py-8 text-center">
-                <p className="text-sm text-slate-500">Không có lớp nào ở khối này.</p>
+                <p className="text-sm text-slate-500">No classes in this grade.</p>
               </div>
             ) : (
               <div className="relative">
@@ -744,7 +1126,7 @@ export default function CreateExamPage() {
                   type="button"
                   onClick={() => scrollStrip('left')}
                   disabled={!canScrollLeft}
-                  aria-label="Cuộn sang trái"
+                  aria-label="Scroll left"
                   className={`absolute left-0 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 -translate-x-1 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-md transition-all hover:bg-indigo-50 hover:text-indigo-600 ${
                     canScrollLeft ? 'opacity-100' : 'pointer-events-none opacity-0'
                   }`}
@@ -759,7 +1141,7 @@ export default function CreateExamPage() {
                   type="button"
                   onClick={() => scrollStrip('right')}
                   disabled={!canScrollRight}
-                  aria-label="Cuộn sang phải"
+                  aria-label="Scroll right"
                   className={`absolute right-0 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 translate-x-1 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-md transition-all hover:bg-indigo-50 hover:text-indigo-600 ${
                     canScrollRight ? 'opacity-100' : 'pointer-events-none opacity-0'
                   }`}
@@ -808,7 +1190,7 @@ export default function CreateExamPage() {
                       >
                         <div className="flex items-start justify-between gap-2">
                           <span className="inline-flex items-center rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-600">
-                            Khối {cls.gradeLevel}
+                            Grade {cls.gradeLevel}
                           </span>
                           <span
                             className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
@@ -828,7 +1210,7 @@ export default function CreateExamPage() {
                         <p className="truncate text-xs text-slate-500">
                           {cls.subject?.name ?? '—'}
                           {cls._count?.classStudents != null && (
-                            <span className="ml-1 text-slate-400">· {cls._count.classStudents} HS</span>
+                            <span className="ml-1 text-slate-400">· {cls._count.classStudents} students</span>
                           )}
                         </p>
                       </button>
@@ -837,6 +1219,61 @@ export default function CreateExamPage() {
                 </div>
               </div>
             )}
+
+            {/* Gradebook component */}
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <div className="mb-2 flex items-center justify-between">
+                <h3 className="text-sm font-bold text-slate-800">
+                  Count toward gradebook
+                </h3>
+                <span className="text-[11px] uppercase tracking-wide text-slate-400">
+                  Circular 22 — High School
+                </span>
+              </div>
+              <p className="mb-3 text-xs text-slate-500">
+                When a grade component is selected, each student's best result is
+                automatically added to the class gradebook with the matching coefficient.
+              </p>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <button
+                  type="button"
+                  onClick={() => updateForm('gradeComponentType', '')}
+                  className={`rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
+                    form.gradeComponentType === ''
+                      ? 'border-slate-600 bg-slate-600 text-white shadow-sm'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="font-bold">Not graded</div>
+                  <div className="text-[11px] opacity-75">Practice only</div>
+                </button>
+                {(Object.keys(GRADE_COMPONENT_INFO) as GradeComponentType[]).map(
+                  (key) => {
+                    const info = GRADE_COMPONENT_INFO[key];
+                    const checked = form.gradeComponentType === key;
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => updateForm('gradeComponentType', key)}
+                        className={`rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
+                          checked
+                            ? 'border-indigo-600 bg-indigo-600 text-white shadow-sm'
+                            : 'border-slate-200 bg-white text-slate-700 hover:border-indigo-300'
+                        }`}
+                      >
+                        <div className="font-bold">
+                          {info.abbr} (coefficient {info.coefficient})
+                        </div>
+                        <div className="text-[11px] opacity-75">
+                          {info.label}
+                        </div>
+                      </button>
+                    );
+                  },
+                )}
+              </div>
+            </div>
 
             {/* Compact Review Summary */}
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
@@ -848,10 +1285,33 @@ export default function CreateExamPage() {
                 <SummaryItem label="Questions" value={form.selectedQuestionIds.length} />
                 <SummaryItem label="Passing" value={`${form.passingScore}%`} />
                 <SummaryItem label="Max Attempts" value={form.maxAttempts} />
+                {form.maxAttempts > 1 && (
+                  <SummaryItem label="Final score" value={GRADING_METHOD_LABELS[form.gradingMethod]} />
+                )}
                 <SummaryItem label="Shuffle" value={form.shuffle ? 'Yes' : 'No'} />
-                <SummaryItem label="Show Results" value={form.showResult ? 'Yes' : 'No'} />
+                <SummaryItem label="Shuffle answers" value={form.shuffleAnswers ? 'Yes' : 'No'} />
+                <SummaryItem label="Navigation" value={form.navigationMode === 'SEQUENTIAL' ? 'Sequential' : 'Free'} />
+                <SummaryItem label="Password" value={form.accessPassword.trim() ? 'Yes' : 'No'} />
+                <SummaryItem
+                  label="Review after submit"
+                  value={
+                    form.reviewOptions.afterSubmit.correctAnswer
+                      ? 'Answer + explanation'
+                      : form.reviewOptions.afterSubmit.marks
+                        ? 'Score only'
+                        : 'Hidden'
+                  }
+                />
                 <SummaryItem label="Scheduled" value={form.scheduleEnabled ? 'Yes' : 'No'} />
                 <SummaryItem label="Classes" value={form.selectedClassIds.length} />
+                <SummaryItem
+                  label="Gradebook"
+                  value={
+                    form.gradeComponentType
+                      ? GRADE_COMPONENT_INFO[form.gradeComponentType].abbr
+                      : '—'
+                  }
+                />
               </dl>
             </div>
           </div>

@@ -85,6 +85,18 @@ function hasRichTextContent(value: string): boolean {
   return (template.content.textContent || '').trim().length > 0;
 }
 
+function getApiErrorMessage(error: unknown, fallback: string): string {
+  const responseMessage = (
+    error as { response?: { data?: { message?: unknown } } }
+  )?.response?.data?.message;
+
+  if (typeof responseMessage === 'string' && responseMessage.trim()) {
+    return responseMessage;
+  }
+
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
 export interface QuestionFormModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -117,6 +129,9 @@ export function QuestionFormModal({
     if (editQuestion) {
       setCurriculum({
         subjectId: String(editQuestion.subjectId),
+        gradeLevel: editQuestion.chapter?.gradeLevel
+          ? String(editQuestion.chapter.gradeLevel)
+          : '',
         chapterId: editQuestion.chapterId ? String(editQuestion.chapterId) : '',
         topicId: editQuestion.topicId ? String(editQuestion.topicId) : '',
       });
@@ -187,8 +202,8 @@ export function QuestionFormModal({
 
   const validate = (): string | null => {
     if (!curriculum.subjectId) return 'Please select a subject.';
+    if (!curriculum.gradeLevel) return 'Please select a grade.';
     if (!curriculum.chapterId) return 'Please select a chapter.';
-    if (!curriculum.topicId) return 'Please select a topic.';
     if (!hasRichTextContent(content)) return 'Question content is required.';
     if (options.some((o) => !hasRichTextContent(o.content)))
       return 'All answer rows need content.';
@@ -243,8 +258,7 @@ export function QuestionFormModal({
       ]);
       toast.success('AI distractor added.');
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Failed to generate distractor.';
-      toast.error(msg);
+      toast.error(getApiErrorMessage(e, 'Failed to generate distractor.'));
     } finally {
       setGeneratingDistractor(false);
     }
@@ -264,7 +278,6 @@ export function QuestionFormModal({
         chapterId: curriculum.chapterId
           ? Number(curriculum.chapterId)
           : undefined,
-        topicId: curriculum.topicId ? Number(curriculum.topicId) : undefined,
         content: content.trim(),
         questionType,
         difficulty,
@@ -298,9 +311,7 @@ export function QuestionFormModal({
       onSaved();
       onClose();
     } catch (e: unknown) {
-      const msg =
-        e instanceof Error ? e.message : 'Failed to save question.';
-      toast.error(msg);
+      toast.error(getApiErrorMessage(e, 'Failed to save question.'));
     } finally {
       setSaving(false);
     }
@@ -329,6 +340,7 @@ export function QuestionFormModal({
           onChange={setCurriculum}
           allowEmpty={false}
           layout="row"
+          showTopic={false}
         />
 
         {/* Question type & Difficulty */}

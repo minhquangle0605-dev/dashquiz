@@ -7,12 +7,12 @@ import { server } from '../mocks/server';
 vi.mock('@/services/exam.api', () => ({
   getExams: vi.fn().mockResolvedValue({
     success: true,
-    data: [{ id: 1, title: 'Math Exam', status: 'PUBLISHED' }],
+    data: [{ id: 1, title: 'Mathematics Exam', status: 'PUBLISHED' }],
     pagination: { page: 1, limit: 10, total: 1, totalPages: 1, hasNext: false, hasPrev: false },
   }),
   getExamById: vi.fn().mockResolvedValue({
     id: 1,
-    title: 'Math Exam',
+    title: 'Mathematics Exam',
     durationMin: 60,
     totalQuestions: 10,
     status: 'PUBLISHED',
@@ -24,7 +24,7 @@ vi.mock('@/services/exam.api', () => ({
 vi.mock('@/services/studentExam.api', () => ({
   listStudentExams: vi.fn().mockResolvedValue({
     success: true,
-    data: [{ id: 1, title: 'Math Exam', subject: { name: 'Math' } }],
+    data: [{ id: 1, title: 'Mathematics Exam', subject: { name: 'Mathematics' } }],
   }),
   startStudentExam: vi.fn().mockResolvedValue({
     success: true,

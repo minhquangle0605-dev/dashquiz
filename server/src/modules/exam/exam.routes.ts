@@ -11,6 +11,7 @@ import {
   assignExamSchema,
   listExamsQuerySchema,
   examMonitoringQuerySchema,
+  gradeAnswerSchema,
 } from './exam.validation';
 import { ROLES } from '../../utils/constants';
 
@@ -116,6 +117,33 @@ router.get(
   authorize(ROLES.TEACHER, ROLES.ADMIN),
   validate(examMonitoringQuerySchema, 'query'),
   examController.getMonitoring,
+);
+
+// ── Reports (Grades / Responses / Statistics / Manual grading) ──
+router.get(
+  '/:id/reports',
+  authenticate,
+  authorize(ROLES.TEACHER, ROLES.ADMIN),
+  examController.getReport,
+);
+
+// ── Manual grade one answer of an attempt ──
+router.put(
+  '/:id/attempts/:attemptId/answers/:answerId/grade',
+  authenticate,
+  authorize(ROLES.TEACHER, ROLES.ADMIN),
+  validate(gradeAnswerSchema),
+  activityLogger('GRADE_EXAM_ANSWER', 'exam_attempt'),
+  examController.gradeAnswer,
+);
+
+// ── Delete an attempt ──
+router.delete(
+  '/:id/attempts/:attemptId',
+  authenticate,
+  authorize(ROLES.TEACHER, ROLES.ADMIN),
+  activityLogger('DELETE_EXAM_ATTEMPT', 'exam_attempt'),
+  examController.deleteAttempt,
 );
 
 export default router;

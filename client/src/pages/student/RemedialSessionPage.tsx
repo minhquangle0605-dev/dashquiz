@@ -38,11 +38,11 @@ function QuestionCard({
     <Card padding="lg" className="overflow-hidden">
       <div className="flex items-center justify-between mb-4">
         <Badge variant="neutral">
-          Câu {index + 1} / {total}
+          Question {index + 1} / {total}
         </Badge>
         {showResult && (
           <Badge variant={question.isCorrect ? 'success' : 'danger'}>
-            {question.isCorrect ? 'Đúng' : 'Sai'}
+            {question.isCorrect ? 'Correct' : 'Wrong'}
           </Badge>
         )}
       </div>
@@ -101,7 +101,7 @@ function QuestionCard({
 
       {showResult && question.explanation && (
         <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50 p-4">
-          <p className="text-sm font-semibold text-sky-800">Giải thích</p>
+          <p className="text-sm font-semibold text-sky-800">Explanation</p>
           <div className="mt-1 text-sm leading-relaxed text-sky-700">
             <MathText>{question.explanation}</MathText>
           </div>
@@ -118,10 +118,10 @@ function QuestionCard({
             {isSubmitting ? (
               <>
                 <Spinner size="sm" className="mr-2" />
-                Đang kiểm tra...
+                Checking...
               </>
             ) : (
-              'Kiểm tra đáp án'
+              'Check Answer'
             )}
           </Button>
         </div>
@@ -150,7 +150,7 @@ export default function RemedialSessionPage() {
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="flex flex-col items-center gap-4">
           <Spinner size="lg" />
-          <p className="text-sm text-slate-500">Đang tải bài luyện tập...</p>
+          <p className="text-sm text-slate-500">Loading practice session...</p>
         </div>
       </div>
     );
@@ -162,17 +162,17 @@ export default function RemedialSessionPage() {
         <Card padding="lg">
           <div className="text-center">
             <h2 className="text-lg font-semibold text-red-800">
-              Không tải được bài luyện tập
+              Failed to load practice session
             </h2>
             <p className="mt-2 text-sm text-red-600">
-              {error instanceof Error ? error.message : 'Vui lòng thử lại sau'}
+              {error instanceof Error ? error.message : 'Please try again later'}
             </p>
             <Button
               variant="outline"
               className="mt-6"
               onClick={() => navigate('/student/exams')}
             >
-              Quay lại danh sách bài thi
+              Back to exam list
             </Button>
           </div>
         </Card>
@@ -194,14 +194,14 @@ export default function RemedialSessionPage() {
         <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
         </svg>
-        Quay lại kết quả bài thi
+        Back to exam result
       </button>
 
       <Card padding="lg">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-xl font-bold text-slate-900">
-              Ôn tập AI: {session.topic.name}
+              AI Review: {session.topic.name}
             </h1>
             <p className="mt-1 text-sm text-slate-500">
               {session.topic.subject} · {session.topic.chapter}
@@ -212,11 +212,11 @@ export default function RemedialSessionPage() {
               <p className="text-lg font-bold text-slate-800">
                 {stats.answered} / {session.totalQuestions}
               </p>
-              <p className="text-xs text-slate-500">Đã làm</p>
+              <p className="text-xs text-slate-500">Answered</p>
             </div>
             <div className="rounded-xl bg-emerald-50 px-4 py-2">
               <p className="text-lg font-bold text-emerald-700">{stats.correct}</p>
-              <p className="text-xs text-emerald-600">Đúng</p>
+              <p className="text-xs text-emerald-600">Correct</p>
             </div>
           </div>
         </div>
@@ -224,7 +224,7 @@ export default function RemedialSessionPage() {
         {completed && (
           <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-center">
             <p className="text-sm font-semibold text-emerald-800">
-              Hoàn thành! Bạn đã làm đúng {stats.correct}/{session.totalQuestions} câu.
+              Complete! You answered {stats.correct}/{session.totalQuestions} questions correctly.
             </p>
           </div>
         )}

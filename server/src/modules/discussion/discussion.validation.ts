@@ -3,6 +3,21 @@ import { z } from 'zod';
 export const discussionScopeSchema = z.enum(['CLASS', 'GLOBAL']);
 export const discussionTypeSchema = z.enum(['ANNOUNCEMENT', 'DISCUSSION']);
 
+const attachmentLinkSchema = z.object({
+  url: z.string().url('Link must be a valid URL').max(2000),
+  title: z.string().max(255).optional(),
+});
+
+const linksSchema = z.preprocess((value) => {
+  if (typeof value !== 'string') return value;
+  if (!value.trim()) return undefined;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}, z.array(attachmentLinkSchema).max(10).optional());
+
 export const listDiscussionsQuerySchema = z.object({
   scope: discussionScopeSchema.optional(),
   type: discussionTypeSchema.optional(),
@@ -19,8 +34,9 @@ export const createDiscussionSchema = z
     scope: discussionScopeSchema,
     type: discussionTypeSchema,
     classId: z.coerce.number().int().positive().optional(),
-    title: z.string().min(1, 'Tiêu đề bắt buộc').max(200),
-    content: z.string().min(1, 'Nội dung bắt buộc').max(10000),
+    title: z.string().min(1, 'Title is required').max(200),
+    content: z.string().max(10000).optional().default(''),
+    links: linksSchema,
   })
   .refine(
     (val) => (val.scope === 'CLASS' ? val.classId !== undefined : val.classId === undefined),
@@ -38,7 +54,8 @@ export const updateDiscussionSchema = z.object({
 export type UpdateDiscussionInput = z.infer<typeof updateDiscussionSchema>;
 
 export const createReplySchema = z.object({
-  content: z.string().min(1, 'Nội dung bắt buộc').max(5000),
+  content: z.string().max(5000).optional().default(''),
+  links: linksSchema,
 });
 export type CreateReplyInput = z.infer<typeof createReplySchema>;
 

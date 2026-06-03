@@ -18,33 +18,33 @@ const STATUS_CONFIG: Record<
   ExamMonitoringStudent['status'],
   { label: string; variant: BadgeVariant }
 > = {
-  NOT_STARTED: { label: 'Chưa bắt đầu', variant: 'neutral' },
-  IN_PROGRESS: { label: 'Đang làm', variant: 'info' },
-  SUBMITTED: { label: 'Đã nộp', variant: 'success' },
-  GRADED: { label: 'Đã chấm', variant: 'success' },
+  NOT_STARTED: { label: 'Not Started', variant: 'neutral' },
+  IN_PROGRESS: { label: 'In Progress', variant: 'info' },
+  SUBMITTED: { label: 'Submitted', variant: 'success' },
+  GRADED: { label: 'Graded', variant: 'success' },
 };
 
 const RISK_CONFIG: Record<ExamMonitoringStudent['riskLevel'], { label: string; variant: BadgeVariant }> = {
-  low: { label: 'Bình thường', variant: 'success' },
-  medium: { label: 'Cần xem', variant: 'warning' },
-  high: { label: 'Rủi ro cao', variant: 'danger' },
+  low: { label: 'Normal', variant: 'success' },
+  medium: { label: 'Review', variant: 'warning' },
+  high: { label: 'High Risk', variant: 'danger' },
 };
 
 const EVENT_LABELS: Record<AttemptMonitoringEventType, string> = {
-  STARTED: 'Bắt đầu',
-  RESUMED: 'Tiếp tục',
+  STARTED: 'Started',
+  RESUMED: 'Resumed',
   HEARTBEAT: 'Heartbeat',
-  ANSWER_SAVED: 'Lưu bài',
-  TAB_HIDDEN: 'Chuyển tab',
-  WINDOW_BLUR: 'Mất focus',
+  ANSWER_SAVED: 'Answer saved',
+  TAB_HIDDEN: 'Tab switch',
+  WINDOW_BLUR: 'Lost focus',
   COPY: 'Copy',
   PASTE: 'Paste',
-  CONTEXT_MENU: 'Menu chuột phải',
-  SHORTCUT_BLOCKED: 'Phím tắt bị chặn',
-  OFFLINE: 'Mất kết nối',
-  ONLINE: 'Kết nối lại',
-  SUBMITTED: 'Nộp bài',
-  AUTO_SUBMITTED: 'Tự động nộp',
+  CONTEXT_MENU: 'Right-click menu',
+  SHORTCUT_BLOCKED: 'Blocked shortcut',
+  OFFLINE: 'Disconnected',
+  ONLINE: 'Reconnected',
+  SUBMITTED: 'Submitted',
+  AUTO_SUBMITTED: 'Auto-submitted',
 };
 
 interface ExamMonitoringPanelProps {
@@ -95,7 +95,7 @@ function formatDateTime(value: string | null) {
     month: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
-  }, 'vi-VN');
+  }, 'en-US');
 }
 
 export function ExamMonitoringPanel({ exam, classId, onClose }: ExamMonitoringPanelProps) {
@@ -115,7 +115,7 @@ export function ExamMonitoringPanel({ exam, classId, onClose }: ExamMonitoringPa
       const result = await getExamMonitoring(exam.id, { classId });
       setData(result);
     } catch {
-      toast.error('Không tải được dữ liệu giám sát.');
+      toast.error('Failed to load monitoring data.');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -169,34 +169,34 @@ export function ExamMonitoringPanel({ exam, classId, onClose }: ExamMonitoringPa
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h4 className="truncate text-sm font-bold text-[var(--color-text-primary)]">
-              Giám sát: {exam.title}
+              Monitoring: {exam.title}
             </h4>
-            {refreshing && <Badge variant="info" size="sm">Đang đồng bộ</Badge>}
+            {refreshing && <Badge variant="info" size="sm">Syncing</Badge>}
           </div>
           <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-            Cập nhật lúc {data ? formatDateTime(data.updatedAt) : '-'}
+            Last updated {data ? formatDateTime(data.updatedAt) : '-'}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => fetchMonitoring(true)}>
-            Làm mới
+            Refresh
           </Button>
           <Button variant="ghost" size="sm" onClick={onClose}>
-            Đóng
+            Close
           </Button>
         </div>
       </div>
 
       {summary && (
         <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-8">
-          <StatTile label="Học sinh" value={summary.totalStudents} />
-          <StatTile label="Đang làm" value={summary.inProgress} tone="info" />
-          <StatTile label="Đã nộp" value={summary.submitted} tone="success" />
-          <StatTile label="Chưa làm" value={summary.notStarted} />
-          <StatTile label="Điểm TB" value={summary.avgScore ?? '-'} tone="success" />
-          <StatTile label="Đạt" value={summary.passRate === null ? '-' : `${summary.passRate}%`} tone="success" />
-          <StatTile label="Cần xem" value={summary.suspiciousCount} tone="warning" />
-          <StatTile label="Rủi ro cao" value={summary.highRiskCount} tone="danger" />
+          <StatTile label="Students" value={summary.totalStudents} />
+          <StatTile label="In Progress" value={summary.inProgress} tone="info" />
+          <StatTile label="Submitted" value={summary.submitted} tone="success" />
+          <StatTile label="Not Started" value={summary.notStarted} />
+          <StatTile label="Avg Score" value={summary.avgScore ?? '-'} tone="success" />
+          <StatTile label="Pass Rate" value={summary.passRate === null ? '-' : `${summary.passRate}%`} tone="success" />
+          <StatTile label="Review" value={summary.suspiciousCount} tone="warning" />
+          <StatTile label="High Risk" value={summary.highRiskCount} tone="danger" />
         </div>
       )}
 
@@ -208,7 +208,7 @@ export function ExamMonitoringPanel({ exam, classId, onClose }: ExamMonitoringPa
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Tìm học sinh..."
+            placeholder="Search students..."
             className="h-10 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-input)] pl-9 pr-3 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-soft-strong)]"
           />
         </div>
@@ -217,36 +217,36 @@ export function ExamMonitoringPanel({ exam, classId, onClose }: ExamMonitoringPa
           onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
           className="h-10 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-input)] px-3 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-primary)] focus:outline-none"
         >
-          <option value="all">Tất cả trạng thái</option>
-          <option value="IN_PROGRESS">Đang làm</option>
-          <option value="SUBMITTED">Đã nộp</option>
-          <option value="NOT_STARTED">Chưa bắt đầu</option>
+          <option value="all">All statuses</option>
+          <option value="IN_PROGRESS">In Progress</option>
+          <option value="SUBMITTED">Submitted</option>
+          <option value="NOT_STARTED">Not Started</option>
         </select>
         <select
           value={riskFilter}
           onChange={(e) => setRiskFilter(e.target.value as typeof riskFilter)}
           className="h-10 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-input)] px-3 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-primary)] focus:outline-none"
         >
-          <option value="all">Tất cả rủi ro</option>
-          <option value="high">Rủi ro cao</option>
-          <option value="medium">Cần xem</option>
-          <option value="low">Bình thường</option>
+          <option value="all">All risk levels</option>
+          <option value="high">High Risk</option>
+          <option value="medium">Review</option>
+          <option value="low">Normal</option>
         </select>
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-[var(--color-border-subtle)]">
         <div className="hidden grid-cols-[minmax(190px,1.5fr)_120px_140px_120px_130px_120px] gap-3 border-b border-[var(--color-border-subtle)] bg-[var(--color-bg-muted)] px-4 py-2.5 text-[11px] font-bold uppercase tracking-wide text-[var(--color-text-muted)] lg:grid">
-          <span>Học sinh</span>
-          <span>Trạng thái</span>
-          <span>Tiến độ / điểm</span>
-          <span>Thời gian</span>
-          <span>Gian lận</span>
-          <span>Hoạt động</span>
+          <span>Student</span>
+          <span>Status</span>
+          <span>Progress / Score</span>
+          <span>Time</span>
+          <span>Cheating</span>
+          <span>Activity</span>
         </div>
 
         {filteredStudents.length === 0 ? (
           <div className="px-4 py-10 text-center text-sm text-[var(--color-text-muted)]">
-            Không có học sinh phù hợp.
+            No matching students.
           </div>
         ) : (
           <div className="divide-y divide-[var(--color-border-subtle)]">
@@ -300,7 +300,7 @@ export function ExamMonitoringPanel({ exam, classId, onClose }: ExamMonitoringPa
                         </div>
                       ) : (
                         <div className="text-sm font-bold text-[var(--color-text-primary)]">
-                          {row.answeredQuestions}/{row.totalQuestions} câu
+                          {row.answeredQuestions}/{row.totalQuestions} questions
                         </div>
                       )}
                       <div className="h-1.5 overflow-hidden rounded-full bg-[var(--color-bg-muted)]">
@@ -314,14 +314,14 @@ export function ExamMonitoringPanel({ exam, classId, onClose }: ExamMonitoringPa
                     <div className="text-sm font-semibold tabular-nums text-[var(--color-text-primary)]">
                       {timeValue}
                       <div className="mt-0.5 text-[11px] font-normal text-[var(--color-text-muted)]">
-                        {row.status === 'IN_PROGRESS' ? 'còn lại' : formatDateTime(row.submittedAt)}
+                        {row.status === 'IN_PROGRESS' ? 'remaining' : formatDateTime(row.submittedAt)}
                       </div>
                     </div>
 
                     <div className="space-y-1">
                       <Badge variant={risk.variant} size="sm">{risk.label}</Badge>
                       <div className="text-[11px] text-[var(--color-text-muted)]">
-                        {row.violationCount} sự kiện
+                        {row.violationCount} events
                       </div>
                     </div>
 
@@ -335,10 +335,10 @@ export function ExamMonitoringPanel({ exam, classId, onClose }: ExamMonitoringPa
                       <div className="grid gap-4 lg:grid-cols-2">
                         <div>
                           <div className="mb-2 text-xs font-bold uppercase tracking-wide text-[var(--color-text-muted)]">
-                            Cờ cảnh báo
+                            Warning Flags
                           </div>
                           {row.flags.length === 0 ? (
-                            <p className="text-sm text-[var(--color-text-muted)]">Không có cảnh báo.</p>
+                            <p className="text-sm text-[var(--color-text-muted)]">No warnings.</p>
                           ) : (
                             <div className="flex flex-wrap gap-2">
                               {row.flags.map((flag) => (
@@ -349,10 +349,10 @@ export function ExamMonitoringPanel({ exam, classId, onClose }: ExamMonitoringPa
                         </div>
                         <div>
                           <div className="mb-2 text-xs font-bold uppercase tracking-wide text-[var(--color-text-muted)]">
-                            Timeline gần nhất
+                            Recent Timeline
                           </div>
                           {row.recentEvents.length === 0 ? (
-                            <p className="text-sm text-[var(--color-text-muted)]">Chưa có sự kiện.</p>
+                            <p className="text-sm text-[var(--color-text-muted)]">No events yet.</p>
                           ) : (
                             <ul className="space-y-1.5">
                               {row.recentEvents.map((event) => (

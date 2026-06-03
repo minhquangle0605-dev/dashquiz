@@ -48,12 +48,15 @@ export interface TimeAnalysisData {
 export interface KnowledgeGraphNode {
   id: number;
   name: string;
+  chapterId: number;
   chapterName: string;
+  chapterColor: string;
   subjectId: number;
   subjectName: string;
   mastery: number;
-  masteryLevel: 'weak' | 'developing' | 'strong';
-  color: 'red' | 'yellow' | 'green';
+  masteryLevel: 'weak' | 'developing' | 'strong' | 'untouched';
+  color: 'red' | 'yellow' | 'green' | 'gray';
+  attempts: number;
 }
 
 export interface KnowledgeGraphEdge {
@@ -63,9 +66,58 @@ export interface KnowledgeGraphEdge {
   relationType: string;
 }
 
+export interface KnowledgeGraphChapter {
+  id: number;
+  name: string;
+  subjectId: number;
+  subjectName: string;
+  orderIndex: number;
+  color: string;
+  topicCount: number;
+  masteredCount: number;
+  attemptedCount: number;
+  avgMastery: number;
+}
+
+export interface KnowledgeGraphSubject {
+  id: number;
+  name: string;
+}
+
+export interface KnowledgeGraphSummary {
+  totalTopics: number;
+  attemptedTopics: number;
+  strongCount: number;
+  developingCount: number;
+  weakCount: number;
+  untouchedCount: number;
+  overallMastery: number;
+}
+
+export interface KnowledgeGraphRecommendation {
+  topicId: number;
+  topicName: string;
+  chapterName: string;
+  subjectName: string;
+  mastery: number;
+  attempts?: number;
+  unlocks?: number;
+  reason?: string;
+}
+
+export interface KnowledgeGraphRecommendations {
+  nextToStudy: KnowledgeGraphRecommendation[];
+  quickWins: KnowledgeGraphRecommendation[];
+  keyPrerequisites: KnowledgeGraphRecommendation[];
+}
+
 export interface KnowledgeGraphData {
   nodes: KnowledgeGraphNode[];
   edges: KnowledgeGraphEdge[];
+  chapters?: KnowledgeGraphChapter[];
+  subjects?: KnowledgeGraphSubject[];
+  summary?: KnowledgeGraphSummary;
+  recommendations?: KnowledgeGraphRecommendations;
 }
 
 export interface AttemptItem {

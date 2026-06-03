@@ -1,4 +1,4 @@
-/** Ba môn cố định của dự án (Toán, Lý, Hóa). */
+/** The three core subjects of the project: Mathematics, Physics, Chemistry. */
 export const CORE_SUBJECT_CODES = ['MATH', 'PHY', 'CHEM'] as const;
 
 export function isCoreSubjectCode(code: string): boolean {

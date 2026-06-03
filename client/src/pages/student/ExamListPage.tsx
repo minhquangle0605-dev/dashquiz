@@ -48,8 +48,14 @@ function ExamCard({ exam }: { exam: StudentExamItem }) {
   const schedule = exam.examSchedules?.[0];
 
   const handleStart = async () => {
+    // Password-protected exams are unlocked inside TakeExamPage, so skip the
+    // pre-start (which would 403) and navigate straight to the runner.
+    if (exam.hasPassword) {
+      navigate(`/student/exams/${exam.id}/take`);
+      return;
+    }
     try {
-      await startMutation.mutateAsync(exam.id);
+      await startMutation.mutateAsync({ examId: exam.id });
       navigate(`/student/exams/${exam.id}/take`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to start exam';
@@ -92,7 +98,7 @@ function ExamCard({ exam }: { exam: StudentExamItem }) {
               <svg className="h-4 w-4 shrink-0 text-[var(--color-text-muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <span className="tabular-nums">{exam._count.examQuestions} câu</span>
+              <span className="tabular-nums">{exam._count.examQuestions} questions</span>
             </div>
             {schedule && (
               <div className="col-span-2 flex items-center gap-2 text-xs text-[var(--color-text-secondary)]">
@@ -116,17 +122,22 @@ function ExamCard({ exam }: { exam: StudentExamItem }) {
                 </span>
               </div>
             )}
-            {exam.phase === 'completed' && exam.bestScore !== null && (
+            {exam.completedCount > 0 && (exam.finalScore ?? exam.bestScore) !== null && (
               <div className="col-span-2 flex items-center justify-between rounded-lg bg-[var(--color-success-soft)] px-3 py-2">
                 <div className="flex items-center gap-2 text-sm font-semibold text-[var(--color-success)]">
                   <svg className="h-4 w-4 shrink-0" fill="currentColor" viewBox="0 0 20 20">
                     <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                   </svg>
-                  <span className="tabular-nums">{exam.bestScore} pts</span>
+                  <span className="tabular-nums">{exam.finalScore ?? exam.bestScore} pts</span>
                 </div>
                 <span className="text-xs font-medium text-[var(--color-success)]/80">
                   {exam.completedCount}/{exam.maxAttempts} attempts
                 </span>
+              </div>
+            )}
+            {exam.maxAttempts > 1 && exam.completedCount > 0 && exam.attemptsRemaining > 0 && (
+              <div className="col-span-2 text-xs font-medium text-[var(--color-text-muted)]">
+                {exam.attemptsRemaining} attempts remaining
               </div>
             )}
           </div>
@@ -136,7 +147,7 @@ function ExamCard({ exam }: { exam: StudentExamItem }) {
           <div className="border-t border-[var(--color-border-subtle)] pt-3">
             {exam.hasInProgress ? (
               <Button variant="primary" size="md" fullWidth onClick={handleResume}>
-                Tiếp tục làm bài
+                Resume
               </Button>
             ) : exam.canStart ? (
               <Button
@@ -146,7 +157,7 @@ function ExamCard({ exam }: { exam: StudentExamItem }) {
                 isLoading={startMutation.isPending}
                 onClick={handleStart}
               >
-                Bắt đầu
+                Start
               </Button>
             ) : exam.phase === 'completed' ? (
               <Button
@@ -155,11 +166,11 @@ function ExamCard({ exam }: { exam: StudentExamItem }) {
                 fullWidth
                 onClick={() => navigate(`/student/exams/${exam.id}/result`)}
               >
-                Xem kết quả
+                View Results
               </Button>
             ) : (
               <Button variant="secondary" size="md" fullWidth disabled>
-                Chưa khả dụng
+                Not yet available
               </Button>
             )}
           </div>
@@ -199,10 +210,10 @@ export default function ExamListPage() {
     <div className="mx-auto max-w-6xl space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-[var(--color-text-primary)] sm:text-3xl">
-          Bài thi của tôi
+          My Exams
         </h1>
         <p className="mt-1 text-sm text-[var(--color-text-muted)]">
-          Xem và làm các bài thi được giao
+          View and take your assigned exams
         </p>
       </div>
 
@@ -259,10 +270,10 @@ export default function ExamListPage() {
               </svg>
             </div>
             <p className="text-sm font-bold text-[var(--color-text-primary)]">
-              Không tải được danh sách
+              Failed to load the list
             </p>
             <p className="text-sm text-[var(--color-text-muted)]">
-              {error instanceof Error ? error.message : 'Vui lòng thử lại sau'}
+              {error instanceof Error ? error.message : 'Please try again later'}
             </p>
           </div>
         </Card>
@@ -275,12 +286,12 @@ export default function ExamListPage() {
               </svg>
             </div>
             <p className="text-base font-bold text-[var(--color-text-primary)]">
-              Không tìm thấy bài thi
+              No exams found
             </p>
             <p className="text-sm text-[var(--color-text-muted)]">
               {activeTab === 'all'
-                ? 'Bạn chưa được giao bài thi nào. Quay lại sau nhé!'
-                : `Không có bài ${activeTab.replace('_', ' ')} nào.`}
+                ? "You haven't been assigned any exams yet. Check back later!"
+                : `No ${activeTab.replace('_', ' ')} exams.`}
             </p>
           </div>
         </Card>
@@ -289,7 +300,7 @@ export default function ExamListPage() {
           {grouped.in_progress.length > 0 && (
             <ExamSection
               dot="bg-amber-500"
-              title="Đang làm"
+              title="In Progress"
               count={grouped.in_progress.length}
               exams={grouped.in_progress}
             />
@@ -297,7 +308,7 @@ export default function ExamListPage() {
           {grouped.upcoming.length > 0 && (
             <ExamSection
               dot="bg-sky-500"
-              title="Sắp diễn ra"
+              title="Upcoming"
               count={grouped.upcoming.length}
               exams={grouped.upcoming}
             />
@@ -305,7 +316,7 @@ export default function ExamListPage() {
           {grouped.completed.length > 0 && (
             <ExamSection
               dot="bg-emerald-500"
-              title="Đã hoàn thành"
+              title="Completed"
               count={grouped.completed.length}
               exams={grouped.completed}
             />

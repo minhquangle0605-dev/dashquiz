@@ -1,7 +1,8 @@
 import type { Request, Response, NextFunction } from 'express';
 import { examService } from './exam.service';
+import { examReportService } from './examReport.service';
 import { AppError } from '../../middlewares/errorHandler';
-import type { ExamMonitoringQuery, ListExamsQuery } from './exam.validation';
+import type { ExamMonitoringQuery, ListExamsQuery, GradeAnswerInput } from './exam.validation';
 
 // ═══════════════════════════════════════════════
 // LIST EXAMS (GET /api/exams)
@@ -166,6 +167,58 @@ export async function getMonitoring(req: Request, res: Response, next: NextFunct
     if (isNaN(id)) throw new AppError('Invalid exam ID', 400);
     const query = (req as Request & { validatedQuery?: ExamMonitoringQuery }).validatedQuery ?? {};
     const result = await examService.getExamMonitoring(id, req.user.id, req.user.role, query);
+    res.json(result);
+  } catch (error: unknown) {
+    next(error instanceof Error ? error : new Error('Unexpected error'));
+  }
+}
+
+// ═══════════════════════════════════════════════
+// EXAM REPORTS (§12)
+// ═══════════════════════════════════════════════
+
+export async function getReport(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    if (!req.user) throw new AppError('Authentication required', 401);
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) throw new AppError('Invalid exam ID', 400);
+    const result = await examReportService.getReport(id, req.user.id, req.user.role);
+    res.json(result);
+  } catch (error: unknown) {
+    next(error instanceof Error ? error : new Error('Unexpected error'));
+  }
+}
+
+export async function gradeAnswer(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    if (!req.user) throw new AppError('Authentication required', 401);
+    const examId = parseInt(req.params.id, 10);
+    const attemptId = parseInt(req.params.attemptId, 10);
+    const answerId = parseInt(req.params.answerId, 10);
+    if (isNaN(examId) || isNaN(attemptId) || isNaN(answerId)) {
+      throw new AppError('Invalid identifier', 400);
+    }
+    const result = await examReportService.gradeAnswer(
+      examId,
+      attemptId,
+      answerId,
+      req.body as GradeAnswerInput,
+      req.user.id,
+      req.user.role,
+    );
+    res.json(result);
+  } catch (error: unknown) {
+    next(error instanceof Error ? error : new Error('Unexpected error'));
+  }
+}
+
+export async function deleteAttempt(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    if (!req.user) throw new AppError('Authentication required', 401);
+    const examId = parseInt(req.params.id, 10);
+    const attemptId = parseInt(req.params.attemptId, 10);
+    if (isNaN(examId) || isNaN(attemptId)) throw new AppError('Invalid identifier', 400);
+    const result = await examReportService.deleteAttempt(examId, attemptId, req.user.id, req.user.role);
     res.json(result);
   } catch (error: unknown) {
     next(error instanceof Error ? error : new Error('Unexpected error'));

@@ -32,6 +32,15 @@ const iconClass = (
     />
   </svg>
 );
+const iconGradebook = (
+  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M9 7h6m-6 4h6m-6 4h3m-6 6h12a2 2 0 002-2V5a2 2 0 00-2-2H6a2 2 0 00-2 2v14a2 2 0 002 2z"
+    />
+  </svg>
+);
 const iconProfile = (
   <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
     <path
@@ -50,6 +59,15 @@ const iconDiscussions = (
     />
   </svg>
 );
+const iconTimetable = (
+  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+    />
+  </svg>
+);
 
 export default function TeacherLayout() {
   return (
@@ -62,7 +80,9 @@ export default function TeacherLayout() {
         { to: '/teacher/questions', label: 'Question Bank', icon: iconBank },
         { to: '/teacher/exams', label: 'Exams', icon: iconExams },
         { to: '/teacher/classes', label: 'Classes', icon: iconClass },
-        { to: '/teacher/discussions', label: 'Thảo luận', icon: iconDiscussions },
+        { to: '/teacher/timetable', label: 'Timetable', icon: iconTimetable },
+        { to: '/teacher/gradebook', label: 'Gradebook', icon: iconGradebook },
+        { to: '/teacher/discussions', label: 'Discussions', icon: iconDiscussions },
         { to: '/teacher/profile', label: 'Profile', icon: iconProfile },
       ]}
     />

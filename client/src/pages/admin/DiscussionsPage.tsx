@@ -76,7 +76,7 @@ export default function AdminDiscussionsPage() {
           limit: res.pagination.limit,
         });
       } catch (e: unknown) {
-        const m = e instanceof Error ? e.message : 'Không tải được danh sách';
+        const m = e instanceof Error ? e.message : 'Failed to load list';
         setError(m);
       } finally {
         setLoading(false);
@@ -90,12 +90,12 @@ export default function AdminDiscussionsPage() {
   }, [reload]);
 
   const handleDelete = async (d: Discussion) => {
-    if (!window.confirm(`Xóa "${d.title}"?\nTác giả: ${d.author.fullName || d.author.username}`)) return;
+    if (!window.confirm(`Delete "${d.title}"?\nAuthor: ${d.author.fullName || d.author.username}`)) return;
     try {
       await deleteDiscussion(d.id);
       await reload(pagination.page);
     } catch (e: unknown) {
-      const m = e instanceof Error ? e.message : 'Không xóa được';
+      const m = e instanceof Error ? e.message : 'Failed to delete';
       window.alert(m);
     }
   };
@@ -105,7 +105,7 @@ export default function AdminDiscussionsPage() {
       await updateDiscussion(d.id, { isPinned: !d.isPinned });
       await reload(pagination.page);
     } catch (e: unknown) {
-      const m = e instanceof Error ? e.message : 'Không cập nhật được';
+      const m = e instanceof Error ? e.message : 'Failed to update';
       window.alert(m);
     }
   };
@@ -115,7 +115,7 @@ export default function AdminDiscussionsPage() {
       await updateDiscussion(d.id, { isLocked: !d.isLocked });
       await reload(pagination.page);
     } catch (e: unknown) {
-      const m = e instanceof Error ? e.message : 'Không cập nhật được';
+      const m = e instanceof Error ? e.message : 'Failed to update';
       window.alert(m);
     }
   };
@@ -125,14 +125,14 @@ export default function AdminDiscussionsPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-[var(--color-text-primary)]">
-            Quản lý Thảo luận & Thông báo
+            Manage Discussions & Announcements
           </h1>
           <p className="mt-1 text-sm text-[var(--color-text-muted)]">
-            Xem toàn bộ bài viết, người tạo và lớp liên quan. Có thể xóa, pin, khóa bất kỳ nội dung nào.
+            View all posts, authors, and related classes. You can delete, pin, or lock any content.
           </p>
         </div>
         <Button variant="primary" onClick={() => setPanelOpen(true)}>
-          Mở panel thảo luận
+          Open Discussion Panel
         </Button>
       </div>
 
@@ -140,7 +140,7 @@ export default function AdminDiscussionsPage() {
       <Card padding="sm">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
           <Input
-            placeholder="Tìm theo tiêu đề hoặc nội dung…"
+            placeholder="Search by title or content…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -154,9 +154,9 @@ export default function AdminDiscussionsPage() {
             }
             className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] px-3 py-2 text-sm focus-ring-brand"
           >
-            <option value="">Tất cả phạm vi</option>
-            <option value="GLOBAL">Toàn trường</option>
-            <option value="CLASS">Theo lớp</option>
+            <option value="">All scopes</option>
+            <option value="GLOBAL">School-wide</option>
+            <option value="CLASS">By class</option>
           </select>
           <select
             value={filters.type ?? ''}
@@ -168,12 +168,12 @@ export default function AdminDiscussionsPage() {
             }
             className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] px-3 py-2 text-sm focus-ring-brand"
           >
-            <option value="">Tất cả loại</option>
-            <option value="ANNOUNCEMENT">Thông báo</option>
-            <option value="DISCUSSION">Thảo luận</option>
+            <option value="">All types</option>
+            <option value="ANNOUNCEMENT">Announcement</option>
+            <option value="DISCUSSION">Discussion</option>
           </select>
           <Button variant="outline" onClick={() => reload(1)}>
-            Làm mới
+            Refresh
           </Button>
         </div>
       </Card>
@@ -192,21 +192,21 @@ export default function AdminDiscussionsPage() {
       ) : items.length === 0 ? (
         <Card>
           <div className="py-10 text-center text-sm text-[var(--color-text-muted)]">
-            Không có bài viết nào khớp với bộ lọc.
+            No posts match the filters.
           </div>
         </Card>
       ) : (
         <Table>
           <TableHead>
             <TableRow>
-              <TableHeaderCell>Tiêu đề</TableHeaderCell>
-              <TableHeaderCell>Loại</TableHeaderCell>
-              <TableHeaderCell>Phạm vi / Lớp</TableHeaderCell>
-              <TableHeaderCell>Người tạo</TableHeaderCell>
-              <TableHeaderCell>Tạo lúc</TableHeaderCell>
-              <TableHeaderCell>Phản hồi</TableHeaderCell>
-              <TableHeaderCell>Trạng thái</TableHeaderCell>
-              <TableHeaderCell>Thao tác</TableHeaderCell>
+              <TableHeaderCell>Title</TableHeaderCell>
+              <TableHeaderCell>Type</TableHeaderCell>
+              <TableHeaderCell>Scope / Class</TableHeaderCell>
+              <TableHeaderCell>Author</TableHeaderCell>
+              <TableHeaderCell>Created At</TableHeaderCell>
+              <TableHeaderCell>Replies</TableHeaderCell>
+              <TableHeaderCell>Status</TableHeaderCell>
+              <TableHeaderCell>Actions</TableHeaderCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -220,14 +220,14 @@ export default function AdminDiscussionsPage() {
                 </TableCell>
                 <TableCell>
                   {d.type === 'ANNOUNCEMENT' ? (
-                    <Badge variant="warning" size="sm">📢 Thông báo</Badge>
+                    <Badge variant="warning" size="sm">📢 Announcement</Badge>
                   ) : (
-                    <Badge variant="info" size="sm">💬 Thảo luận</Badge>
+                    <Badge variant="info" size="sm">💬 Discussion</Badge>
                   )}
                 </TableCell>
                 <TableCell>
                   {d.scope === 'GLOBAL' ? (
-                    <Badge variant="accent" size="sm">Toàn trường</Badge>
+                    <Badge variant="accent" size="sm">School-wide</Badge>
                   ) : (
                     <div className="flex flex-col gap-0.5">
                       <Badge variant="brand" size="sm">
@@ -235,7 +235,7 @@ export default function AdminDiscussionsPage() {
                       </Badge>
                       {d.class?.gradeLevel && (
                         <span className="text-[10px] text-[var(--color-text-muted)]">
-                          Khối {d.class.gradeLevel}
+                          Grade {d.class.gradeLevel}
                         </span>
                       )}
                     </div>
@@ -271,10 +271,10 @@ export default function AdminDiscussionsPage() {
                       {d.isPinned ? 'Unpin' : 'Pin'}
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => handleToggleLock(d)}>
-                      {d.isLocked ? 'Mở' : 'Khóa'}
+                      {d.isLocked ? 'Unlock' : 'Lock'}
                     </Button>
                     <Button size="sm" variant="danger" onClick={() => handleDelete(d)}>
-                      Xóa
+                      Delete
                     </Button>
                   </div>
                 </TableCell>
@@ -288,7 +288,7 @@ export default function AdminDiscussionsPage() {
       {pagination.totalPages > 1 && (
         <div className="flex items-center justify-between text-sm">
           <span className="text-[var(--color-text-muted)]">
-            Trang {pagination.page}/{pagination.totalPages} · {pagination.total} bài viết
+            Page {pagination.page}/{pagination.totalPages} · {pagination.total} posts
           </span>
           <div className="flex gap-1">
             <Button
@@ -297,7 +297,7 @@ export default function AdminDiscussionsPage() {
               disabled={pagination.page <= 1}
               onClick={() => reload(pagination.page - 1)}
             >
-              ← Trước
+              ← Previous
             </Button>
             <Button
               variant="outline"
@@ -305,7 +305,7 @@ export default function AdminDiscussionsPage() {
               disabled={pagination.page >= pagination.totalPages}
               onClick={() => reload(pagination.page + 1)}
             >
-              Sau →
+              Next →
             </Button>
           </div>
         </div>
@@ -316,8 +316,8 @@ export default function AdminDiscussionsPage() {
         isOpen={panelOpen}
         onClose={() => setPanelOpen(false)}
         size="3xl"
-        title="Thảo luận & Thông báo"
-        description="Chế độ admin: xem và moderate tất cả bài viết"
+        title="Discussions & Announcements"
+        description="Admin mode: view and moderate all posts"
       >
         <DiscussionsPanel adminMode />
       </Modal>

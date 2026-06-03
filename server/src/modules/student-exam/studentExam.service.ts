@@ -5,6 +5,9 @@ import { AppError } from '../../middlewares/errorHandler';
 import { logger } from '../../utils/logger';
 import { PAGINATION, COMPLETED_ATTEMPT_STATUSES } from '../../utils/constants';
 import { invalidateStudentCache } from '../analytics/analytics.service';
+import { computeFinalScore } from '../exam/grading';
+import { getReviewWindowFlags, hasAnyReview } from '../exam/reviewOptions';
+import { buildAttemptQuestions } from './attemptQuestions';
 import { notificationService } from '../notification/notification.service';
 import { emitStudentSubmitted, emitDashboardUpdate, emitAttemptEvent } from '../../socket';
 import type {
@@ -29,14 +32,6 @@ function redisAnswerKey(attemptId: number): string {
   return `${REDIS_KEY_PREFIX}:${attemptId}:answers`;
 }
 
-function shuffleArray<T>(arr: T[]): T[] {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
 
 function normalizeTextAnswer(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, ' ');
@@ -191,7 +186,7 @@ export class StudentExamService {
     emitAttemptEvent(attempt.examId, {
       attemptId,
       studentId: attempt.studentId,
-      studentName: attempt.student.fullName || attempt.student.username || 'Học sinh',
+      studentName: attempt.student.fullName || attempt.student.username || 'Student',
       type: event.type,
       occurredAt: event.occurredAt,
       clientElapsedSec: event.clientElapsedSec,
@@ -213,7 +208,7 @@ export class StudentExamService {
 
   // ═══════════════════════════════════════════════
   // LIST EXAMS ASSIGNED TO STUDENT
-  // UC05: Xem DS bài kiểm tra
+  // UC05: View list of exams
   // ═══════════════════════════════════════════════
 
   async listStudentExams(query: ListStudentExamsQuery, studentId: number) {
@@ -280,7 +275,15 @@ export class StudentExamService {
         creator: { select: { id: true, fullName: true } },
         examSchedules: {
           orderBy: { startTime: 'desc' },
-          take: 1,
+          select: {
+            id: true,
+            examId: true,
+            classId: true,
+            startTime: true,
+            endTime: true,
+            status: true,
+            room: true,
+          },
         },
         examAttempts: {
           where: { studentId },
@@ -301,14 +304,35 @@ export class StudentExamService {
       const bestScore = completedAttempts.length > 0
         ? Math.max(...completedAttempts.map((a) => Number(a.totalScore ?? 0)))
         : null;
-      const schedule = exam.examSchedules[0] ?? null;
+      // Final grade follows the exam's configured grading method (§5).
+      const finalScore = computeFinalScore(completedAttempts, exam.gradingMethod);
       const maxedOut = completedAttempts.length >= exam.maxAttempts;
+      const attemptsRemaining = Math.max(0, exam.maxAttempts - completedAttempts.length);
 
-      const isOpen = exam.status === 'PUBLISHED';
-      const isScheduledAndActive = schedule
-        && schedule.status === 'ACTIVE'
-        && new Date(schedule.startTime) <= now
-        && new Date(schedule.endTime) > now;
+      // Phase 5: schedules relevant to THIS student = global (classId null) plus any
+      // scoped to a class the student is in. Per-class gating is opt-in: it only
+      // applies when the exam actually has at least one per-class schedule, so
+      // every existing global-only exam keeps its previous behaviour exactly.
+      const hasPerClassSchedule = exam.examSchedules.some((s) => s.classId !== null);
+      const relevantSchedules = exam.examSchedules.filter(
+        (s) => s.classId === null || classIds.includes(s.classId),
+      );
+      const sortedRelevant = [...relevantSchedules].sort(
+        (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime(),
+      );
+      const activeRelevant = sortedRelevant.find(
+        (s) =>
+          s.status === 'ACTIVE' &&
+          new Date(s.startTime) <= now &&
+          new Date(s.endTime) > now,
+      );
+      const upcomingRelevant = sortedRelevant.find((s) => new Date(s.startTime) > now);
+      const schedule =
+        activeRelevant ?? upcomingRelevant ?? sortedRelevant[sortedRelevant.length - 1] ?? null;
+
+      // A globally-published exam (no per-class windows) is open immediately, as before.
+      const isOpen = hasPerClassSchedule ? false : exam.status === 'PUBLISHED';
+      const isScheduledAndActive = Boolean(activeRelevant);
       const isAvailable = isOpen || isScheduledAndActive;
 
       let examPhase: 'upcoming' | 'in_progress' | 'completed';
@@ -328,13 +352,21 @@ export class StudentExamService {
 
       const canStart = isAvailable && !hasInProgress && !maxedOut;
 
-      const { examAttempts, ...examData } = exam;
+      // Strip accessPassword from the payload — students must never receive it;
+      // expose only whether a password is required.
+      const { examAttempts, accessPassword, ...examData } = exam;
       return {
         ...examData,
+        // Expose only the schedule window relevant to this student (preserves the
+        // previous single-schedule payload shape the client reads from [0]).
+        examSchedules: schedule ? [schedule] : [],
+        hasPassword: accessPassword !== null,
         phase: examPhase,
         attemptCount: attempts.length,
         completedCount: completedAttempts.length,
         bestScore,
+        finalScore,
+        attemptsRemaining,
         hasInProgress,
         canStart,
       };
@@ -359,10 +391,10 @@ export class StudentExamService {
 
   // ═══════════════════════════════════════════════
   // START EXAM
-  // UC06: Làm bài kiểm tra — tạo attempt, trả câu hỏi
+  // UC06: Take exam — create attempt, return questions
   // ═══════════════════════════════════════════════
 
-  async startExam(examId: number, studentId: number) {
+  async startExam(examId: number, studentId: number, password?: string) {
     const exam = await prisma.exam.findUnique({
       where: { id: examId },
       include: {
@@ -386,26 +418,45 @@ export class StudentExamService {
     });
 
     if (!exam) throw new AppError('Exam not found', 404);
-    if (exam.status !== 'PUBLISHED') {
-      const activeSchedule = await prisma.examSchedule.findFirst({
+
+    const assignedClassIds = exam.examAssignments.map((a) => a.classId);
+
+    // Which of the exam's classes is this student actually in?
+    const myEnrollments = await prisma.classStudent.findMany({
+      where: { studentId, classId: { in: assignedClassIds } },
+      select: { classId: true },
+    });
+    if (myEnrollments.length === 0) {
+      throw new AppError('You are not assigned to take this exam', 403);
+    }
+    const myClassIds = myEnrollments.map((e) => e.classId);
+
+    // Availability gate. Per-class scheduling is opt-in: only when the exam has at
+    // least one per-class window do we require one relevant to the student's class.
+    const now = new Date();
+    const perClassCount = await prisma.examSchedule.count({
+      where: { examId, classId: { not: null } },
+    });
+    if (perClassCount > 0) {
+      const activeRelevant = await prisma.examSchedule.findFirst({
         where: {
           examId,
           status: 'ACTIVE',
-          startTime: { lte: new Date() },
-          endTime: { gt: new Date() },
+          startTime: { lte: now },
+          endTime: { gt: now },
+          OR: [{ classId: null }, { classId: { in: myClassIds } }],
         },
+      });
+      if (!activeRelevant) {
+        throw new AppError('This exam is not currently available for your class', 400);
+      }
+    } else if (exam.status !== 'PUBLISHED') {
+      const activeSchedule = await prisma.examSchedule.findFirst({
+        where: { examId, status: 'ACTIVE', startTime: { lte: now }, endTime: { gt: now } },
       });
       if (!activeSchedule) {
         throw new AppError('This exam is not currently available', 400);
       }
-    }
-
-    const assignedClassIds = exam.examAssignments.map((a) => a.classId);
-    const enrollment = await prisma.classStudent.findFirst({
-      where: { studentId, classId: { in: assignedClassIds } },
-    });
-    if (!enrollment) {
-      throw new AppError('You are not assigned to take this exam', 403);
     }
 
     const existingAttempt = await prisma.examAttempt.findFirst({
@@ -431,18 +482,7 @@ export class StudentExamService {
           },
         });
 
-        let questions = exam.examQuestions.map((eq) => ({
-          questionId: eq.questionId,
-          orderIndex: eq.orderIndex,
-          points: eq.points,
-          content: eq.question.content,
-          questionType: eq.question.questionType,
-          options: eq.question.options,
-        }));
-
-        if (exam.shuffle) {
-          questions = shuffleArray(questions);
-        }
+        const questions = buildAttemptQuestions(exam, existingAttempt.id);
 
         return {
           success: true,
@@ -461,11 +501,30 @@ export class StudentExamService {
               durationMin: exam.durationMin,
               totalQuestions: exam.totalQuestions,
               shuffle: exam.shuffle,
+              shuffleAnswers: exam.shuffleAnswers,
+              navigationMode: exam.navigationMode,
+              questionsPerPage: exam.questionsPerPage,
             },
             questions,
             savedAnswers,
           },
         };
+      }
+    }
+
+    // Password gate (§9): enforced only when starting a fresh attempt. A resume
+    // of an in-progress attempt returns above and bypasses this, since the
+    // student already entered the password when the attempt was created.
+    if (exam.accessPassword) {
+      if (!password) {
+        throw new AppError('This exam requires a password to start', 403, true, null, {
+          code: 'PASSWORD_REQUIRED',
+        });
+      }
+      if (password !== exam.accessPassword) {
+        throw new AppError('Incorrect password', 403, true, null, {
+          code: 'PASSWORD_INCORRECT',
+        });
       }
     }
 
@@ -509,18 +568,7 @@ export class StudentExamService {
     const ttl = (exam.durationMin + BUFFER_MINUTES) * 60;
     await redis.set(redisAnswerKey(attempt.id), JSON.stringify({}), 'EX', ttl);
 
-    let questions = exam.examQuestions.map((eq) => ({
-      questionId: eq.questionId,
-      orderIndex: eq.orderIndex,
-      points: eq.points,
-      content: eq.question.content,
-      questionType: eq.question.questionType,
-      options: eq.question.options,
-    }));
-
-    if (exam.shuffle) {
-      questions = shuffleArray(questions);
-    }
+    const questions = buildAttemptQuestions(exam, attempt.id);
 
     return {
       success: true,
@@ -539,6 +587,9 @@ export class StudentExamService {
           durationMin: exam.durationMin,
           totalQuestions: exam.totalQuestions,
           shuffle: exam.shuffle,
+          shuffleAnswers: exam.shuffleAnswers,
+          navigationMode: exam.navigationMode,
+          questionsPerPage: exam.questionsPerPage,
         },
         questions,
         savedAnswers: {},
@@ -601,7 +652,7 @@ export class StudentExamService {
 
   // ═══════════════════════════════════════════════
   // SUBMIT ATTEMPT
-  // UC07: Nộp bài kiểm tra
+  // UC07: Submit exam
   // ═══════════════════════════════════════════════
 
   async submitAttempt(attemptId: number, data: SubmitAttemptInput, studentId: number) {
@@ -635,7 +686,7 @@ export class StudentExamService {
 
   // ═══════════════════════════════════════════════
   // GET RESULT
-  // UC09: Xem kết quả & đáp án
+  // UC09: View results & answers
   // ═══════════════════════════════════════════════
 
   async getAttemptResult(attemptId: number, studentId: number) {
@@ -645,6 +696,11 @@ export class StudentExamService {
         exam: {
           include: {
             subject: { select: { id: true, name: true, code: true } },
+            examSchedules: {
+              orderBy: { endTime: 'desc' },
+              take: 1,
+              select: { endTime: true },
+            },
           },
         },
         attemptAnswers: {
@@ -669,11 +725,22 @@ export class StudentExamService {
       throw new AppError('Exam has not been submitted yet', 400);
     }
 
-    const isCompleted = (COMPLETED_ATTEMPT_STATUSES as readonly string[]).includes(attempt.status);
-    if (!attempt.exam.showResult && !isCompleted) {
+    // §8: resolve which review window applies and what is visible in it.
+    const now = new Date();
+    const { window: reviewWindow, flags } = getReviewWindowFlags({
+      reviewOptions: attempt.exam.reviewOptions,
+      showResult: attempt.exam.showResult,
+      examStatus: attempt.exam.status,
+      scheduleEndsAt: attempt.exam.examSchedules[0]?.endTime ?? null,
+      submittedAt: attempt.submittedAt,
+      now,
+    });
+
+    if (!hasAnyReview(flags)) {
       return {
         success: true,
-        message: 'Results are not available yet. Please wait for your teacher to release results.',
+        message:
+          'Results are not available yet. Some details may be released after the exam closes.',
         data: {
           attempt: {
             id: attempt.id,
@@ -684,6 +751,8 @@ export class StudentExamService {
             isAutoSubmitted: attempt.isAutoSubmitted,
           },
           resultsAvailable: false,
+          reviewWindow,
+          reviewFlags: flags,
         },
       };
     }
@@ -694,44 +763,48 @@ export class StudentExamService {
       ? parseFloat(((correctCount / totalQuestions) * 100).toFixed(1))
       : 0;
 
-    const questionDetails = attempt.attemptAnswers.map((ans) => {
-      const correctOptions = ans.question.options.filter((o) => o.isCorrect);
-      const selectedOptionIds = Array.isArray(ans.selectedOptionIds)
-        ? ans.selectedOptionIds.filter((id): id is number => typeof id === 'number')
-        : [];
-      const selectedOptions = ans.question.options
-        .filter((o) => selectedOptionIds.includes(o.id))
-        .map((o) => ({
-          id: o.id,
-          label: o.label,
-          content: o.content,
-        }));
-      return {
-        questionId: ans.questionId,
-        content: ans.question.content,
-        questionType: ans.question.questionType,
-        chapter: ans.question.chapter,
-        topic: ans.question.topic,
-        explanation: ans.question.explanation,
-        selectedOption: ans.selectedOption,
-        selectedOptions,
-        answerText: ans.answerText,
-        correctOptions: correctOptions.map((o) => ({
-          id: o.id,
-          label: o.label,
-          content: o.content,
-        })),
-        allOptions: ans.question.options.map((o) => ({
-          id: o.id,
-          label: o.label,
-          content: o.content,
-          isCorrect: o.isCorrect,
-        })),
-        isCorrect: ans.isCorrect,
-        timeSpentSec: ans.timeSpentSec,
-        answerChanges: ans.answerChanges,
-      };
-    });
+    // Per-question detail is only worth sending when at least one of the
+    // question-level flags is on; otherwise we expose just the score summary.
+    const showQuestions =
+      flags.responses || flags.correctness || flags.correctAnswer || flags.generalFeedback;
+
+    const questionDetails = showQuestions
+      ? attempt.attemptAnswers.map((ans) => {
+          const selectedOptionIds = Array.isArray(ans.selectedOptionIds)
+            ? ans.selectedOptionIds.filter((id): id is number => typeof id === 'number')
+            : [];
+          const selectedOptions = flags.responses
+            ? ans.question.options
+                .filter((o) => selectedOptionIds.includes(o.id))
+                .map((o) => ({ id: o.id, label: o.label, content: o.content }))
+            : [];
+          return {
+            questionId: ans.questionId,
+            content: ans.question.content,
+            questionType: ans.question.questionType,
+            chapter: ans.question.chapter,
+            topic: ans.question.topic,
+            explanation: flags.generalFeedback ? ans.question.explanation : null,
+            selectedOption: flags.responses ? ans.selectedOption : null,
+            selectedOptions,
+            answerText: flags.responses ? ans.answerText : null,
+            correctOptions: flags.correctAnswer
+              ? ans.question.options
+                  .filter((o) => o.isCorrect)
+                  .map((o) => ({ id: o.id, label: o.label, content: o.content }))
+              : [],
+            allOptions: ans.question.options.map((o) => ({
+              id: o.id,
+              label: o.label,
+              content: o.content,
+              isCorrect: flags.correctAnswer ? o.isCorrect : false,
+            })),
+            isCorrect: flags.correctness ? ans.isCorrect : false,
+            timeSpentSec: ans.timeSpentSec,
+            answerChanges: ans.answerChanges,
+          };
+        })
+      : [];
 
     return {
       success: true,
@@ -746,29 +819,32 @@ export class StudentExamService {
           startedAt: attempt.startedAt,
           submittedAt: attempt.submittedAt,
           isAutoSubmitted: attempt.isAutoSubmitted,
-          totalScore: attempt.totalScore,
+          totalScore: flags.marks ? attempt.totalScore : null,
           timeSpentSec: attempt.timeSpentSec,
           passingScore: attempt.exam.passingScore,
           durationMin: attempt.exam.durationMin,
         },
         summary: {
           totalQuestions,
-          correctCount,
-          incorrectCount: totalQuestions - correctCount,
-          scorePercentage,
-          passed: attempt.exam.passingScore
-            ? Number(attempt.totalScore) >= Number(attempt.exam.passingScore)
-            : null,
+          correctCount: flags.correctness ? correctCount : 0,
+          incorrectCount: flags.correctness ? totalQuestions - correctCount : 0,
+          scorePercentage: flags.marks ? scorePercentage : 0,
+          passed:
+            flags.marks && attempt.exam.passingScore
+              ? Number(attempt.totalScore) >= Number(attempt.exam.passingScore)
+              : null,
         },
         questions: questionDetails,
         resultsAvailable: true,
+        reviewWindow,
+        reviewFlags: flags,
       },
     };
   }
 
   // ═══════════════════════════════════════════════
   // LIST ALL ATTEMPTS (HISTORY)
-  // UC15: Xem lịch sử bài KT
+  // UC15: View exam history
   // ═══════════════════════════════════════════════
 
   async listAttempts(query: ListAttemptsQuery, studentId: number) {
@@ -991,7 +1067,7 @@ export class StudentExamService {
     emitStudentSubmitted(attempt.examId, {
       attemptId: attempt.id,
       studentId: attempt.studentId,
-      studentName: student?.fullName || student?.username || 'Học sinh',
+      studentName: student?.fullName || student?.username || 'Student',
       totalScore: Number(totalScore),
       totalQuestions: examQuestions.length,
       correctCount,
@@ -1073,7 +1149,7 @@ export class StudentExamService {
 
   // ═══════════════════════════════════════════════
   // CRON: Auto-submit expired attempts
-  // UC08: Tự động nộp khi hết giờ
+  // UC08: Auto-submit when time runs out
   // ═══════════════════════════════════════════════
 
   async autoSubmitExpiredAttempts() {

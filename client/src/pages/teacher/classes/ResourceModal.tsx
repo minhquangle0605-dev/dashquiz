@@ -40,17 +40,17 @@ export function ResourceModal({
   onSubmit,
 }: ResourceModalProps) {
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Thêm Resource" size="lg">
+    <Modal isOpen={isOpen} onClose={onClose} title="Add Resource" size="lg">
       <div className="space-y-4">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Input
-            label="Tiêu đề"
+            label="Title"
             value={form.title}
             onChange={(e) => onChange({ ...form, title: e.target.value })}
           />
           <div>
             <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
-              Loại
+              Type
             </label>
             <select
               className={selectBase}
@@ -59,9 +59,10 @@ export function ResourceModal({
                 onChange({ ...form, type: e.target.value as ClassResource['type'] })
               }
             >
-              <option value="LESSON">Bài giảng</option>
-              <option value="LINK">Liên kết</option>
+              <option value="LESSON">Lesson</option>
+              <option value="LINK">Link</option>
               <option value="VIDEO">Video</option>
+              <option value="IMAGE">Image</option>
               <option value="FILE">File</option>
             </select>
           </div>
@@ -89,20 +90,30 @@ export function ResourceModal({
           </select>
         </div>
         <Input
-          label="Mô tả"
+          label="Description"
           value={form.description}
           onChange={(e) => onChange({ ...form, description: e.target.value })}
         />
-        {form.type === 'FILE' ? (
+        {form.type === 'FILE' || form.type === 'IMAGE' ? (
           <label className="block cursor-pointer rounded-2xl border-2 border-dashed border-[var(--color-border)] bg-[var(--color-bg-subtle)] p-6 text-center transition-colors hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-soft)]/50">
             <svg className="mx-auto h-8 w-8 text-[var(--color-text-muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
             </svg>
             <p className="mt-2 text-sm font-semibold text-[var(--color-text-primary)]">
-              {form.file ? form.file.name : 'Click để chọn file'}
+              {form.file
+                ? form.file.name
+                : form.type === 'IMAGE'
+                  ? 'Click to select an image'
+                  : 'Click to select a file'}
             </p>
+            {form.type === 'IMAGE' && (
+              <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                JPG, PNG, WebP, or GIF. Max 10MB.
+              </p>
+            )}
             <input
               type="file"
+              accept={form.type === 'IMAGE' ? 'image/jpeg,image/png,image/webp,image/gif' : undefined}
               className="hidden"
               onChange={(e) =>
                 onChange({ ...form, file: e.target.files?.[0] ?? null })
@@ -112,11 +123,11 @@ export function ResourceModal({
         ) : form.type === 'LESSON' ? (
           <div>
             <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
-              Nội dung bài giảng
+              Lesson content
             </label>
             <textarea
               className={textareaBase}
-              placeholder="Nội dung bài giảng…"
+              placeholder="Lesson content…"
               value={form.content}
               onChange={(e) => onChange({ ...form, content: e.target.value })}
             />
@@ -136,14 +147,14 @@ export function ResourceModal({
             checked={form.isPublished}
             onChange={(e) => onChange({ ...form, isPublished: e.target.checked })}
           />
-          Công khai cho học sinh
+          Publish to students
         </label>
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={onClose}>
-            Hủy
+            Cancel
           </Button>
           <Button variant="primary" isLoading={saving} onClick={onSubmit}>
-            Thêm
+            Add
           </Button>
         </div>
       </div>

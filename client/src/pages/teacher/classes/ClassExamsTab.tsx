@@ -10,10 +10,10 @@ import type { ClassItem, TeacherExam, TeacherExamStatus } from '@/types/exam';
 import { ExamMonitoringPanel } from './ExamMonitoringPanel';
 
 const STATUS_CONFIG: Record<TeacherExamStatus, { label: string; variant: BadgeVariant }> = {
-  DRAFT: { label: 'Nháp', variant: 'neutral' },
-  PUBLISHED: { label: 'Đã xuất bản', variant: 'success' },
-  SCHEDULED: { label: 'Đã lên lịch', variant: 'info' },
-  CLOSED: { label: 'Đã đóng', variant: 'warning' },
+  DRAFT: { label: 'Draft', variant: 'neutral' },
+  PUBLISHED: { label: 'Published', variant: 'success' },
+  SCHEDULED: { label: 'Scheduled', variant: 'info' },
+  CLOSED: { label: 'Closed', variant: 'warning' },
 };
 
 interface ClassExamsTabProps {
@@ -39,7 +39,7 @@ export function ClassExamsTab({ selectedClass }: ClassExamsTabProps) {
         : ((res as unknown as { items?: TeacherExam[] }).items ?? []);
       setExams(items);
     } catch {
-      toast.error('Không tải được danh sách Exam.');
+      toast.error('Failed to load exam list.');
       setExams([]);
     } finally {
       setLoading(false);
@@ -54,10 +54,10 @@ export function ClassExamsTab({ selectedClass }: ClassExamsTabProps) {
     setPublishingId(exam.id);
     try {
       await publishExam(exam.id);
-      toast.success('Đã xuất bản Exam!');
+      toast.success('Exam published!');
       fetchExams();
     } catch {
-      toast.error('Không xuất bản được.');
+      toast.error('Failed to publish.');
     } finally {
       setPublishingId(null);
     }
@@ -79,10 +79,10 @@ export function ClassExamsTab({ selectedClass }: ClassExamsTabProps) {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h3 className="text-base font-bold tracking-tight text-[var(--color-text-primary)]">
-            Bài thi của lớp
+            Class Exams
           </h3>
           <p className="mt-0.5 text-sm text-[var(--color-text-muted)]">
-            Tất cả Exam đã được gán cho lớp{' '}
+            All exams assigned to class{' '}
             <span className="font-semibold text-[var(--color-text-primary)]">
               {selectedClass.name}
             </span>
@@ -98,7 +98,7 @@ export function ClassExamsTab({ selectedClass }: ClassExamsTabProps) {
             </svg>
           }
         >
-          Tạo Exam cho lớp
+          Create Class Exam
         </Button>
       </div>
 
@@ -114,10 +114,10 @@ export function ClassExamsTab({ selectedClass }: ClassExamsTabProps) {
             </svg>
           </div>
           <p className="text-sm font-bold text-[var(--color-text-primary)]">
-            Lớp chưa có Exam nào
+            No exams in this class yet
           </p>
           <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-            Bấm "Tạo Exam cho lớp" để bắt đầu.
+            Click "Create Class Exam" to get started.
           </p>
         </div>
       ) : (
@@ -143,13 +143,13 @@ export function ClassExamsTab({ selectedClass }: ClassExamsTabProps) {
                         <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
-                        {exam.durationMin} phút
+                        {exam.durationMin} min
                       </span>
                       <span className="inline-flex items-center gap-1">
                         <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                         </svg>
-                        {exam.totalQuestions} câu
+                        {exam.totalQuestions} questions
                       </span>
                       {schedule && (
                         <span className="inline-flex items-center gap-1">
@@ -168,7 +168,7 @@ export function ClassExamsTab({ selectedClass }: ClassExamsTabProps) {
                         size="sm"
                         onClick={() => navigate(`/teacher/exams/create?edit=${exam.id}`)}
                       >
-                        Sửa
+                        Edit
                       </Button>
                     )}
                     {exam.status === 'DRAFT' && (
@@ -178,7 +178,7 @@ export function ClassExamsTab({ selectedClass }: ClassExamsTabProps) {
                         isLoading={publishingId === exam.id}
                         onClick={() => handlePublish(exam)}
                       >
-                        Xuất bản
+                        Publish
                       </Button>
                     )}
                     {exam.status !== 'DRAFT' && (
@@ -189,7 +189,7 @@ export function ClassExamsTab({ selectedClass }: ClassExamsTabProps) {
                           setMonitoringExamId((current) => (current === exam.id ? null : exam.id))
                         }
                       >
-                        Theo dõi
+                        Monitor
                       </Button>
                     )}
                     {exam.status !== 'DRAFT' && (
@@ -198,7 +198,7 @@ export function ClassExamsTab({ selectedClass }: ClassExamsTabProps) {
                         size="sm"
                         onClick={() => navigate(`/teacher/exams`)}
                       >
-                        Quản lý
+                        Manage
                       </Button>
                     )}
                   </div>

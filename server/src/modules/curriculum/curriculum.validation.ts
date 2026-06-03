@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 export const createChapterSchema = z.object({
   subjectId: z.coerce.number().int().positive('Subject is required'),
+  gradeLevel: z.coerce.number().int().min(10, 'Grade level 10-12').max(12, 'Grade level 10-12'),
   name: z
     .string()
     .min(1, 'Chapter name is required')

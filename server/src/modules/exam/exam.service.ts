@@ -7,6 +7,7 @@ import { PAGINATION } from '../../utils/constants';
 import { cacheGet, cacheSet, cacheInvalidateExact } from '../../utils/cache';
 import { buildPaginationResponse } from '../../utils/pagination';
 import { notificationService } from '../notification/notification.service';
+import { timetableService } from '../timetable/timetable.service';
 import { emitExamStarted, emitExamClosed, emitDashboardUpdateBulk } from '../../socket';
 import type {
   CreateExamInput,
@@ -113,6 +114,12 @@ export class ExamService {
           shuffle: true,
           showResult: true,
           maxAttempts: true,
+          gradingMethod: true,
+          shuffleAnswers: true,
+          navigationMode: true,
+          questionsPerPage: true,
+          accessPassword: true,
+          reviewOptions: true,
           status: true,
           createdAt: true,
           subject: { select: { id: true, name: true, code: true } },
@@ -165,6 +172,12 @@ export class ExamService {
         shuffle: true,
         showResult: true,
         maxAttempts: true,
+        gradingMethod: true,
+        shuffleAnswers: true,
+        navigationMode: true,
+        questionsPerPage: true,
+        accessPassword: true,
+        reviewOptions: true,
         status: true,
         createdAt: true,
         subject: { select: { id: true, name: true, code: true } },
@@ -206,13 +219,18 @@ export class ExamService {
         },
         examSchedules: {
           orderBy: { startTime: 'desc' },
-          take: 5,
+          take: 20,
           select: {
             id: true,
             examId: true,
+            classId: true,
             startTime: true,
             endTime: true,
+            room: true,
+            proctorId: true,
             status: true,
+            class: { select: { id: true, name: true } },
+            proctor: { select: { id: true, fullName: true } },
           },
         },
         examAssignments: {
@@ -282,6 +300,12 @@ export class ExamService {
         shuffle: data.shuffle,
         showResult: data.showResult,
         maxAttempts: data.maxAttempts,
+        gradingMethod: data.gradingMethod,
+        shuffleAnswers: data.shuffleAnswers,
+        navigationMode: data.navigationMode,
+        questionsPerPage: data.questionsPerPage ?? null,
+        accessPassword: data.accessPassword ?? null,
+        reviewOptions: data.reviewOptions ?? Prisma.JsonNull,
         status: 'DRAFT',
       },
       include: {
@@ -331,6 +355,14 @@ export class ExamService {
         ...(data.shuffle !== undefined && { shuffle: data.shuffle }),
         ...(data.showResult !== undefined && { showResult: data.showResult }),
         ...(data.maxAttempts !== undefined && { maxAttempts: data.maxAttempts }),
+        ...(data.gradingMethod !== undefined && { gradingMethod: data.gradingMethod }),
+        ...(data.shuffleAnswers !== undefined && { shuffleAnswers: data.shuffleAnswers }),
+        ...(data.navigationMode !== undefined && { navigationMode: data.navigationMode }),
+        ...(data.questionsPerPage !== undefined && { questionsPerPage: data.questionsPerPage }),
+        ...(data.accessPassword !== undefined && { accessPassword: data.accessPassword }),
+        ...(data.reviewOptions !== undefined && {
+          reviewOptions: data.reviewOptions ?? Prisma.JsonNull,
+        }),
       },
       include: {
         subject: { select: { id: true, name: true, code: true } },
@@ -536,7 +568,10 @@ export class ExamService {
   // ═══════════════════════════════════════════════
 
   async scheduleExam(examId: number, data: ScheduleExamInput, userId: number, role: string = 'teacher') {
-    const exam = await prisma.exam.findUnique({ where: { id: examId } });
+    const exam = await prisma.exam.findUnique({
+      where: { id: examId },
+      include: { examAssignments: { select: { classId: true } } },
+    });
     if (!exam) throw new AppError('Exam not found', 404);
     if (exam.createdBy !== userId && role !== 'admin') throw new AppError('You can only schedule your own exams', 403);
 
@@ -544,11 +579,48 @@ export class ExamService {
       throw new AppError('Only DRAFT or PUBLISHED exams can be scheduled', 400);
     }
 
+    const assignedClassIds = (exam.examAssignments ?? []).map((a) => a.classId);
+
+    // Phase 5: a per-class schedule must target a class the exam is assigned to.
+    if (data.classId != null && !assignedClassIds.includes(data.classId)) {
+      throw new AppError('The chosen class is not assigned to this exam', 400);
+    }
+
+    // Timetable / exam conflict check. Only runs once the exam is assigned to at
+    // least one class — scheduling before assigning stays allowed (no regression).
+    // Per-class schedules are checked only against their own class.
+    const conflictClassIds = data.classId != null ? [data.classId] : assignedClassIds;
+    if (conflictClassIds.length > 0) {
+      const conflicts = await timetableService.checkExamScheduleConflicts({
+        classIds: conflictClassIds,
+        subjectId: exam.subjectId,
+        startTime: data.startTime,
+        endTime: data.endTime,
+        excludeExamId: examId,
+        room: data.room ?? null,
+        proctorId: data.proctorId ?? null,
+      });
+      // Hard conflicts block; only an admin may force past them.
+      const canForce = data.force === true && role === 'admin';
+      if (conflicts.hardConflicts.length > 0 && !canForce) {
+        throw new AppError(
+          'Schedule conflicts detected',
+          409,
+          true,
+          conflicts.hardConflicts,
+          { softWarnings: conflicts.softWarnings },
+        );
+      }
+    }
+
     const schedule = await prisma.examSchedule.create({
       data: {
         examId,
+        classId: data.classId ?? null,
         startTime: data.startTime,
         endTime: data.endTime,
+        room: data.room ?? null,
+        proctorId: data.proctorId ?? null,
         status: 'PENDING',
       },
     });
@@ -592,12 +664,23 @@ export class ExamService {
       throw new AppError(`Classes not found: ${missing.join(', ')}`, 404);
     }
 
+    const gradeComponentType = data.gradeComponentType ?? null;
+
     const existing = await prisma.examAssignment.findMany({
       where: { examId, classId: { in: data.classIds } },
       select: { classId: true },
     });
     const alreadyAssigned = new Set(existing.map((ea) => ea.classId));
     const newClassIds = data.classIds.filter((cid) => !alreadyAssigned.has(cid));
+
+    // Update grade component type on existing assignments too — teachers
+    // may re-assign solely to flip the gradebook flag.
+    if (gradeComponentType && alreadyAssigned.size > 0) {
+      await prisma.examAssignment.updateMany({
+        where: { examId, classId: { in: Array.from(alreadyAssigned) } },
+        data: { gradeComponentType },
+      });
+    }
 
     if (newClassIds.length === 0) {
       return {
@@ -607,10 +690,36 @@ export class ExamService {
       };
     }
 
+    // Block assigning a class whose timetable/other-exams collide with an existing
+    // schedule of this exam. Exams without schedules are unaffected (no regression).
+    const schedules = await prisma.examSchedule.findMany({
+      where: { examId, status: { in: ['PENDING', 'ACTIVE'] } },
+      select: { startTime: true, endTime: true },
+    });
+    for (const schedule of schedules) {
+      const conflicts = await timetableService.checkExamScheduleConflicts({
+        classIds: newClassIds,
+        subjectId: exam.subjectId,
+        startTime: schedule.startTime,
+        endTime: schedule.endTime,
+        excludeExamId: examId,
+      });
+      if (conflicts.hardConflicts.length > 0) {
+        throw new AppError(
+          'Cannot assign class because schedule conflicts were found',
+          409,
+          true,
+          conflicts.hardConflicts,
+          { softWarnings: conflicts.softWarnings },
+        );
+      }
+    }
+
     await prisma.examAssignment.createMany({
       data: newClassIds.map((classId) => ({
         examId,
         classId,
+        gradeComponentType,
         assignedBy: userId,
       })),
     });
@@ -657,17 +766,24 @@ export class ExamService {
       include: { _count: { select: { examAttempts: true } } },
     });
     if (!exam) throw new AppError('Exam not found', 404);
-    if (exam.createdBy !== userId && role !== 'admin') {
+
+    const isAdmin = role === 'admin';
+
+    // Teachers may delete only their own exams (any status); admins may delete any exam.
+    if (!isAdmin && exam.createdBy !== userId) {
       throw new AppError('You can only delete your own exams', 403);
     }
-    if (exam.status !== 'DRAFT' && role !== 'admin') {
-      throw new AppError('Only DRAFT exams can be deleted', 400);
-    }
-    if (exam._count.examAttempts > 0) {
+
+    // An exam with student attempts holds graded results. Teachers are blocked
+    // from deleting it; only an admin may force-delete, in which case the FK
+    // cascade removes attempts, answers, monitoring events and any AI practice
+    // sessions derived from those attempts.
+    if (!isAdmin && exam._count.examAttempts > 0) {
       throw new AppError('Cannot delete an exam that already has attempts', 400);
     }
 
-    // Related rows (examQuestions, examSchedules, examAssignments) cascade via FK.
+    // Related rows (examQuestions, examSchedules, examAssignments, examAttempts)
+    // cascade via FK; StudentGrade keeps its row (examAssignmentId set to null).
     await prisma.exam.delete({ where: { id: examId } });
     await this.invalidateExamDetail(examId);
 
@@ -929,13 +1045,13 @@ export class ExamService {
       );
       const flags: string[] = [];
 
-      if (tabSwitchCount >= 3) flags.push(`Chuyển tab ${tabSwitchCount} lần`);
-      if (copyPasteCount > 0) flags.push(`Copy/paste ${copyPasteCount} lần`);
-      if (blockedShortcutCount > 0) flags.push(`Phím tắt bị chặn ${blockedShortcutCount} lần`);
-      if (offlineCount > 0) flags.push(`Mất kết nối ${offlineCount} lần`);
+      if (tabSwitchCount >= 3) flags.push(`Tab switched ${tabSwitchCount} times`);
+      if (copyPasteCount > 0) flags.push(`Copy/paste ${copyPasteCount} times`);
+      if (blockedShortcutCount > 0) flags.push(`Blocked shortcut ${blockedShortcutCount} times`);
+      if (offlineCount > 0) flags.push(`Disconnected ${offlineCount} times`);
       if (attempt.isAutoSubmitted) {
         riskScore += 1;
-        flags.push('Tự động nộp bài');
+        flags.push('Auto-submitted');
       }
 
       if (attempt.status === 'IN_PROGRESS' && latestHeartbeat) {
@@ -944,7 +1060,7 @@ export class ExamService {
         );
         if (secondsSinceHeartbeat > 75) {
           riskScore += 2;
-          flags.push('Không có heartbeat mới');
+          flags.push('No recent heartbeat');
         }
       }
 
@@ -956,7 +1072,7 @@ export class ExamService {
         score >= 8
       ) {
         riskScore += 2;
-        flags.push('Điểm cao với thời gian rất ngắn');
+        flags.push('High score with very short time');
       }
 
       const riskLevel = riskScore >= 8 ? 'high' : riskScore >= 3 ? 'medium' : 'low';
@@ -1097,21 +1213,27 @@ export class ExamService {
     });
 
     for (const schedule of toClose) {
-      await prisma.$transaction([
-        prisma.examSchedule.update({
-          where: { id: schedule.id },
-          data: { status: 'COMPLETED' },
-        }),
-        prisma.exam.update({
+      // Mark this window complete first.
+      await prisma.examSchedule.update({
+        where: { id: schedule.id },
+        data: { status: 'COMPLETED' },
+      });
+
+      // Only close the whole exam once it has no further pending/active windows —
+      // so a per-class schedule ending early does not lock out other classes.
+      const remaining = await prisma.examSchedule.count({
+        where: { examId: schedule.examId, status: { in: ['PENDING', 'ACTIVE'] } },
+      });
+      if (remaining === 0) {
+        await prisma.exam.update({
           where: { id: schedule.examId },
           data: { status: 'CLOSED' },
-        }),
-      ]);
-
-      emitExamClosed(schedule.examId, {
-        examId: schedule.examId,
-        title: schedule.exam.title,
-      });
+        });
+        emitExamClosed(schedule.examId, {
+          examId: schedule.examId,
+          title: schedule.exam.title,
+        });
+      }
     }
 
     const affectedExamIds = new Set<number>();

@@ -24,8 +24,8 @@ export default function DiscussionsPage() {
       isOpen
       onClose={handleClose}
       size="3xl"
-      title="Thảo luận & Thông báo"
-      description="Trao đổi câu hỏi, đăng thông báo và phản hồi"
+      title="Discussions & Announcements"
+      description="Exchange questions, post announcements, and reply"
     >
       <DiscussionsPanel />
     </Modal>

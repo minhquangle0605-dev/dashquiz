@@ -278,13 +278,13 @@ export class NotificationService {
       });
       if (!student) return;
 
-      const studentName = student.fullName || student.username || 'Học sinh';
+      const studentName = student.fullName || student.username || 'Student';
 
       const parentUserId = student.studentProfile?.parent?.userId;
 
       if (parentUserId) {
-        const title = `Kết quả bài KT: ${examTitle}`;
-        const message = `Con bạn ${studentName} đã hoàn thành bài kiểm tra "${examTitle}", điểm: ${score}/10 (${correctCount}/${totalQuestions} câu đúng).`;
+        const title = `Exam Result: ${examTitle}`;
+        const message = `Your child ${studentName} has finished the exam "${examTitle}", score: ${score}/10 (${correctCount}/${totalQuestions} correct).`;
 
         await this.createNotification(parentUserId, title, message, 'child_exam_submitted');
 
@@ -330,9 +330,9 @@ export class NotificationService {
         if (studentIds.has(cs.student.id)) continue;
         studentIds.add(cs.student.id);
 
-        const studentName = cs.student.fullName || cs.student.username || 'Học sinh';
-        const title = `Kết quả đã được công bố: ${examTitle}`;
-        const message = `Giáo viên đã công bố kết quả bài kiểm tra "${examTitle}". Vào xem kết quả của bạn ngay!`;
+        const studentName = cs.student.fullName || cs.student.username || 'Student';
+        const title = `Results published: ${examTitle}`;
+        const message = `The teacher has published the results for the exam "${examTitle}". View your result now!`;
 
         await this.createNotification(cs.student.id, title, message, 'results_published');
 
@@ -361,8 +361,8 @@ export class NotificationService {
 
         for (const { userId: studentId, parent } of studentsWithParent) {
           if (!parent) continue;
-          const title = `Kết quả bài KT đã công bố: ${examTitle}`;
-          const message = `Giáo viên đã công bố kết quả bài kiểm tra "${examTitle}" cho con bạn.`;
+          const title = `Exam results published: ${examTitle}`;
+          const message = `The teacher has published the results for the exam "${examTitle}" for your child.`;
 
           await this.createNotification(parent.userId, title, message, 'child_results_published');
 
@@ -406,8 +406,8 @@ export class NotificationService {
         if (notified.has(cs.student.id)) continue;
         notified.add(cs.student.id);
 
-        const title = `Bài kiểm tra đã mở: ${examTitle}`;
-        const message = `Bài kiểm tra "${examTitle}" đã được mở. Bạn có thể bắt đầu làm bài ngay!`;
+        const title = `Exam opened: ${examTitle}`;
+        const message = `The exam "${examTitle}" has been opened. You can start now!`;
 
         await this.createNotification(cs.student.id, title, message, 'exam_published');
 
@@ -419,6 +419,64 @@ export class NotificationService {
       }
     } catch (error) {
       logger.error('onExamPublished notification trigger failed:', error);
+    }
+  }
+
+  /**
+   * Trigger: Teacher (or admin) posts a new ANNOUNCEMENT discussion → notify students.
+   * - CLASS scope: notify every enrolled student of that class.
+   * - GLOBAL scope: notify every active STUDENT user.
+   * The author is excluded from the recipient list.
+   */
+  async onAnnouncementCreated(discussionId: number) {
+    try {
+      const discussion = await prisma.discussion.findUnique({
+        where: { id: discussionId },
+        include: {
+          author: { select: { id: true, fullName: true, username: true } },
+          class: { select: { name: true } },
+        },
+      });
+
+      if (!discussion || discussion.type !== 'ANNOUNCEMENT') return;
+
+      let studentIds: number[] = [];
+
+      if (discussion.scope === 'CLASS' && discussion.classId !== null) {
+        const classStudents = await prisma.classStudent.findMany({
+          where: { classId: discussion.classId },
+          select: { studentId: true },
+        });
+        studentIds = classStudents.map((cs) => cs.studentId);
+      } else if (discussion.scope === 'GLOBAL') {
+        const students = await prisma.user.findMany({
+          where: { role: 'STUDENT', status: 'ACTIVE' },
+          select: { id: true },
+        });
+        studentIds = students.map((s) => s.id);
+      }
+
+      studentIds = studentIds.filter((id) => id !== discussion.author.id);
+      if (studentIds.length === 0) return;
+
+      const teacherName = discussion.author.fullName || discussion.author.username || 'Teacher';
+      const className = discussion.class?.name;
+      const title = `New announcement: ${discussion.title}`;
+      const message = className
+        ? `${teacherName} posted an announcement in class ${className}.`
+        : `${teacherName} posted a new announcement.`;
+
+      for (const sid of studentIds) {
+        await this.createNotification(sid, title, message, 'teacher_announcement');
+
+        this.sendWebPush(sid, {
+          title,
+          body: message,
+          url: '/student/discussions',
+        }).catch(() => {});
+      }
+    } catch (error) {
+      logger.error('onAnnouncementCreated notification trigger failed:', error);
     }
   }
 
@@ -446,15 +504,15 @@ export class NotificationService {
         },
       });
 
-      const teacherName = exam.creator.fullName || exam.creator.username || 'Giáo viên';
+      const teacherName = exam.creator.fullName || exam.creator.username || 'Teacher';
       const notified = new Set<number>();
 
       for (const cs of classStudents) {
         if (notified.has(cs.student.id)) continue;
         notified.add(cs.student.id);
 
-        const title = `Bài kiểm tra mới: ${exam.title}`;
-        const message = `Giáo viên ${teacherName} đã giao bài kiểm tra "${exam.title}" (${exam.subject.name}, ${exam.durationMin} phút).`;
+        const title = `New exam: ${exam.title}`;
+        const message = `Teacher ${teacherName} has assigned the exam "${exam.title}" (${exam.subject.name}, ${exam.durationMin} minutes).`;
 
         await this.createNotification(cs.student.id, title, message, 'new_exam');
 

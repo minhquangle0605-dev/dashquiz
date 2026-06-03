@@ -54,7 +54,11 @@ export const FILE_UPLOAD = {
   MAX_QUESTION_IMAGE_SIZE: 5 * 1024 * 1024, // 5MB
   MAX_EXCEL_SIZE: 10 * 1024 * 1024, // 10MB
   MAX_DOCUMENT_SIZE: 15 * 1024 * 1024, // 15MB (Word / PDF question imports)
+  MAX_CLASS_IMAGE_RESOURCE_SIZE: 10 * 1024 * 1024, // 10MB (course images)
+  ALLOWED_CLASS_IMAGE_TYPES: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
   MAX_CLASS_RESOURCE_SIZE: 100 * 1024 * 1024, // 100MB (course files/videos)
+  MAX_DISCUSSION_ATTACHMENT_SIZE: 100 * 1024 * 1024, // 100MB (discussion files/videos)
+  MAX_DISCUSSION_ATTACHMENTS: 5,
 } as const;
 
 export const TOKEN_BLACKLIST_PREFIX = 'bl:' as const;

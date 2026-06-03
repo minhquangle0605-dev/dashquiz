@@ -276,7 +276,7 @@ export default function DashboardPage() {
     <div className="space-y-6">
       {/* Greeting hero */}
       <GreetingBanner
-        subtitle="Analytics, học sinh cần hỗ trợ và kết quả lớp – trong một màn hình."
+        subtitle="Analytics, students who need support, and class results — all in one screen."
         meta={
           classDash
             ? [

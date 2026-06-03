@@ -35,7 +35,9 @@ export async function startExam(
     if (!req.user) throw new AppError('Authentication required', 401);
     const examId = parseInt(req.params.id, 10);
     if (isNaN(examId)) throw new AppError('Invalid exam ID', 400);
-    const result = await studentExamService.startExam(examId, req.user.id);
+    const password =
+      typeof req.body?.password === 'string' ? req.body.password : undefined;
+    const result = await studentExamService.startExam(examId, req.user.id, password);
     res.status(201).json(result);
   } catch (error: unknown) {
     next(error instanceof Error ? error : new Error('Unexpected error'));

@@ -23,14 +23,26 @@ import {
   getExamAssignments,
 } from '@/services/exam.api';
 import { listClasses } from '@/services/class.api';
+import { checkConflicts } from '@/services/timetable.api';
+import { ConflictDialog } from '@/components/timetable/ConflictDialog';
+import { useAuthStore } from '@/stores/authStore';
 import type {
   TeacherExam,
   TeacherExamStatus,
   ExamAssignmentItem,
   ClassItem,
 } from '@/types/exam';
+import type { ConflictCheckResult, ConflictItem } from '@/types/timetable';
 import type { PaginatedResponse } from '@/types/api';
 import { useDebounce } from '@/hooks/useDebounce';
+
+/** Pull the message + hard-conflict list out of a backend AppError response. */
+function extractConflictError(err: unknown): { message: string; conflicts: ConflictItem[] } {
+  const data = (err as { response?: { data?: { message?: string; errors?: unknown } } })?.response
+    ?.data;
+  const conflicts = Array.isArray(data?.errors) ? (data?.errors as ConflictItem[]) : [];
+  return { message: data?.message ?? 'Request failed.', conflicts };
+}
 
 const STATUS_CONFIG: Record<TeacherExamStatus, { label: string; variant: BadgeVariant }> = {
   DRAFT: { label: 'Draft', variant: 'neutral' },
@@ -57,7 +69,13 @@ export default function ExamsPage() {
   const [scheduleModal, setScheduleModal] = useState<TeacherExam | null>(null);
   const [scheduleStart, setScheduleStart] = useState('');
   const [scheduleEnd, setScheduleEnd] = useState('');
+  const [scheduleClassId, setScheduleClassId] = useState<number | ''>('');
+  const [scheduleRoom, setScheduleRoom] = useState('');
   const [scheduling, setScheduling] = useState(false);
+
+  // Conflict pre-check before committing a schedule.
+  const [conflictResult, setConflictResult] = useState<ConflictCheckResult | null>(null);
+  const isAdmin = useAuthStore((s) => s.user?.role === 'admin');
 
   const [assignModal, setAssignModal] = useState<TeacherExam | null>(null);
   const [allClasses, setAllClasses] = useState<ClassItem[]>([]);
@@ -95,7 +113,11 @@ export default function ExamsPage() {
   }, [statusFilter, debouncedSearch]);
 
   const handleDelete = async (exam: TeacherExam) => {
-    if (!window.confirm(`Delete "${exam.title}"? This cannot be undone.`)) return;
+    const extra =
+      exam.status !== 'DRAFT'
+        ? ' Its schedules and class assignments will also be removed.'
+        : '';
+    if (!window.confirm(`Delete "${exam.title}"?${extra} This cannot be undone.`)) return;
     setDeletingId(exam.id);
     try {
       await deleteExam(exam.id);
@@ -130,21 +152,64 @@ export default function ExamsPage() {
     setScheduleModal(exam);
     setScheduleStart('');
     setScheduleEnd('');
+    setScheduleClassId('');
+    setScheduleRoom('');
   };
 
-  const handleSchedule = async () => {
+  // Actually create the schedule. `force` is honoured server-side for admins only.
+  const commitSchedule = async (force: boolean) => {
     if (!scheduleModal || !scheduleStart || !scheduleEnd) return;
     setScheduling(true);
     try {
       await scheduleExam(scheduleModal.id, {
         startTime: new Date(scheduleStart).toISOString(),
         endTime: new Date(scheduleEnd).toISOString(),
+        classId: scheduleClassId === '' ? null : scheduleClassId,
+        room: scheduleRoom.trim() || null,
+        force,
       });
       toast.success('Exam scheduled!');
+      setConflictResult(null);
       setScheduleModal(null);
       fetchExams();
+    } catch (err) {
+      const { message } = extractConflictError(err);
+      toast.error(message || 'Failed to schedule exam.');
+    } finally {
+      setScheduling(false);
+    }
+  };
+
+  const handleSchedule = async () => {
+    if (!scheduleModal || !scheduleStart || !scheduleEnd) return;
+    const allClassIds = (scheduleModal.examAssignments ?? []).map((a) => a.classId);
+    // A per-class window only clashes against its own class.
+    const targetClassIds = scheduleClassId === '' ? allClassIds : [scheduleClassId];
+
+    // No assigned classes → nothing to clash with; schedule straight away.
+    if (targetClassIds.length === 0) {
+      await commitSchedule(false);
+      return;
+    }
+
+    setScheduling(true);
+    try {
+      const result = await checkConflicts({
+        classIds: targetClassIds,
+        subjectId: scheduleModal.subjectId,
+        startTime: new Date(scheduleStart).toISOString(),
+        endTime: new Date(scheduleEnd).toISOString(),
+        excludeExamId: scheduleModal.id,
+        room: scheduleRoom.trim() || null,
+      });
+      if (result.hardConflicts.length === 0 && result.softWarnings.length === 0) {
+        await commitSchedule(false);
+      } else {
+        // Surface the conflicts; the dialog decides whether the user may proceed.
+        setConflictResult(result);
+      }
     } catch {
-      toast.error('Failed to schedule exam.');
+      toast.error('Failed to check schedule conflicts.');
     } finally {
       setScheduling(false);
     }
@@ -184,8 +249,11 @@ export default function ExamsPage() {
       toast.success(`Assigned to ${newIds.length} new class(es)!`);
       setAssignModal(null);
       fetchExams();
-    } catch {
-      toast.error('Failed to assign exam.');
+    } catch (err) {
+      const { message, conflicts } = extractConflictError(err);
+      // Surface the server's conflict reason (e.g. "Overlaps the Physics period of 10A1").
+      const detail = conflicts.length > 0 ? `: ${conflicts.map((c) => c.message).join('; ')}` : '';
+      toast.error(`${message}${detail}` || 'Failed to assign exam.');
     } finally {
       setAssigning(false);
     }
@@ -338,6 +406,15 @@ export default function ExamsPage() {
                       <Button variant="outline" size="sm" onClick={() => openAssignModal(exam)}>
                         Assign
                       </Button>
+                      {!isDraft && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => navigate(`/teacher/exams/${exam.id}/reports`)}
+                        >
+                          Reports
+                        </Button>
+                      )}
                       {isDraft && (
                         <Button
                           variant="primary"
@@ -348,16 +425,14 @@ export default function ExamsPage() {
                           Publish
                         </Button>
                       )}
-                      {isDraft && (
-                        <Button
-                          variant="danger"
-                          size="sm"
-                          isLoading={deletingId === exam.id}
-                          onClick={() => handleDelete(exam)}
-                        >
-                          Delete
-                        </Button>
-                      )}
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        isLoading={deletingId === exam.id}
+                        onClick={() => handleDelete(exam)}
+                      >
+                        Delete
+                      </Button>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -413,6 +488,34 @@ export default function ExamsPage() {
                 value={scheduleEnd}
                 min={scheduleStart}
                 onChange={(e) => setScheduleEnd(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">Apply to class</label>
+              <select
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                value={scheduleClassId}
+                onChange={(e) => setScheduleClassId(e.target.value === '' ? '' : Number(e.target.value))}
+              >
+                <option value="">All assigned classes</option>
+                {(scheduleModal?.examAssignments ?? []).map((a) => (
+                  <option key={a.classId} value={a.classId}>
+                    {a.class?.name ?? `Class #${a.classId}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">Room (optional)</label>
+              <input
+                type="text"
+                maxLength={50}
+                placeholder="e.g. A101"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                value={scheduleRoom}
+                onChange={(e) => setScheduleRoom(e.target.value)}
               />
             </div>
           </div>
@@ -505,6 +608,17 @@ export default function ExamsPage() {
           </div>
         </div>
       </Modal>
+
+      {/* Conflict dialog shown when a schedule clashes with the timetable or another exam */}
+      <ConflictDialog
+        isOpen={conflictResult !== null}
+        hardConflicts={conflictResult?.hardConflicts ?? []}
+        softWarnings={conflictResult?.softWarnings ?? []}
+        canForce={isAdmin}
+        forcing={scheduling}
+        onConfirm={() => commitSchedule((conflictResult?.hardConflicts.length ?? 0) > 0)}
+        onClose={() => setConflictResult(null)}
+      />
     </div>
   );
 }

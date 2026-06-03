@@ -1,7 +1,7 @@
 # WebQuiz — High School Learning Analytics Dashboard
 
-Hệ thống kiểm tra trắc nghiệm trực tuyến và phân tích hiệu suất học tập cho trường THPT.
-Ba môn cốt lõi: **Toán**, **Vật lý**, **Hóa học**.
+Online multiple-choice testing platform and learning-performance analytics for high schools.
+Three core subjects: **Mathematics**, **Physics**, **Chemistry**.
 
 ## Tech Stack
 

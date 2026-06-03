@@ -13,9 +13,9 @@ export default function AIPracticePage() {
             </svg>
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Luyện tập AI</h1>
+            <h1 className="text-2xl font-bold text-slate-900">AI Practice</h1>
             <p className="mt-2 text-slate-600">
-              Placeholder — câu hỏi gợi ý theo mức độ, giải thích và theo dõi tiến bộ qua AI.
+              Placeholder — recommended questions by difficulty, explanations, and AI-driven progress tracking.
             </p>
           </div>
         </div>

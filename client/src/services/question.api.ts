@@ -112,7 +112,7 @@ export async function removeTag(
 export async function importQuestions(
   file: File,
   subjectId: number,
-  chapterId?: number,
+  chapterId: number,
   topicId?: number,
 ): Promise<ImportQuestionResult> {
   const formData = new FormData();
@@ -173,12 +173,12 @@ export async function bulkCreateQuestions(
   questions: ExtractedQuestion[],
   subjectId: number,
   chapterId: number,
-  topicId: number,
+  topicId?: number,
 ): Promise<BulkCreateResult> {
   const { data } = await api.post(API_ENDPOINTS.QUESTIONS.BULK_CREATE, {
     subjectId,
     chapterId,
-    topicId,
+    ...(topicId ? { topicId } : {}),
     questions,
   });
   return data.data ?? data;

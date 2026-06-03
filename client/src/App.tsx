@@ -20,20 +20,26 @@ const ExamResultPage = lazy(() => import('./pages/student/ExamResultPage'));
 const AIPracticePage = lazy(() => import('./pages/student/AIPracticePage'));
 const RemedialSessionPage = lazy(() => import('./pages/student/RemedialSessionPage'));
 const MyClassesPage = lazy(() => import('./pages/student/MyClassesPage'));
+const StudentTimetablePage = lazy(() => import('./pages/student/TimetablePage'));
 
 const TeacherDashboard = lazy(() => import('./pages/teacher/DashboardPage'));
 const QuestionBankPage = lazy(() => import('./pages/teacher/QuestionBankPage'));
 const ExamsPage = lazy(() => import('./pages/teacher/ExamsPage'));
 const CreateExamPage = lazy(() => import('./pages/teacher/CreateExamPage'));
+const ExamReportsPage = lazy(() => import('./pages/teacher/ExamReportsPage'));
 const ClassesPage = lazy(() => import('./pages/teacher/ClassesPage'));
+const TeacherTimetablePage = lazy(() => import('./pages/teacher/TimetablePage'));
 
 const ParentDashboard = lazy(() => import('./pages/parent/DashboardPage'));
 const ChildResultsPage = lazy(() => import('./pages/parent/ChildResultsPage'));
+const ParentTimetablePage = lazy(() => import('./pages/parent/TimetablePage'));
 
 const AdminDashboard = lazy(() => import('./pages/admin/DashboardPage'));
 const UsersPage = lazy(() => import('./pages/admin/UsersPage'));
 const AcademicPage = lazy(() => import('./pages/admin/AcademicPage'));
 const SystemPage = lazy(() => import('./pages/admin/SystemPage'));
+const AdminTimetablePage = lazy(() => import('./pages/admin/TimetablePage'));
+const AdminExamsPage = lazy(() => import('./pages/admin/ExamsPage'));
 
 const NotFoundPage = lazy(() => import('./pages/common/NotFoundPage'));
 const ForbiddenPage = lazy(() => import('./pages/common/ForbiddenPage'));
@@ -41,6 +47,7 @@ const ServerErrorPage = lazy(() => import('./pages/common/ServerErrorPage'));
 const ProfilePage = lazy(() => import('./pages/common/ProfilePage'));
 const NotificationsPage = lazy(() => import('./pages/common/NotificationsPage'));
 const DiscussionsPage = lazy(() => import('./pages/common/DiscussionsPage'));
+const GradebookPage = lazy(() => import('./pages/common/GradebookPage'));
 const AdminDiscussionsPage = lazy(() => import('./pages/admin/DiscussionsPage'));
 
 function LoadingSpinner() {
@@ -72,6 +79,7 @@ export default function App() {
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<StudentDashboard />} />
             <Route path="classes" element={<MyClassesPage />} />
+            <Route path="timetable" element={<StudentTimetablePage />} />
             <Route path="knowledge-graph" element={<KnowledgeGraphPage />} />
             <Route path="exams" element={<ExamListPage />} />
             <Route path="exams/:id/take" element={<TakeExamPage />} />
@@ -92,7 +100,10 @@ export default function App() {
             <Route path="questions" element={<QuestionBankPage />} />
             <Route path="exams" element={<ExamsPage />} />
             <Route path="exams/create" element={<CreateExamPage />} />
+            <Route path="exams/:id/reports" element={<ExamReportsPage />} />
             <Route path="classes" element={<ClassesPage />} />
+            <Route path="timetable" element={<TeacherTimetablePage />} />
+            <Route path="gradebook" element={<GradebookPage />} />
             <Route path="discussions" element={<DiscussionsPage />} />
             <Route path="notifications" element={<NotificationsPage />} />
             <Route path="profile" element={<ProfilePage />} />
@@ -105,6 +116,7 @@ export default function App() {
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<ParentDashboard />} />
             <Route path="results" element={<ChildResultsPage />} />
+            <Route path="timetable" element={<ParentTimetablePage />} />
             <Route path="notifications" element={<NotificationsPage />} />
             <Route path="profile" element={<ProfilePage />} />
           </Route>
@@ -117,7 +129,10 @@ export default function App() {
             <Route path="dashboard" element={<AdminDashboard />} />
             <Route path="users" element={<UsersPage />} />
             <Route path="questions" element={<QuestionBankPage />} />
+            <Route path="exams" element={<AdminExamsPage />} />
             <Route path="academic" element={<AcademicPage />} />
+            <Route path="timetable" element={<AdminTimetablePage />} />
+            <Route path="gradebook" element={<GradebookPage />} />
             <Route path="discussions" element={<AdminDiscussionsPage />} />
             <Route path="system" element={<SystemPage />} />
             <Route path="notifications" element={<NotificationsPage />} />

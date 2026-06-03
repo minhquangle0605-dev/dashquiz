@@ -331,8 +331,8 @@ export function ImportDocumentModal({
 
   const validationErrors = (): string[] => {
     const errors: string[] = [];
-    if (!curriculum.subjectId || !curriculum.chapterId || !curriculum.topicId) {
-      errors.push('Please select Subject, Chapter, and Topic.');
+    if (!curriculum.subjectId || !curriculum.gradeLevel || !curriculum.chapterId) {
+      errors.push('Please select Subject, Grade and Chapter.');
     }
     questions.forEach((question, index) => {
       questionValidationErrors(question).forEach((error) => {
@@ -354,7 +354,6 @@ export function ImportDocumentModal({
         questions,
         Number(curriculum.subjectId),
         Number(curriculum.chapterId),
-        Number(curriculum.topicId),
       );
       setSaveResult(result);
       if (result.imported > 0) {
@@ -543,10 +542,11 @@ Match each country to its capital: {
             value={curriculum}
             onChange={setCurriculum}
             allowEmpty={false}
+            showTopic={false}
             labels={{
               subject: 'Target Subject *',
+              grade: 'Target Grade *',
               chapter: 'Target Chapter *',
-              topic: 'Target Topic *',
             }}
           />
 

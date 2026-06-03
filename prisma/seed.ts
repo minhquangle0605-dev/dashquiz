@@ -79,18 +79,18 @@ async function main() {
   });
   console.log(`✓ Teacher account seeded: ${teacher.username}`);
 
-  // ── 2. Seed Subjects (Toán, Lý, Hóa — theo proposal) ──
+  // ── 2. Seed Subjects (Mathematics, Physics, Chemistry) ──
   const subjectsData = [
-    { name: 'Toán', code: 'MATH', description: 'Toán học phổ thông — Đại số, Hình học, Giải tích' },
-    { name: 'Vật lý', code: 'PHY', description: 'Vật lý phổ thông — Cơ học, Điện, Quang, Nhiệt' },
-    { name: 'Hóa học', code: 'CHEM', description: 'Hóa học phổ thông — Vô cơ, Hữu cơ' },
+    { name: 'Mathematics', code: 'MATH', description: 'High school mathematics - Algebra, Geometry, Calculus' },
+    { name: 'Physics', code: 'PHY', description: 'High school physics - Mechanics, Electricity, Optics, Thermodynamics' },
+    { name: 'Chemistry', code: 'CHEM', description: 'High school chemistry - Inorganic, Organic' },
   ];
 
   const subjects = await Promise.all(
     subjectsData.map((s) =>
       prisma.subject.upsert({
         where: { code: s.code },
-        update: {},
+        update: { name: s.name, description: s.description, status: 1 },
         create: { ...s, status: 1 },
       }),
     ),
@@ -112,13 +112,13 @@ async function main() {
 
   const semestersData = [
     {
-      name: 'Học kỳ 1',
+      name: 'Semester 1',
       startDate: new Date('2025-09-01'),
       endDate: new Date('2026-01-15'),
       academicYearId: academicYear.id,
     },
     {
-      name: 'Học kỳ 2',
+      name: 'Semester 2',
       startDate: new Date('2026-01-16'),
       endDate: new Date('2026-06-30'),
       academicYearId: academicYear.id,
@@ -137,43 +137,158 @@ async function main() {
   console.log(`✓ ${semesters.length} semesters seeded`);
 
   // ── 4. Seed Chapters & Topics ────────────────────
-  const chaptersConfig: Record<string, { name: string; topics: string[] }[]> = {
+  const chaptersConfig: Record<
+    string,
+    { gradeLevel: 10 | 11 | 12; chapters: string[] }[]
+  > = {
     MATH: [
       {
-        name: 'Hàm số và đồ thị',
-        topics: ['Hàm số bậc nhất', 'Hàm số bậc hai', 'Đồ thị hàm số', 'Biến thiên hàm số', 'Giá trị lớn nhất - nhỏ nhất'],
+        gradeLevel: 10,
+        chapters: [
+          'Propositions and Sets',
+          'Inequalities and Systems of Linear Inequalities in Two Variables',
+          'Functions and Graphs',
+          'Quadratic Functions',
+          'Trigonometric Relations in Triangles',
+          'Vectors',
+          'Dot Product of Two Vectors',
+          'Coordinate Geometry in the Plane',
+          'Combinatorics',
+          'Probability',
+          'Statistics',
+          'Vectors in the Plane',
+          'Oxy Coordinate System',
+          'Lines',
+          'Circles',
+          'The Three Basic Conic Sections',
+        ],
       },
       {
-        name: 'Phương trình và bất phương trình',
-        topics: ['Phương trình bậc hai', 'Hệ phương trình', 'Bất phương trình', 'Phương trình chứa ẩn ở mẫu'],
+        gradeLevel: 11,
+        chapters: [
+          'Trigonometric Functions',
+          'Trigonometric Equations',
+          'Sequences',
+          'Arithmetic Sequences',
+          'Geometric Sequences',
+          'Limits of Sequences',
+          'Limits of Functions',
+          'Continuous Functions',
+          'Exponential Functions',
+          'Logarithmic Functions',
+          'Exponential and Logarithmic Equations and Inequalities',
+          'Parallel Relations',
+          'Lines and Planes',
+          'Perpendicular Relations',
+          'Angles in Space',
+          'Distances in Space',
+          'Pyramids',
+          'Prisms',
+          'Events',
+          'Classical Probability',
+          'Probability Rules',
+        ],
       },
       {
-        name: 'Lượng giác',
-        topics: ['Góc lượng giác', 'Hàm số lượng giác', 'Phương trình lượng giác'],
-      },
-    ],
-    PHY: [
-      {
-        name: 'Động học',
-        topics: ['Chuyển động thẳng đều', 'Chuyển động thẳng biến đổi đều', 'Rơi tự do', 'Chuyển động tròn đều'],
-      },
-      {
-        name: 'Động lực học',
-        topics: ['Ba định luật Newton', 'Lực ma sát', 'Lực hướng tâm', 'Bài toán hệ vật'],
+        gradeLevel: 12,
+        chapters: [
+          'Applications of Derivatives',
+          'Rational Functions',
+          'Advanced Exponential and Logarithmic Functions',
+          'Antiderivatives',
+          'Integrals',
+          'Applications of Integrals',
+          'Complex Numbers',
+          'Three-Dimensional Coordinate System',
+          'Equations of Planes',
+          'Equations of Lines',
+          'Spheres',
+          'Distances and Angles in Oxyz Space',
+          'Random Variables',
+          'Probability Distributions',
+          'Basic Expected Value',
+        ],
       },
     ],
     CHEM: [
       {
-        name: 'Cấu tạo nguyên tử',
-        topics: ['Thành phần nguyên tử', 'Cấu hình electron', 'Bảng tuần hoàn'],
+        gradeLevel: 10,
+        chapters: [
+          'Atomic Structure',
+          'Periodic Table and Periodic Law',
+          'Chemical Bonding',
+          'Oxidation-Reduction Reactions',
+          'Reaction Rate and Chemical Equilibrium',
+          'Halogens',
+          'Oxygen and Sulfur Group Elements',
+        ],
       },
       {
-        name: 'Liên kết hóa học',
-        topics: ['Liên kết ion', 'Liên kết cộng hóa trị', 'Tinh thể', 'Hóa trị và số oxi hóa'],
+        gradeLevel: 11,
+        chapters: [
+          'Electrolytic Dissociation',
+          'Nitrogen and Phosphorus',
+          'Carbon and Silicon',
+          'Introduction to Organic Chemistry',
+          'Saturated Hydrocarbons (Alkanes)',
+          'Unsaturated Hydrocarbons',
+          'Aromatic Hydrocarbons',
+          'Halogen Derivatives - Alcohols - Phenols',
+          'Aldehydes - Ketones - Carboxylic Acids',
+        ],
       },
       {
-        name: 'Phản ứng hóa học',
-        topics: ['Phản ứng oxi hóa khử', 'Tốc độ phản ứng', 'Cân bằng hóa học'],
+        gradeLevel: 12,
+        chapters: [
+          'Esters and Lipids',
+          'Carbohydrates',
+          'Amines, Amino Acids, and Proteins',
+          'Polymers and Polymer Materials',
+          'General Principles of Metals',
+          'Alkali Metals, Alkaline Earth Metals, and Aluminum',
+          'Iron, Chromium, Copper, and Some Important Compounds',
+          'Distinguishing Certain Inorganic Substances',
+          'General Principles of Organic Chemistry',
+        ],
+      },
+    ],
+    PHY: [
+      {
+        gradeLevel: 10,
+        chapters: [
+          'Kinematics',
+          'Dynamics',
+          'Equilibrium and Motion of Rigid Bodies',
+          'Conservation Laws',
+          'Circular Motion',
+          'Deformation of Solids',
+          'Fluids',
+          'Thermodynamics',
+        ],
+      },
+      {
+        gradeLevel: 11,
+        chapters: [
+          'Oscillations',
+          'Waves',
+          'Electric Field',
+          'Electric Current and Electric Circuits',
+          'Magnetic Field',
+          'Electromagnetic Induction',
+          'Optics',
+        ],
+      },
+      {
+        gradeLevel: 12,
+        chapters: [
+          'Mechanical Oscillations',
+          'Mechanical Waves and Sound Waves',
+          'Alternating Current',
+          'Electromagnetic Oscillations and Electromagnetic Waves',
+          'Light Waves',
+          'Quantum Physics of Light',
+          'Atomic Nucleus Physics',
+        ],
       },
     ],
   };
@@ -183,25 +298,46 @@ async function main() {
   const topicIds: number[] = [];
 
   for (const subject of subjects) {
-    const chapters = chaptersConfig[subject.code] || [];
-    for (let ci = 0; ci < chapters.length; ci++) {
-      const chap = chapters[ci];
-      const chapter = await prisma.chapter.create({
-        data: {
-          subjectId: subject.id,
-          name: chap.name,
-          orderIndex: ci + 1,
-        },
-      });
-      totalChapters++;
-
-      for (const topicName of chap.topics) {
-        const topic = await prisma.topic.create({
-          data: {
-            chapterId: chapter.id,
-            name: topicName,
+    const gradeGroups = chaptersConfig[subject.code] || [];
+    for (const group of gradeGroups) {
+      for (let ci = 0; ci < group.chapters.length; ci++) {
+        const chapterName = group.chapters[ci];
+        const existingChapter = await prisma.chapter.findFirst({
+          where: {
+            subjectId: subject.id,
+            gradeLevel: group.gradeLevel,
+            name: chapterName,
           },
         });
+        const chapter = existingChapter
+          ? await prisma.chapter.update({
+              where: { id: existingChapter.id },
+              data: { orderIndex: ci + 1 },
+            })
+          : await prisma.chapter.create({
+              data: {
+                subjectId: subject.id,
+                gradeLevel: group.gradeLevel,
+                name: chapterName,
+                orderIndex: ci + 1,
+              },
+            });
+        totalChapters++;
+
+        const existingTopic = await prisma.topic.findFirst({
+          where: {
+            chapterId: chapter.id,
+            name: 'General',
+          },
+        });
+        const topic = existingTopic
+          ? existingTopic
+          : await prisma.topic.create({
+              data: {
+                chapterId: chapter.id,
+                name: 'General',
+              },
+            });
         topicIds.push(topic.id);
         totalTopics++;
       }
@@ -211,25 +347,43 @@ async function main() {
   console.log(`✓ ${totalTopics} topics seeded`);
 
   // ── 5. Seed Topic Relations (Knowledge Graph) ────
-  // MATH: 0-11, PHY: 12-19, CHEM: 20-29
-  const relationsData = [
-    // Toán: Hàm số bậc nhất → Hàm số bậc hai → Đồ thị hàm số
+  // The PDF provides chapter lists only, not prerequisite relationships.
+  let removedLegacyChapters = 0;
+  for (const subject of subjects) {
+    const legacyChapters = await prisma.chapter.findMany({
+      where: {
+        subjectId: subject.id,
+        topics: { none: { name: 'General' } },
+      },
+      include: { _count: { select: { questions: true } } },
+    });
+
+    for (const chapter of legacyChapters) {
+      if (chapter._count.questions > 0) continue;
+      await prisma.chapter.delete({ where: { id: chapter.id } });
+      removedLegacyChapters++;
+    }
+  }
+  console.log(`✓ ${removedLegacyChapters} legacy empty chapters removed`);
+
+  const relationsData: Array<{ fromIdx: number; toIdx: number; type: string }> = [/*
+    // Math: Linear Functions → Quadratic Functions → Function Graphs
     { fromIdx: 0, toIdx: 1, type: 'prerequisite' },
     { fromIdx: 1, toIdx: 2, type: 'prerequisite' },
     { fromIdx: 0, toIdx: 3, type: 'related' },
-    // Toán: Phương trình bậc hai → Hệ phương trình → Bất phương trình
+    // Math: Quadratic Equations → Systems of Equations → Inequalities
     { fromIdx: 5, toIdx: 6, type: 'prerequisite' },
     { fromIdx: 6, toIdx: 7, type: 'prerequisite' },
-    // Vật lý: Chuyển động thẳng đều → CĐTBDĐ → Rơi tự do
+    // Physics: Uniform Linear Motion → Uniformly Accelerated Linear Motion → Free Fall
     { fromIdx: 12, toIdx: 13, type: 'prerequisite' },
     { fromIdx: 13, toIdx: 14, type: 'related' },
-    // Hóa: Thành phần nguyên tử → Cấu hình electron → Bảng tuần hoàn
+    // Chemistry: Atomic Composition → Electron Configuration → Periodic Table
     { fromIdx: 20, toIdx: 21, type: 'prerequisite' },
     { fromIdx: 21, toIdx: 22, type: 'prerequisite' },
-    // Hóa: Phản ứng oxi hóa khử → Tốc độ phản ứng → Cân bằng hóa học
+    // Chemistry: Redox Reactions → Reaction Rate → Chemical Equilibrium
     { fromIdx: 27, toIdx: 28, type: 'prerequisite' },
     { fromIdx: 28, toIdx: 29, type: 'related' },
-  ];
+  */];
 
   let relCount = 0;
   for (const rel of relationsData) {
@@ -246,12 +400,93 @@ async function main() {
   }
   console.log(`✓ ${relCount} topic relations seeded (Knowledge Graph)`);
 
+  // ── 5b. Seed managed-subject timetable slots ─────
+  // Encodes the Math/Physics/Chemistry slots from the timetable plan (Appendix §10).
+  // Only classes that already exist (created by teachers) get seeded; display-only
+  // subjects are left for the Excel import. Period times are minute-of-day (VN).
+  const PERIOD_TIMES: Record<number, { start: number; end: number }> = {
+    1: { start: 7 * 60, end: 7 * 60 + 45 }, // 07:00–07:45
+    2: { start: 7 * 60 + 50, end: 8 * 60 + 35 }, // 07:50–08:35
+    3: { start: 8 * 60 + 40, end: 9 * 60 + 25 }, // 08:40–09:25
+    4: { start: 9 * 60 + 45, end: 10 * 60 + 30 }, // 09:45–10:30
+    5: { start: 10 * 60 + 30, end: 11 * 60 + 15 }, // 10:30–11:15
+  };
+  const DAY = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 } as const;
+  type DayKey = keyof typeof DAY;
+
+  // [day, period] pairs per class per managed subject code.
+  const timetablePlan: Record<string, Record<'MATH' | 'PHY' | 'CHEM', [DayKey, number][]>> = {
+    '10A1': { MATH: [['Mon', 2], ['Tue', 2], ['Thu', 1], ['Fri', 3]], PHY: [['Mon', 5], ['Thu', 2]], CHEM: [['Tue', 1], ['Thu', 3]] },
+    '10A2': { MATH: [['Mon', 3], ['Tue', 3], ['Thu', 1], ['Sat', 3]], PHY: [['Tue', 1], ['Thu', 4]], CHEM: [['Mon', 5], ['Thu', 2]] },
+    '10A3': { MATH: [['Mon', 3], ['Tue', 1], ['Thu', 2], ['Sat', 1]], PHY: [['Tue', 3], ['Fri', 1]], CHEM: [['Tue', 2], ['Thu', 1]] },
+    '11A1': { MATH: [['Mon', 2], ['Tue', 2], ['Thu', 1], ['Fri', 3]], PHY: [['Mon', 5], ['Thu', 2]], CHEM: [['Tue', 1], ['Thu', 3]] },
+    '11A2': { MATH: [['Mon', 3], ['Tue', 2], ['Thu', 2], ['Sat', 1]], PHY: [['Tue', 1], ['Thu', 3]], CHEM: [['Mon', 5], ['Thu', 1]] },
+    '11A3': { MATH: [['Mon', 4], ['Tue', 1], ['Thu', 1], ['Fri', 3]], PHY: [['Tue', 2], ['Thu', 4]], CHEM: [['Tue', 3], ['Thu', 2]] },
+    '12A1': { MATH: [['Mon', 2], ['Tue', 1], ['Wed', 2], ['Thu', 3], ['Fri', 2]], PHY: [['Mon', 5], ['Thu', 1]], CHEM: [['Tue', 2], ['Thu', 2]] },
+    '12A2': { MATH: [['Mon', 3], ['Tue', 2], ['Wed', 1], ['Thu', 4], ['Fri', 2]], PHY: [['Tue', 1], ['Thu', 2]], CHEM: [['Mon', 5], ['Thu', 1]] },
+    '12A3': { MATH: [['Mon', 3], ['Tue', 1], ['Wed', 2], ['Thu', 4], ['Fri', 2]], PHY: [['Tue', 2], ['Thu', 3]], CHEM: [['Tue', 3], ['Thu', 2]] },
+  };
+
+  const subjectByCode = new Map(subjects.map((s) => [s.code, s]));
+  let timetableSlots = 0;
+  let skippedClasses = 0;
+
+  for (const [className, perSubject] of Object.entries(timetablePlan)) {
+    const cls = await prisma.class.findFirst({ where: { name: className } });
+    if (!cls) {
+      skippedClasses++;
+      continue;
+    }
+
+    for (const code of ['MATH', 'PHY', 'CHEM'] as const) {
+      const subject = subjectByCode.get(code);
+      if (!subject) continue;
+      for (const [dayKey, period] of perSubject[code]) {
+        const dayOfWeek = DAY[dayKey];
+        const times = PERIOD_TIMES[period];
+        if (!times) continue;
+
+        const existing = await prisma.classTimetableSlot.findFirst({
+          where: { classId: cls.id, dayOfWeek, periodIndex: period },
+        });
+        const slotData = {
+          subjectId: subject.id,
+          displayName: subject.name,
+          kind: 'MANAGED_SUBJECT' as const,
+          status: 'ACTIVE' as const,
+          startMinute: times.start,
+          endMinute: times.end,
+          semesterId: cls.semesterId,
+        };
+
+        if (existing) {
+          await prisma.classTimetableSlot.update({ where: { id: existing.id }, data: slotData });
+        } else {
+          await prisma.classTimetableSlot.create({
+            data: {
+              classId: cls.id,
+              dayOfWeek,
+              periodIndex: period,
+              createdBy: admin.id,
+              ...slotData,
+            },
+          });
+        }
+        timetableSlots++;
+      }
+    }
+  }
+  console.log(
+    `✓ ${timetableSlots} managed timetable slots seeded` +
+      (skippedClasses > 0 ? ` (${skippedClasses} class name(s) not found, skipped)` : ''),
+  );
+
   // ── 6. Seed System Configs ───────────────────────
   const configs = [
-    { configKey: 'school_name', configValue: 'Trường THPT WebQuiz Demo', description: 'Tên trường hiển thị trên hệ thống' },
-    { configKey: 'school_logo', configValue: '/images/logo.png', description: 'Đường dẫn logo trường' },
-    { configKey: 'max_upload_size_mb', configValue: '10', description: 'Kích thước tải lên tối đa (MB)' },
-    { configKey: 'session_timeout_min', configValue: '30', description: 'Thời gian hết phiên (phút)' },
+    { configKey: 'school_name', configValue: 'WebQuiz Demo High School', description: 'School name displayed in the system' },
+    { configKey: 'school_logo', configValue: '/images/logo.png', description: 'Path to school logo' },
+    { configKey: 'max_upload_size_mb', configValue: '10', description: 'Maximum upload size (MB)' },
+    { configKey: 'session_timeout_min', configValue: '30', description: 'Session timeout (minutes)' },
   ];
 
   for (const cfg of configs) {

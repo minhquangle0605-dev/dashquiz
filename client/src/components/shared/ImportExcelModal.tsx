@@ -80,8 +80,8 @@ export function ImportExcelModal({
       toast.error('Please select a file first.');
       return;
     }
-    if (!curriculum.subjectId) {
-      toast.error('Please select a subject for the imported questions.');
+    if (!curriculum.subjectId || !curriculum.gradeLevel || !curriculum.chapterId) {
+      toast.error('Please select a subject, grade and chapter for the imported questions.');
       return;
     }
 
@@ -90,8 +90,7 @@ export function ImportExcelModal({
       const res = await importQuestions(
         file,
         Number(curriculum.subjectId),
-        curriculum.chapterId ? Number(curriculum.chapterId) : undefined,
-        curriculum.topicId ? Number(curriculum.topicId) : undefined,
+        Number(curriculum.chapterId),
       );
       setResult(res);
       setStep('result');
@@ -152,10 +151,11 @@ export function ImportExcelModal({
             value={curriculum}
             onChange={setCurriculum}
             allowEmpty={false}
+            showTopic={false}
             labels={{
               subject: 'Target Subject *',
-              chapter: 'Target Chapter',
-              topic: 'Target Topic',
+              grade: 'Target Grade *',
+              chapter: 'Target Chapter *',
             }}
           />
 
@@ -259,7 +259,12 @@ export function ImportExcelModal({
             </Button>
             <Button
               variant="primary"
-              disabled={!file || !curriculum.subjectId}
+              disabled={
+                !file ||
+                !curriculum.subjectId ||
+                !curriculum.gradeLevel ||
+                !curriculum.chapterId
+              }
               onClick={handleImport}
             >
               Import Questions

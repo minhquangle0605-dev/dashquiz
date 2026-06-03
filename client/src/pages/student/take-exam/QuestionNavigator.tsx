@@ -9,6 +9,8 @@ interface QuestionNavigatorProps {
   unansweredCount: number;
   onSelect: (index: number) => void;
   onClose: () => void;
+  /** Returns whether the student is allowed to jump to a question (Sequential mode locks it). */
+  canSelect?: (index: number) => boolean;
 }
 
 function isQuestionAnswered(question: ExamQuestion, value: StudentAnswerValue) {
@@ -34,6 +36,7 @@ export function QuestionNavigator({
   unansweredCount,
   onSelect,
   onClose,
+  canSelect,
 }: QuestionNavigatorProps) {
   const answeredCount = questions.length - unansweredCount;
 
@@ -106,6 +109,7 @@ export function QuestionNavigator({
                 const answered = isQuestionAnswered(q, answers[String(q.questionId)]);
                 const isFlagged = flagged.has(i);
                 const isCurrent = i === currentIndex;
+                const selectable = canSelect ? canSelect(i) : true;
 
                 let cls =
                   'bg-[var(--color-bg-muted)] text-[var(--color-text-secondary)] hover:bg-[var(--color-border)]';
@@ -120,10 +124,11 @@ export function QuestionNavigator({
                   <button
                     key={q.questionId}
                     type="button"
-                    onClick={() => onSelect(i)}
+                    disabled={!selectable}
+                    onClick={() => selectable && onSelect(i)}
                     className={`relative flex h-10 w-full items-center justify-center rounded-lg text-sm font-bold tabular-nums transition-all duration-150 will-change-transform active:scale-95 focus-ring-brand ${cls} ${
                       isCurrent ? 'ring-2 ring-[var(--color-primary)] ring-offset-2 ring-offset-[var(--color-bg-card)]' : ''
-                    }`}
+                    } ${!selectable ? 'cursor-not-allowed opacity-40' : ''}`}
                   >
                     {i + 1}
                     {isFlagged && (

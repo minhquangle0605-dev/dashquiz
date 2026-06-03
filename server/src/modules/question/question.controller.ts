@@ -142,11 +142,11 @@ export async function importQuestions(
     const meta = {
       subjectId: Number(req.body.subjectId),
       chapterId: Number(req.body.chapterId),
-      topicId: Number(req.body.topicId),
+      topicId: req.body.topicId ? Number(req.body.topicId) : undefined,
     };
 
-    if (!meta.subjectId || !meta.chapterId || !meta.topicId) {
-      throw new AppError('subjectId, chapterId, and topicId are required', 400);
+    if (!meta.subjectId || !meta.chapterId) {
+      throw new AppError('subjectId and chapterId are required', 400);
     }
 
     const result = await questionService.importFromExcel(
@@ -302,14 +302,11 @@ export async function bulkCreateQuestions(
     const meta = {
       subjectId: Number(req.body?.subjectId),
       chapterId: Number(req.body?.chapterId),
-      topicId: Number(req.body?.topicId),
+      topicId: req.body?.topicId ? Number(req.body.topicId) : undefined,
     };
 
-    if (!meta.subjectId || !meta.chapterId || !meta.topicId) {
-      throw new AppError(
-        'subjectId, chapterId, and topicId are required',
-        400,
-      );
+    if (!meta.subjectId || !meta.chapterId) {
+      throw new AppError('subjectId and chapterId are required', 400);
     }
 
     const questions = Array.isArray(req.body?.questions) ? req.body.questions : [];

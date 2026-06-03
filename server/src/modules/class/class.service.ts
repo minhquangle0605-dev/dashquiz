@@ -255,7 +255,7 @@ export class ClassService {
       if (!defaultSemester) {
         defaultSemester = await prisma.semester.create({
           data: {
-            name: 'Học kỳ 1',
+            name: 'Semester 1',
             academicYearId: academicYear.id,
             startDate: academicYear.startDate,
             endDate: new Date(`${academicYear.startDate.getFullYear() + 1}-01-15`),
@@ -345,7 +345,7 @@ export class ClassService {
       if (!defaultSemester) {
         defaultSemester = await prisma.semester.create({
           data: {
-            name: 'Học kỳ 1',
+            name: 'Semester 1',
             academicYearId: academicYear.id,
             startDate: academicYear.startDate,
             endDate: new Date(`${academicYear.startDate.getFullYear() + 1}-01-15`),
@@ -908,8 +908,8 @@ export class ClassService {
 
   generateImportTemplate(): Buffer {
     const sampleData = [
-      { username: 'student001', full_name: 'Nguyễn Văn A' },
-      { username: 'student002', full_name: 'Trần Thị B' },
+      { username: 'student001', full_name: 'John Doe' },
+      { username: 'student002', full_name: 'Jane Smith' },
     ];
 
     const worksheet = XLSX.utils.json_to_sheet(sampleData);
@@ -919,17 +919,17 @@ export class ClassService {
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Students');
 
     const instructionData = [
-      ['Hướng dẫn Import Học sinh vào Lớp'],
+      ['Instructions for Importing Students into Class'],
       [''],
-      ['Cột', 'Mô tả', 'Bắt buộc'],
-      ['username', 'Tên đăng nhập của học sinh', 'Có'],
-      ['full_name', 'Họ tên (chỉ để tham khảo, không dùng để lookup)', 'Không'],
+      ['Column', 'Description', 'Required'],
+      ['username', 'Username of the student', 'Yes'],
+      ['full_name', 'Full name (for reference only, not used for lookup)', 'No'],
       [''],
-      ['Lưu ý:', 'Học sinh phải đã có tài khoản trong hệ thống với vai trò Student'],
+      ['Note:', 'Students must already have an account in the system with the Student role'],
     ];
     const instructionSheet = XLSX.utils.aoa_to_sheet(instructionData);
     instructionSheet['!cols'] = [{ wch: 15 }, { wch: 55 }, { wch: 20 }];
-    XLSX.utils.book_append_sheet(workbook, instructionSheet, 'Huong dan');
+    XLSX.utils.book_append_sheet(workbook, instructionSheet, 'Instructions');
 
     return Buffer.from(XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }));
   }

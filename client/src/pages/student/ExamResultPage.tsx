@@ -9,7 +9,15 @@ import { MathText } from '@/components/shared/MathText';
 import { useAttemptResult } from '@/hooks/useExam';
 import { useGenerateRemedial } from '@/hooks/useAiRemedial';
 import { formatDuration, formatDate } from '@/utils/format';
-import type { ResultQuestion } from '@/types/exam';
+import type { ResultQuestion, ReviewWindowFlags } from '@/types/exam';
+
+const ALL_REVIEW_FLAGS: ReviewWindowFlags = {
+  responses: true,
+  marks: true,
+  correctness: true,
+  correctAnswer: true,
+  generalFeedback: true,
+};
 
 function ScoreRing({
   percentage,
@@ -73,25 +81,36 @@ function ScoreRing({
 function QuestionReview({
   question,
   index,
+  flags,
 }: {
   question: ResultQuestion;
   index: number;
+  flags: ReviewWindowFlags;
 }) {
   const selectedOptions = question.selectedOptions ?? [];
   const hasTextAnswer = Boolean(question.answerText && question.answerText.trim());
   const skipped =
-    question.selectedOption === null && selectedOptions.length === 0 && !hasTextAnswer;
+    flags.responses &&
+    question.selectedOption === null &&
+    selectedOptions.length === 0 &&
+    !hasTextAnswer;
 
-  const borderColor = skipped
+  // Only colour the card by correctness when the student is allowed to see it.
+  const showCorrectness = flags.correctness;
+  const borderColor = !showCorrectness
     ? 'border-slate-200'
-    : question.isCorrect
-      ? 'border-emerald-200'
-      : 'border-red-200';
-  const bgColor = skipped
+    : skipped
+      ? 'border-slate-200'
+      : question.isCorrect
+        ? 'border-emerald-200'
+        : 'border-red-200';
+  const bgColor = !showCorrectness
     ? 'bg-slate-50'
-    : question.isCorrect
-      ? 'bg-emerald-50'
-      : 'bg-red-50';
+    : skipped
+      ? 'bg-slate-50'
+      : question.isCorrect
+        ? 'bg-emerald-50'
+        : 'bg-red-50';
 
   return (
     <div className={`rounded-xl border-2 ${borderColor} overflow-hidden`}>
@@ -100,7 +119,7 @@ function QuestionReview({
         <div className="flex items-center gap-3">
           <span
             className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${
-              skipped
+              !showCorrectness || skipped
                 ? 'bg-slate-200 text-slate-600'
                 : question.isCorrect
                   ? 'bg-emerald-500 text-white'
@@ -109,21 +128,13 @@ function QuestionReview({
           >
             {index + 1}
           </span>
-          <Badge
-            variant={
-              skipped
-                ? 'neutral'
-                : question.isCorrect
-                  ? 'success'
-                  : 'danger'
-            }
-          >
-            {skipped
-              ? 'Skipped'
-              : question.isCorrect
-                ? 'Correct'
-                : 'Incorrect'}
-          </Badge>
+          {showCorrectness && (
+            <Badge
+              variant={skipped ? 'neutral' : question.isCorrect ? 'success' : 'danger'}
+            >
+              {skipped ? 'Skipped' : question.isCorrect ? 'Correct' : 'Incorrect'}
+            </Badge>
+          )}
         </div>
         {question.chapter && (
           <span className="text-xs text-slate-500">
@@ -309,8 +320,13 @@ export default function ExamResultPage() {
   }
 
   const { attempt, summary, questions } = result;
+  const flags = result.reviewFlags ?? ALL_REVIEW_FLAGS;
   const skippedCount =
     summary.totalQuestions - summary.correctCount - summary.incorrectCount;
+  const allFlagsOn =
+    flags.responses && flags.marks && flags.correctness && flags.correctAnswer && flags.generalFeedback;
+  const showRestrictedNotice =
+    !allFlagsOn && result.reviewWindow !== undefined && result.reviewWindow !== 'afterClosed';
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -326,24 +342,29 @@ export default function ExamResultPage() {
         Back to Exams
       </button>
 
+      {showRestrictedNotice && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Some content (answers, explanations, or scores) will become visible after the exam closes.
+        </div>
+      )}
+
       {/* Score overview card */}
       <Card padding="lg" className="overflow-hidden">
         <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-start sm:gap-8">
-          {/* Score ring */}
-          <div className="flex flex-col items-center gap-3">
-            <ScoreRing
-              percentage={summary.scorePercentage}
-              passed={summary.passed}
-            />
-            {summary.passed !== null && (
-              <Badge
-                variant={summary.passed ? 'success' : 'danger'}
-                className="text-sm px-4 py-1"
-              >
-                {summary.passed ? 'PASSED' : 'NOT PASSED'}
-              </Badge>
-            )}
-          </div>
+          {/* Score ring — only when marks are visible */}
+          {flags.marks && (
+            <div className="flex flex-col items-center gap-3">
+              <ScoreRing percentage={summary.scorePercentage} passed={summary.passed} />
+              {summary.passed !== null && (
+                <Badge
+                  variant={summary.passed ? 'success' : 'danger'}
+                  className="text-sm px-4 py-1"
+                >
+                  {summary.passed ? 'PASSED' : 'NOT PASSED'}
+                </Badge>
+              )}
+            </div>
+          )}
 
           {/* Details */}
           <div className="flex-1 space-y-4 text-center sm:text-left">
@@ -359,35 +380,41 @@ export default function ExamResultPage() {
             </div>
 
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <div className="rounded-xl bg-slate-50 p-3 text-center">
-                <p className="text-2xl font-bold text-slate-800">
-                  {Number(attempt.totalScore).toFixed(1)}
-                </p>
-                <p className="text-xs text-slate-500 mt-0.5">Score</p>
-              </div>
+              {flags.marks && (
+                <div className="rounded-xl bg-slate-50 p-3 text-center">
+                  <p className="text-2xl font-bold text-slate-800">
+                    {attempt.totalScore !== null ? Number(attempt.totalScore).toFixed(1) : '—'}
+                  </p>
+                  <p className="text-xs text-slate-500 mt-0.5">Score</p>
+                </div>
+              )}
               <div className="rounded-xl bg-slate-50 p-3 text-center">
                 <p className="text-2xl font-bold text-slate-800">
                   {formatDuration(attempt.timeSpentSec)}
                 </p>
                 <p className="text-xs text-slate-500 mt-0.5">Time Spent</p>
               </div>
-              <div className="rounded-xl bg-emerald-50 p-3 text-center">
-                <p className="text-2xl font-bold text-emerald-700">
-                  {summary.correctCount}
-                </p>
-                <p className="text-xs text-emerald-600 mt-0.5">Correct</p>
-              </div>
-              <div className="rounded-xl bg-red-50 p-3 text-center">
-                <p className="text-2xl font-bold text-red-700">
-                  {summary.incorrectCount}
-                </p>
-                <p className="text-xs text-red-600 mt-0.5">Incorrect</p>
-              </div>
+              {flags.correctness && (
+                <>
+                  <div className="rounded-xl bg-emerald-50 p-3 text-center">
+                    <p className="text-2xl font-bold text-emerald-700">
+                      {summary.correctCount}
+                    </p>
+                    <p className="text-xs text-emerald-600 mt-0.5">Correct</p>
+                  </div>
+                  <div className="rounded-xl bg-red-50 p-3 text-center">
+                    <p className="text-2xl font-bold text-red-700">
+                      {summary.incorrectCount}
+                    </p>
+                    <p className="text-xs text-red-600 mt-0.5">Incorrect</p>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Meta info */}
             <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs text-slate-500">
-              {skippedCount > 0 && (
+              {flags.correctness && skippedCount > 0 && (
                 <span>{skippedCount} skipped</span>
               )}
               <span>
@@ -401,22 +428,22 @@ export default function ExamResultPage() {
               {attempt.isAutoSubmitted && (
                 <Badge variant="warning">Auto-submitted</Badge>
               )}
-              {attempt.passingScore !== null && (
+              {flags.marks && attempt.passingScore !== null && (
                 <span>
                   Passing score: {Number(attempt.passingScore)}
                 </span>
               )}
             </div>
 
-            {summary.incorrectCount > 0 && (
+            {flags.correctness && summary.incorrectCount > 0 && (
               <div className="rounded-xl border border-violet-200 bg-gradient-to-br from-violet-50 to-indigo-50 p-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="text-left">
                     <p className="text-sm font-semibold text-violet-900">
-                      Khắc phục {summary.incorrectCount} câu sai bằng AI
+                      Fix {summary.incorrectCount} wrong answers with AI
                     </p>
                     <p className="mt-0.5 text-xs text-violet-700">
-                      AI sẽ phân tích lỗi và sinh bộ câu hỏi tương đương để bạn luyện lại.
+                      AI will analyze your mistakes and generate similar questions for you to practice.
                     </p>
                   </div>
                   <Button
@@ -427,10 +454,10 @@ export default function ExamResultPage() {
                     {generateRemedial.isPending ? (
                       <>
                         <Spinner size="sm" className="mr-2" />
-                        Đang sinh câu hỏi...
+                        Generating questions...
                       </>
                     ) : (
-                      <>Ôn tập câu sai với AI</>
+                      <>Review wrong answers with AI</>
                     )}
                   </Button>
                 </div>
@@ -438,7 +465,7 @@ export default function ExamResultPage() {
                   <p className="mt-2 text-xs text-red-600">
                     {generateRemedial.error instanceof Error
                       ? generateRemedial.error.message
-                      : 'Không thể sinh câu hỏi, vui lòng thử lại.'}
+                      : 'Could not generate questions, please try again.'}
                   </p>
                 )}
               </div>
@@ -448,36 +475,40 @@ export default function ExamResultPage() {
       </Card>
 
       {/* Question details toggle */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-slate-800">
-          Question Details
-        </h2>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setShowDetails(!showDetails)}
-          className="min-h-[44px]"
-        >
-          {showDetails ? 'Hide Details' : 'Show Details'}
-          <svg
-            className={`ml-1.5 h-4 w-4 transition-transform ${showDetails ? 'rotate-180' : ''}`}
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-          </svg>
-        </Button>
-      </div>
+      {questions.length > 0 && (
+        <>
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-slate-800">
+              Question Details
+            </h2>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowDetails(!showDetails)}
+              className="min-h-[44px]"
+            >
+              {showDetails ? 'Hide Details' : 'Show Details'}
+              <svg
+                className={`ml-1.5 h-4 w-4 transition-transform ${showDetails ? 'rotate-180' : ''}`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+              </svg>
+            </Button>
+          </div>
 
-      {/* Question list */}
-      {showDetails && (
-        <div className="space-y-4">
-          {questions.map((q, i) => (
-            <QuestionReview key={q.questionId} question={q} index={i} />
-          ))}
-        </div>
+          {/* Question list */}
+          {showDetails && (
+            <div className="space-y-4">
+              {questions.map((q, i) => (
+                <QuestionReview key={q.questionId} question={q} index={i} flags={flags} />
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       {/* Footer */}

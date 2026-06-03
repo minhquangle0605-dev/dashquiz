@@ -41,7 +41,7 @@ describe('StudentAnalyticsService', () => {
           totalScore: 8.0,
           submittedAt: new Date(),
           timeSpentSec: 1800,
-          exam: { id: 1, title: 'Exam 1', subject: { name: 'Math' } },
+          exam: { id: 1, title: 'Exam 1', subject: { name: 'Mathematics' } },
         },
       ]);
 
