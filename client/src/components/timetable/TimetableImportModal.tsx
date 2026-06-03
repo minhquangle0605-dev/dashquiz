@@ -24,7 +24,7 @@ export function TimetableImportModal({
       isOpen={isOpen}
       onClose={onClose}
       title="Import timetable from Excel"
-      description="Upload an Excel file with the class's weekly slots."
+      description="Upload an Excel file with weekly slots. Add a className column to fill many classes at once — classes that don't exist yet are created automatically. Rows with no className go to the selected class."
       size="md"
     >
       <div className="space-y-4">

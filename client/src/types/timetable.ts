@@ -22,6 +22,16 @@ export interface ClassTimetable {
   slots: TimetableSlot[];
 }
 
+/**
+ * Payload for creating a class from the timetable screen — name + grade only.
+ * Subject/semester/teacher are inherited from an existing class server-side.
+ * This is intentionally lighter than the Classes-page CreateClassPayload.
+ */
+export interface CreateTimetableClassPayload {
+  name: string;
+  gradeLevel: number;
+}
+
 export interface CreateSlotPayload {
   displayName: string;
   subjectId?: number | null;
@@ -72,6 +82,10 @@ export interface CheckConflictsPayload {
 export interface ImportTimetableResult {
   imported: number;
   updated: number;
+  /** Number of classes auto-created from the file's className column. */
+  createdClasses: number;
+  /** Names of the classes created during the import. */
+  createdClassNames: string[];
   failed: number;
   total: number;
   errors: { row: number; message: string }[] | null;

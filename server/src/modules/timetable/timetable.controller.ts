@@ -30,6 +30,20 @@ export async function getClassTimetable(req: Request, res: Response, next: NextF
 }
 
 // ═══════════════════════════════════════════════
+// POST /api/timetable/classes  (create class: name + grade only)
+// ═══════════════════════════════════════════════
+
+export async function createClass(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const user = requireUser(req);
+    const result = await timetableService.createClass(req.body, user);
+    res.status(201).json(result);
+  } catch (error: unknown) {
+    next(error instanceof Error ? error : new Error('Unexpected error'));
+  }
+}
+
+// ═══════════════════════════════════════════════
 // POST /api/timetable/classes/:classId/slots
 // ═══════════════════════════════════════════════
 

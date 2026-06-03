@@ -10,11 +10,23 @@ import {
   cancelSlot,
   clearTimetable,
   createSlot,
+  createTimetableClass,
   getClassTimetable,
   importTimetable,
   updateSlot,
 } from '@/services/timetable.api';
-import type { ClassTimetable, CreateSlotPayload, TimetableSlot } from '@/types/timetable';
+import { TimetableClassModal } from './TimetableClassModal';
+import type {
+  ClassTimetable,
+  CreateSlotPayload,
+  CreateTimetableClassPayload,
+  TimetableSlot,
+} from '@/types/timetable';
+
+const initialClassForm: CreateTimetableClassPayload = {
+  name: '',
+  gradeLevel: 10,
+};
 
 export interface TimetableClassOption {
   id: number;
@@ -26,15 +38,21 @@ interface TimetableWorkspaceProps {
   classes: TimetableClassOption[];
   classesLoading: boolean;
   canManage: boolean;
+  /** Whether to show the "New Class" button + modal. Admin-only. */
+  canCreateClass?: boolean;
   /** Optional message when the user has no classes to show. */
   emptyMessage?: string;
+  /** Called after an import or create adds new classes, so the parent can refresh the class list. */
+  onClassesChanged?: () => void;
 }
 
 export function TimetableWorkspace({
   classes,
   classesLoading,
   canManage,
+  canCreateClass = false,
   emptyMessage = 'No classes available.',
+  onClassesChanged,
 }: TimetableWorkspaceProps) {
   const [selectedClassId, setSelectedClassId] = useState<number | null>(null);
   const [timetable, setTimetable] = useState<ClassTimetable | null>(null);
@@ -50,6 +68,10 @@ export function TimetableWorkspace({
   const [importFile, setImportFile] = useState<File | null>(null);
 
   const [clearing, setClearing] = useState(false);
+
+  const [createClassOpen, setCreateClassOpen] = useState(false);
+  const [createForm, setCreateForm] = useState<CreateTimetableClassPayload>(initialClassForm);
+  const [creatingClass, setCreatingClass] = useState(false);
 
   // Default to the first class once the list arrives.
   useEffect(() => {
@@ -126,17 +148,56 @@ export function TimetableWorkspace({
     setImporting(true);
     try {
       const result = await importTimetable(selectedClassId, importFile);
-      toast.success(`Imported ${result.imported} new, updated ${result.updated}.`);
+      const summary = `Imported ${result.imported} new, updated ${result.updated}`;
+      toast.success(
+        result.createdClasses > 0
+          ? `${summary}, created ${result.createdClasses} class(es).`
+          : `${summary}.`,
+      );
       if (result.failed > 0) {
         toast(`${result.failed} row(s) skipped — check the file format.`);
       }
       setImportOpen(false);
       setImportFile(null);
+      // New classes only appear in the dropdown after the parent reloads its class list.
+      if (result.createdClasses > 0) onClassesChanged?.();
       await fetchTimetable(selectedClassId);
     } catch {
       toast.error('Failed to import timetable.');
     } finally {
       setImporting(false);
+    }
+  };
+
+  const openCreateClass = () => {
+    setCreateForm(initialClassForm);
+    setCreateClassOpen(true);
+  };
+
+  const handleCreateClass = async () => {
+    if (!createForm.name.trim()) {
+      toast.error('Please enter a class name.');
+      return;
+    }
+    setCreatingClass(true);
+    try {
+      const created = await createTimetableClass({
+        name: createForm.name.trim(),
+        gradeLevel: createForm.gradeLevel,
+      });
+      toast.success('Class created.');
+      setCreateClassOpen(false);
+      setCreateForm(initialClassForm);
+      // The new class only appears in the dropdown after the parent reloads its list.
+      onClassesChanged?.();
+      setSelectedClassId(created.id);
+    } catch (err) {
+      const message =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        'Failed to create class.';
+      toast.error(message);
+    } finally {
+      setCreatingClass(false);
     }
   };
 
@@ -160,6 +221,32 @@ export function TimetableWorkspace({
     }
   };
 
+  const newClassButton = canCreateClass ? (
+    <Button
+      variant="outline"
+      size="md"
+      onClick={openCreateClass}
+      leftIcon={
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+        </svg>
+      }
+    >
+      New Class
+    </Button>
+  ) : null;
+
+  const createClassModal = canCreateClass ? (
+    <TimetableClassModal
+      isOpen={createClassOpen}
+      saving={creatingClass}
+      form={createForm}
+      onChange={setCreateForm}
+      onClose={() => setCreateClassOpen(false)}
+      onSubmit={handleCreateClass}
+    />
+  ) : null;
+
   if (classesLoading) {
     return (
       <div className="flex justify-center py-12">
@@ -171,7 +258,9 @@ export function TimetableWorkspace({
   if (classes.length === 0) {
     return (
       <div className="rounded-2xl border-2 border-dashed border-[var(--color-border)] py-14 text-center text-sm text-[var(--color-text-muted)]">
-        {emptyMessage}
+        <p>{emptyMessage}</p>
+        {newClassButton && <div className="mt-4 flex justify-center">{newClassButton}</div>}
+        {createClassModal}
       </div>
     );
   }
@@ -194,9 +283,10 @@ export function TimetableWorkspace({
           </select>
         </div>
 
-        {canManage && (
-          <div className="flex gap-2">
-            {timetable && timetable.slots.length > 0 && (
+        {(canManage || canCreateClass) && (
+          <div className="flex flex-wrap gap-2">
+            {newClassButton}
+            {canManage && timetable && timetable.slots.length > 0 && (
               <Button
                 variant="danger"
                 size="md"
@@ -215,21 +305,25 @@ export function TimetableWorkspace({
                 Clear Timetable
               </Button>
             )}
-            <Button variant="outline" size="md" onClick={() => setImportOpen(true)}>
-              Import Excel
-            </Button>
-            <Button
-              variant="primary"
-              size="md"
-              onClick={() => openCreate(1, 1)}
-              leftIcon={
-                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                </svg>
-              }
-            >
-              Add Slot
-            </Button>
+            {canManage && (
+              <>
+                <Button variant="outline" size="md" onClick={() => setImportOpen(true)}>
+                  Import Excel
+                </Button>
+                <Button
+                  variant="primary"
+                  size="md"
+                  onClick={() => openCreate(1, 1)}
+                  leftIcon={
+                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                    </svg>
+                  }
+                >
+                  Add Slot
+                </Button>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -275,6 +369,8 @@ export function TimetableWorkspace({
           />
         </>
       )}
+
+      {createClassModal}
     </div>
   );
 }

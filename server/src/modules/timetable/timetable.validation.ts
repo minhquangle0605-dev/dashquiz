@@ -46,6 +46,22 @@ export const updateSlotSchema = z
   );
 
 // ═══════════════════════════════════════════════
+// CREATE CLASS (timetable-only: name + grade)
+// ═══════════════════════════════════════════════
+// Unlike the Classes-page create (which needs subject + academic year), the
+// timetable only needs a class identity. Subject/semester/teacher are copied
+// from an existing class on the server.
+
+export const createTimetableClassSchema = z.object({
+  name: z.string().min(1, 'Class name is required').max(20),
+  gradeLevel: z.coerce
+    .number()
+    .int()
+    .min(10, 'Grade must be 10–12')
+    .max(12, 'Grade must be 10–12'),
+});
+
+// ═══════════════════════════════════════════════
 // CHECK EXAM-SCHEDULE CONFLICTS
 // ═══════════════════════════════════════════════
 
@@ -72,4 +88,5 @@ export const checkConflictsSchema = z
 
 export type CreateSlotInput = z.infer<typeof createSlotSchema>;
 export type UpdateSlotInput = z.infer<typeof updateSlotSchema>;
+export type CreateTimetableClassInput = z.infer<typeof createTimetableClassSchema>;
 export type CheckConflictsInput = z.infer<typeof checkConflictsSchema>;

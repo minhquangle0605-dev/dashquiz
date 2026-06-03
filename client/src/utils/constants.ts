@@ -153,6 +153,7 @@ export const API_ENDPOINTS = {
     IMPORT_TEMPLATE: '/api/classes/import-template',
   },
   TIMETABLE: {
+    CLASSES: '/api/timetable/classes',
     CLASS: (classId: number) => `/api/timetable/classes/${classId}`,
     SLOTS: (classId: number) => `/api/timetable/classes/${classId}/slots`,
     SLOT_BY_ID: (classId: number, slotId: number) =>

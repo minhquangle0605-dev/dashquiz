@@ -10,7 +10,11 @@ import {
   rangesOverlap,
   toVnClock,
 } from './timetable.time';
-import type { CreateSlotInput, UpdateSlotInput } from './timetable.validation';
+import type {
+  CreateSlotInput,
+  UpdateSlotInput,
+  CreateTimetableClassInput,
+} from './timetable.validation';
 
 export interface ConflictItem {
   type:
@@ -521,7 +525,10 @@ export class TimetableService {
   // ═══════════════════════════════════════════════
 
   async importTimetable(classId: number, fileBuffer: Buffer, user: RequestUser) {
-    const cls = await this.assertCanManage(classId, user);
+    // The passed classId is the *default* target for rows that omit a className.
+    // When a row carries a className, the slot is routed to (or creates) that class instead,
+    // so a single file can populate the whole school — not just the selected class.
+    const defaultClass = await this.assertCanManage(classId, user);
 
     const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
     const sheetName = workbook.SheetNames[0];
@@ -536,11 +543,21 @@ export class TimetableService {
     let imported = 0;
     let updated = 0;
 
+    // Target classes resolved during this import, keyed by lower-cased name. Seeded with the
+    // default class so rows without a className (legacy single-class files) still land somewhere.
+    const classCache = new Map<string, { id: number; semesterId: number | null }>();
+    classCache.set(defaultClass.name.trim().toLowerCase(), {
+      id: defaultClass.id,
+      semesterId: defaultClass.semesterId,
+    });
+    const createdClassNames: string[] = [];
+
     for (let i = 0; i < rows.length; i++) {
       const rowNum = i + 2; // header is row 1
       const raw = rows[i];
 
       const displayName = String(raw.displayName ?? raw.display_name ?? '').trim();
+      const className = String(raw.className ?? raw.class_name ?? raw.class ?? '').trim();
       const dayOfWeek = this.parseDayOfWeek(raw.dayOfWeek ?? raw.day_of_week);
       const periodIndex = Number(raw.periodIndex ?? raw.period_index);
       const startMinute = this.parseTimeToMinutes(raw.startTime ?? raw.start_time);
@@ -564,11 +581,32 @@ export class TimetableService {
         continue;
       }
 
+      // Route the row to its class. A blank className falls back to the selected class.
+      let target: { id: number; semesterId: number | null };
+      if (className) {
+        try {
+          target = await this.resolveOrCreateClass(
+            className,
+            raw.gradeLevel ?? raw.grade_level ?? raw.grade,
+            classCache,
+            createdClassNames,
+          );
+        } catch (err) {
+          errors.push({
+            row: rowNum,
+            message: err instanceof AppError ? err.message : 'Failed to resolve class',
+          });
+          continue;
+        }
+      } else {
+        target = { id: defaultClass.id, semesterId: defaultClass.semesterId };
+      }
+
       const mapping = await this.resolveSlotSubject(displayName);
 
       // Idempotent per (class, day, period): update existing else create.
       const existing = await prisma.classTimetableSlot.findFirst({
-        where: { classId, dayOfWeek, periodIndex },
+        where: { classId: target.id, dayOfWeek, periodIndex },
         select: { id: true },
       });
 
@@ -583,15 +621,15 @@ export class TimetableService {
             startMinute,
             endMinute,
             room,
-            semesterId: cls.semesterId,
+            semesterId: target.semesterId,
           },
         });
         updated++;
       } else {
         await prisma.classTimetableSlot.create({
           data: {
-            classId,
-            semesterId: cls.semesterId,
+            classId: target.id,
+            semesterId: target.semesterId,
             subjectId: mapping.subjectId,
             displayName,
             kind: mapping.kind,
@@ -608,17 +646,143 @@ export class TimetableService {
       }
     }
 
+    const createdClasses = createdClassNames.length;
+    const createdSuffix = createdClasses ? `, created ${createdClasses} class(es)` : '';
     return {
       success: true,
-      message: `Imported ${imported} new slot(s), updated ${updated}`,
+      message: `Imported ${imported} new slot(s), updated ${updated}${createdSuffix}`,
       data: {
         imported,
         updated,
+        createdClasses,
+        createdClassNames,
         failed: errors.length,
         total: rows.length,
         errors: errors.length > 0 ? errors : null,
       },
     };
+  }
+
+  /**
+   * Resolve the timetable target class for a row's className, creating it when absent.
+   * A new class copies teacher / subject / semester from an existing class (preferring the
+   * same grade level), since the Class model requires all three. The grade level comes from
+   * an explicit hint or the leading number of the name (e.g. "10A3" → grade 10).
+   */
+  private async resolveOrCreateClass(
+    rawName: string,
+    gradeHint: unknown,
+    cache: Map<string, { id: number; semesterId: number | null }>,
+    createdNames: string[],
+  ): Promise<{ id: number; semesterId: number | null }> {
+    const name = rawName.trim();
+    const key = name.toLowerCase();
+    const cached = cache.get(key);
+    if (cached) return cached;
+
+    const existing = await prisma.class.findFirst({
+      where: { name: { equals: name, mode: 'insensitive' } },
+      orderBy: { id: 'asc' },
+      select: { id: true, semesterId: true },
+    });
+    if (existing) {
+      const resolved = { id: existing.id, semesterId: existing.semesterId };
+      cache.set(key, resolved);
+      return resolved;
+    }
+
+    const gradeLevel = this.parseGradeLevel(gradeHint) ?? this.parseGradeFromName(name);
+    if (gradeLevel === null) {
+      throw new AppError(
+        `Cannot create class "${name}": grade level unknown (add a gradeLevel column or start the name with the grade, e.g. 10A3)`,
+        400,
+      );
+    }
+
+    const created = await this.createClassFromTemplate(name, gradeLevel);
+
+    const resolved = { id: created.id, semesterId: created.semesterId };
+    cache.set(key, resolved);
+    createdNames.push(name);
+    return resolved;
+  }
+
+  /**
+   * Create a bare class with just a name + grade. The Class model requires a
+   * teacher / subject / semester, so these are copied from an existing class
+   * (preferring the same grade level). Shared by the Excel import and the
+   * timetable "New Class" action.
+   */
+  private async createClassFromTemplate(name: string, gradeLevel: number) {
+    const template =
+      (await prisma.class.findFirst({
+        where: { gradeLevel },
+        orderBy: { id: 'asc' },
+        select: { teacherId: true, subjectId: true, semesterId: true },
+      })) ??
+      (await prisma.class.findFirst({
+        orderBy: { id: 'asc' },
+        select: { teacherId: true, subjectId: true, semesterId: true },
+      }));
+
+    if (!template) {
+      throw new AppError(
+        `Cannot create class "${name}": no existing class to copy teacher/subject/semester from. Create at least one class from the Classes page first.`,
+        400,
+      );
+    }
+
+    return prisma.class.create({
+      data: {
+        name,
+        gradeLevel,
+        semesterId: template.semesterId,
+        teacherId: template.teacherId,
+        subjectId: template.subjectId,
+      },
+      select: { id: true, name: true, gradeLevel: true, semesterId: true },
+    });
+  }
+
+  /**
+   * Create a class from the timetable screen — name + grade only.
+   * Distinct from the Classes-page create (subject + academic year): the
+   * timetable just needs the class identity, so subject/semester/teacher are
+   * inherited from an existing class via {@link createClassFromTemplate}.
+   */
+  async createClass(data: CreateTimetableClassInput, user: RequestUser) {
+    if (user.role !== 'admin') {
+      throw new AppError('Only administrators can create classes', 403);
+    }
+
+    const name = data.name.trim();
+    if (!name) throw new AppError('Class name is required', 400);
+
+    const existing = await prisma.class.findFirst({
+      where: { name: { equals: name, mode: 'insensitive' } },
+      select: { id: true },
+    });
+    if (existing) {
+      throw new AppError(`A class named "${name}" already exists`, 409);
+    }
+
+    const created = await this.createClassFromTemplate(name, data.gradeLevel);
+    return { id: created.id, name: created.name, gradeLevel: created.gradeLevel };
+  }
+
+  /** Validate an explicit grade-level cell (number or numeric string), 1–12. */
+  private parseGradeLevel(value: unknown): number | null {
+    if (value === null || value === undefined || value === '') return null;
+    const n = Number(value);
+    return Number.isInteger(n) && n >= 1 && n <= 12 ? n : null;
+  }
+
+  /** Derive a grade level from the leading number of a class name (e.g. "10A3" → 10). */
+  private parseGradeFromName(name: string): number | null {
+    const m = name.trim().match(/^(\d{1,2})/);
+    if (!m) return null;
+    const n = Number(m[1]);
+    return n >= 1 && n <= 12 ? n : null;
   }
 
   private parseDayOfWeek(value: unknown): number | null {
@@ -657,32 +821,35 @@ export class TimetableService {
 
   generateImportTemplate(): Buffer {
     const sample = [
-      { dayOfWeek: 'Mon', periodIndex: 1, startTime: '07:00', endTime: '07:45', displayName: 'Flag Ceremony', room: 'A101' },
-      { dayOfWeek: 'Mon', periodIndex: 2, startTime: '07:50', endTime: '08:35', displayName: 'Mathematics', room: 'A101' },
-      { dayOfWeek: 'Mon', periodIndex: 5, startTime: '10:30', endTime: '11:15', displayName: 'Physics', room: 'A101' },
+      { className: '10A1', dayOfWeek: 'Mon', periodIndex: 1, startTime: '07:00', endTime: '07:45', displayName: 'Flag Ceremony', room: 'A101' },
+      { className: '10A1', dayOfWeek: 'Mon', periodIndex: 2, startTime: '07:50', endTime: '08:35', displayName: 'Mathematics', room: 'A101' },
+      { className: '10A3', dayOfWeek: 'Mon', periodIndex: 1, startTime: '07:00', endTime: '07:45', displayName: 'Flag Ceremony', room: 'A103' },
     ];
 
     const worksheet = XLSX.utils.json_to_sheet(sample);
-    worksheet['!cols'] = [{ wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 22 }, { wch: 10 }];
+    worksheet['!cols'] = [{ wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 22 }, { wch: 10 }];
 
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Timetable');
 
     const instructions = [
-      ['Instructions for importing a class timetable'],
+      ['Instructions for importing class timetables'],
       [''],
       ['Column', 'Description', 'Required'],
+      ['className', 'Class name, e.g. 10A1. One file may hold many classes. A class that does not exist yet is created automatically. If left blank, the row is added to the class currently selected in the app.', 'Recommended'],
       ['dayOfWeek', 'Mon–Sun or 1–7 (1 = Monday … 7 = Sunday)', 'Yes'],
       ['periodIndex', 'Period number (1–12)', 'Yes'],
       ['startTime', 'Start time HH:MM (24h), e.g. 07:00', 'Yes'],
       ['endTime', 'End time HH:MM (24h), e.g. 07:45', 'Yes'],
       ['displayName', 'Subject/activity name shown in the grid', 'Yes'],
+      ['gradeLevel', 'Grade (1–12) for a NEW class. Optional — defaults to the leading number of className (10A1 → 10).', 'No'],
       ['room', 'Room label', 'No'],
       [''],
+      ['Note:', 'A newly-created class copies its teacher, subject and semester from an existing class (preferring the same grade), so at least one class must already exist.'],
       ['Note:', 'Mathematics / Physics / Chemistry are auto-linked as managed subjects and used for exam-conflict checking. All other names are display-only.'],
     ];
     const instructionSheet = XLSX.utils.aoa_to_sheet(instructions);
-    instructionSheet['!cols'] = [{ wch: 15 }, { wch: 70 }, { wch: 12 }];
+    instructionSheet['!cols'] = [{ wch: 15 }, { wch: 90 }, { wch: 14 }];
     XLSX.utils.book_append_sheet(workbook, instructionSheet, 'Instructions');
 
     return Buffer.from(XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }));

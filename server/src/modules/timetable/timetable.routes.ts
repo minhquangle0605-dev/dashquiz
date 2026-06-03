@@ -8,6 +8,7 @@ import {
   createSlotSchema,
   updateSlotSchema,
   checkConflictsSchema,
+  createTimetableClassSchema,
 } from './timetable.validation';
 import { ROLES, FILE_UPLOAD } from '../../utils/constants';
 
@@ -44,6 +45,18 @@ router.post(
   authorize(ROLES.TEACHER, ROLES.ADMIN),
   validate(checkConflictsSchema),
   timetableController.checkConflicts,
+);
+
+// ── Create class (POST /api/timetable/classes) ──
+// Timetable-only: name + grade. Subject/semester/teacher are copied from an
+// existing class server-side. Distinct from POST /api/classes.
+router.post(
+  '/classes',
+  authenticate,
+  authorize(ROLES.ADMIN),
+  validate(createTimetableClassSchema),
+  activityLogger('CREATE_CLASS', 'class'),
+  timetableController.createClass,
 );
 
 // ── View class timetable (GET /api/timetable/classes/:classId) ──

@@ -5,6 +5,7 @@ import type {
   CheckConflictsPayload,
   ConflictCheckResult,
   CreateSlotPayload,
+  CreateTimetableClassPayload,
   ImportTimetableResult,
   TimetableSlot,
   UpdateSlotPayload,
@@ -12,6 +13,17 @@ import type {
 
 export async function getClassTimetable(classId: number): Promise<ClassTimetable> {
   const { data } = await api.get(API_ENDPOINTS.TIMETABLE.CLASS(classId));
+  return data.data ?? data;
+}
+
+/**
+ * Create a class from the timetable screen (name + grade only).
+ * Distinct from class.api's createClass, which needs subject + academic year.
+ */
+export async function createTimetableClass(
+  payload: CreateTimetableClassPayload,
+): Promise<{ id: number; name: string; gradeLevel: number }> {
+  const { data } = await api.post(API_ENDPOINTS.TIMETABLE.CLASSES, payload);
   return data.data ?? data;
 }
 

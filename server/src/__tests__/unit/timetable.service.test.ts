@@ -1,5 +1,14 @@
+import * as XLSX from 'xlsx';
 import { prismaMock } from '../mocks/prisma';
 import { timetableService } from '../../modules/timetable/timetable.service';
+
+/** Build an in-memory .xlsx buffer from row objects, mirroring the import format. */
+function buildWorkbook(rows: Record<string, unknown>[]): Buffer {
+  const worksheet = XLSX.utils.json_to_sheet(rows);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Timetable');
+  return Buffer.from(XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }));
+}
 
 // 2024-01-01 is a Monday, 2024-01-07 is a Sunday. Times below are chosen so the
 // VN wall-clock (UTC+7) lands inside the morning school window unless noted.
@@ -210,5 +219,98 @@ describe('timetableService.clearClassTimetable', () => {
       timetableService.clearClassTimetable(1, { id: 42, role: 'student' }),
     ).rejects.toThrow('Only administrators can manage the class timetable');
     expect(prismaMock.classTimetableSlot.deleteMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('timetableService.importTimetable', () => {
+  const ADMIN = { id: 99, role: 'admin' };
+  // The default/selected class the file is uploaded against.
+  const DEFAULT_CLASS = { id: 1, name: '10A1', gradeLevel: 10, teacherId: 5, semesterId: 2 };
+
+  beforeEach(() => {
+    prismaMock.class.findUnique.mockResolvedValue(DEFAULT_CLASS);
+    // Every displayName resolves as display-only (no managed-subject match) to keep tests focused.
+    prismaMock.subject.findFirst.mockResolvedValue(null);
+    prismaMock.classTimetableSlot.findFirst.mockResolvedValue(null);
+    prismaMock.classTimetableSlot.create.mockResolvedValue({});
+    prismaMock.classTimetableSlot.update.mockResolvedValue({});
+  });
+
+  it('creates an unknown className by copying teacher/subject/semester from a same-grade class', async () => {
+    // class.findFirst is used for: (1) lookup by name, (2) template by gradeLevel.
+    prismaMock.class.findFirst.mockImplementation(({ where }: { where: Record<string, unknown> }) => {
+      if (where.name) return Promise.resolve(null); // 10A3 does not exist yet
+      if (where.gradeLevel === 10) {
+        return Promise.resolve({ teacherId: 5, subjectId: 7, semesterId: 2 });
+      }
+      return Promise.resolve(null);
+    });
+    prismaMock.class.create.mockResolvedValue({ id: 42, semesterId: 2 });
+
+    const buffer = buildWorkbook([
+      { className: '10A3', dayOfWeek: 'Mon', periodIndex: 1, startTime: '07:00', endTime: '07:45', displayName: 'Flag Ceremony', room: 'A103' },
+    ]);
+
+    const result = await timetableService.importTimetable(1, buffer, ADMIN);
+
+    expect(prismaMock.class.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { name: '10A3', gradeLevel: 10, semesterId: 2, teacherId: 5, subjectId: 7 },
+      }),
+    );
+    // The new class id (not the default class) receives the slot.
+    expect(prismaMock.classTimetableSlot.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ classId: 42 }) }),
+    );
+    expect(result.data.imported).toBe(1);
+    expect(result.data.createdClasses).toBe(1);
+    expect(result.data.createdClassNames).toEqual(['10A3']);
+  });
+
+  it('routes a row without a className to the selected class and creates no class', async () => {
+    const buffer = buildWorkbook([
+      { dayOfWeek: 'Mon', periodIndex: 2, startTime: '07:50', endTime: '08:35', displayName: 'Mathematics', room: 'A101' },
+    ]);
+
+    const result = await timetableService.importTimetable(1, buffer, ADMIN);
+
+    expect(prismaMock.class.findFirst).not.toHaveBeenCalled();
+    expect(prismaMock.class.create).not.toHaveBeenCalled();
+    expect(prismaMock.classTimetableSlot.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ classId: 1 }) }),
+    );
+    expect(result.data.createdClasses).toBe(0);
+    expect(result.data.imported).toBe(1);
+  });
+
+  it('reuses an existing class matched by name (case-insensitive) without creating', async () => {
+    prismaMock.class.findFirst.mockResolvedValue({ id: 2, semesterId: 2 }); // 10a2 → existing 10A2
+
+    const buffer = buildWorkbook([
+      { className: '10a2', dayOfWeek: 'Tue', periodIndex: 3, startTime: '08:50', endTime: '09:35', displayName: 'History' },
+    ]);
+
+    const result = await timetableService.importTimetable(1, buffer, ADMIN);
+
+    expect(prismaMock.class.create).not.toHaveBeenCalled();
+    expect(prismaMock.classTimetableSlot.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ classId: 2 }) }),
+    );
+    expect(result.data.createdClasses).toBe(0);
+  });
+
+  it('skips a row when a new class has no derivable grade level', async () => {
+    prismaMock.class.findFirst.mockResolvedValue(null); // name lookup misses; "FooBar" → no grade
+
+    const buffer = buildWorkbook([
+      { className: 'FooBar', dayOfWeek: 'Mon', periodIndex: 1, startTime: '07:00', endTime: '07:45', displayName: 'Flag Ceremony' },
+    ]);
+
+    const result = await timetableService.importTimetable(1, buffer, ADMIN);
+
+    expect(prismaMock.class.create).not.toHaveBeenCalled();
+    expect(result.data.failed).toBe(1);
+    expect(result.data.imported).toBe(0);
+    expect(result.data.errors?.[0].message).toMatch(/grade level unknown/i);
   });
 });
