@@ -4,6 +4,7 @@ import {
   generateDocumentImportTemplatePdf,
   questionExtractService,
 } from './question.extract.service';
+import { questionZipService } from './question.zip.service';
 import {
   decodeImageKey,
   getQuestionImageObject,
@@ -281,6 +282,55 @@ export async function extractFromDocument(
       message: `Detected ${result.questions.length} question(s)`,
       data: result,
     });
+  } catch (error: unknown) {
+    next(error instanceof Error ? error : new Error('Unexpected error'));
+  }
+}
+
+// ═══════════════════════════════════════════════
+// IMPORT FROM ZIP (POST /api/questions/import-zip)
+// Parses questions.json + images/, uploads images, returns a preview.
+// The teacher then confirms via the shared bulk-create endpoint.
+// ═══════════════════════════════════════════════
+
+export async function importQuestionsFromZip(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (!req.user) throw new AppError('Authentication required', 401);
+    if (!req.file) throw new AppError('ZIP file is required', 400);
+
+    const result = await questionZipService.importFromZip(req.file.buffer, req.user.id);
+
+    res.json({
+      success: true,
+      message: `Parsed ${result.total} question(s): ${result.valid} valid, ${result.invalid} need review`,
+      data: result,
+    });
+  } catch (error: unknown) {
+    next(error instanceof Error ? error : new Error('Unexpected error'));
+  }
+}
+
+// ═══════════════════════════════════════════════
+// DOWNLOAD ZIP IMPORT TEMPLATE (GET /api/questions/zip-import-template)
+// ═══════════════════════════════════════════════
+
+export async function downloadZipImportTemplate(
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const buffer = await questionZipService.generateTemplateZip();
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename=question_image_import_template.zip',
+    );
+    res.setHeader('Content-Type', 'application/zip');
+    res.send(buffer);
   } catch (error: unknown) {
     next(error instanceof Error ? error : new Error('Unexpected error'));
   }

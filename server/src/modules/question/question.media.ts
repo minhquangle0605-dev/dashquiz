@@ -25,6 +25,59 @@ export function getQuestionImageUrl(objectName: string): string {
   return `/api/questions/images/${encodeImageKey(objectName)}`;
 }
 
+/**
+ * Detect the real image MIME type from a buffer's magic numbers, so we never
+ * trust a (possibly spoofed) file extension coming from an uploaded archive.
+ * Returns one of the allowed question-image MIME types or null.
+ */
+export function detectImageMime(buffer: Buffer): string | null {
+  if (buffer.length < 12) return null;
+  // PNG: 89 50 4E 47 0D 0A 1A 0A
+  if (
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4e &&
+    buffer[3] === 0x47
+  ) {
+    return 'image/png';
+  }
+  // JPEG: FF D8 FF
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return 'image/jpeg';
+  }
+  // WEBP: "RIFF" .... "WEBP"
+  if (
+    buffer.toString('ascii', 0, 4) === 'RIFF' &&
+    buffer.toString('ascii', 8, 12) === 'WEBP'
+  ) {
+    return 'image/webp';
+  }
+  return null;
+}
+
+/**
+ * Upload an image from a raw buffer to MinIO under the question-images prefix.
+ * Shared by the single-file upload endpoint and the ZIP importer.
+ */
+export async function uploadQuestionImageBuffer(
+  userId: number,
+  buffer: Buffer,
+  mimetype: string,
+  size: number,
+): Promise<{ url: string; objectName: string }> {
+  const ext = mimetype.split('/')[1] || 'jpg';
+  const objectName = `${QUESTION_IMAGE_PREFIX}/${userId}/${Date.now()}-${randomUUID()}.${ext}`;
+  await getMinioClient().putObject(
+    env.minio.bucket,
+    objectName,
+    Readable.from(buffer),
+    size,
+    { 'Content-Type': mimetype },
+  );
+
+  return { objectName, url: getQuestionImageUrl(objectName) };
+}
+
 export async function uploadQuestionImage(
   userId: number,
   file: Express.Multer.File,
@@ -37,17 +90,7 @@ export async function uploadQuestionImage(
     throw new AppError('Question image must not exceed 5MB', 400);
   }
 
-  const ext = file.mimetype.split('/')[1] || 'jpg';
-  const objectName = `${QUESTION_IMAGE_PREFIX}/${userId}/${Date.now()}-${randomUUID()}.${ext}`;
-  await getMinioClient().putObject(
-    env.minio.bucket,
-    objectName,
-    Readable.from(file.buffer),
-    file.size,
-    { 'Content-Type': file.mimetype },
-  );
-
-  return { objectName, url: getQuestionImageUrl(objectName) };
+  return uploadQuestionImageBuffer(userId, file.buffer, file.mimetype, file.size);
 }
 
 export async function getQuestionImageObject(objectName: string): Promise<{

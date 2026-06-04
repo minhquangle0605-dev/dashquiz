@@ -9,6 +9,7 @@ import type {
   ImportQuestionResult,
   ExtractFromDocumentResult,
   ExtractedQuestion,
+  ZipImportResult,
   BulkCreateResult,
   CurriculumSubject,
   CurriculumChapter,
@@ -134,6 +135,30 @@ export function getDocumentImportTemplateUrl(): string {
 
 export async function downloadDocumentImportTemplate(): Promise<Blob> {
   const { data } = await api.get(API_ENDPOINTS.QUESTIONS.DOCUMENT_IMPORT_TEMPLATE, {
+    responseType: 'blob',
+  });
+  return data;
+}
+
+// ── ZIP image import ──────────────────────────────
+
+export async function importQuestionsFromZip(
+  file: File,
+  onUploadProgress?: (progress: number) => void,
+): Promise<ZipImportResult> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const { data } = await api.post(API_ENDPOINTS.QUESTIONS.IMPORT_ZIP, formData, {
+    onUploadProgress: (event) => {
+      if (!event.total || !onUploadProgress) return;
+      onUploadProgress(Math.round((event.loaded * 100) / event.total));
+    },
+  });
+  return data.data ?? data;
+}
+
+export async function downloadZipImportTemplate(): Promise<Blob> {
+  const { data } = await api.get(API_ENDPOINTS.QUESTIONS.ZIP_IMPORT_TEMPLATE, {
     responseType: 'blob',
   });
   return data;

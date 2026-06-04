@@ -59,6 +59,26 @@ const documentUpload = multer({
   },
 });
 
+// Multer instance for ZIP question+image bundles
+const zipUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: FILE_UPLOAD.MAX_ZIP_IMPORT_SIZE },
+  fileFilter: (_req, file, cb) => {
+    const allowedMimes = [
+      'application/zip',
+      'application/x-zip-compressed',
+      'application/octet-stream',
+      'multipart/x-zip',
+    ];
+    const name = (file.originalname || '').toLowerCase();
+    if (allowedMimes.includes(file.mimetype) || name.endsWith('.zip')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only .zip files are allowed'));
+    }
+  },
+});
+
 // ── Public (authenticated) ──────────────────────
 const imageUpload = multer({
   storage: multer.memoryStorage(),
@@ -104,6 +124,23 @@ router.post(
   upload.single('file'),
   activityLogger('IMPORT_QUESTIONS', 'question'),
   questionController.importQuestions,
+);
+
+// ── ZIP import template + import (teacher/admin) ──
+router.get(
+  '/zip-import-template',
+  authenticate,
+  authorize(ROLES.TEACHER, ROLES.ADMIN),
+  questionController.downloadZipImportTemplate,
+);
+
+router.post(
+  '/import-zip',
+  authenticate,
+  authorize(ROLES.TEACHER, ROLES.ADMIN),
+  zipUpload.single('file'),
+  activityLogger('IMPORT_QUESTIONS_ZIP', 'question'),
+  questionController.importQuestionsFromZip,
 );
 
 // ── Extract questions from Word/PDF (teacher/admin) ──

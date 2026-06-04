@@ -83,6 +83,8 @@ export interface ExtractedOption {
   label: string;
   content: string;
   isCorrect: boolean;
+  /** Inline image URL for this option (ZIP image import). */
+  imageUrl?: string | null;
 }
 
 export interface ExtractedQuestion {
@@ -95,6 +97,9 @@ export interface ExtractedQuestion {
   errors?: string[];
   sourceLine?: number | null;
   sourceText?: string;
+  /** Inline image URLs (ZIP image import). */
+  questionImageUrl?: string | null;
+  explanationImageUrl?: string | null;
 }
 
 export interface ExtractFromDocumentResult {
@@ -103,6 +108,17 @@ export interface ExtractFromDocumentResult {
   questions: ExtractedQuestion[];
   warnings: string[];
   templateRules?: string[];
+}
+
+// ── ZIP image import ──────────────────────────────
+
+export interface ZipImportResult {
+  source: 'zip';
+  questions: ExtractedQuestion[];
+  warnings: string[];
+  total: number;
+  valid: number;
+  invalid: number;
 }
 
 export interface BulkCreateResult {

@@ -185,6 +185,8 @@ export const API_ENDPOINTS = {
     IMPORT_TEMPLATE: '/api/questions/import-template',
     DOCUMENT_IMPORT_TEMPLATE: '/api/questions/document-import-template',
     EXTRACT_FROM_DOCUMENT: '/api/questions/extract-from-document',
+    IMPORT_ZIP: '/api/questions/import-zip',
+    ZIP_IMPORT_TEMPLATE: '/api/questions/zip-import-template',
     BULK_CREATE: '/api/questions/bulk-create',
     BULK_DELETE: '/api/questions/bulk-delete',
     IMAGE_UPLOAD: '/api/questions/images',
