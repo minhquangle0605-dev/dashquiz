@@ -30,7 +30,6 @@ import type {
 } from '@/types/question';
 import type {
   ClassItem,
-  GradeComponentType,
   GradingMethod,
   NavigationMode,
   ReviewOptions,
@@ -38,7 +37,6 @@ import type {
   ReviewWindowName,
 } from '@/types/exam';
 import {
-  GRADE_COMPONENT_INFO,
   GRADING_METHOD_LABELS,
   REVIEW_ROW_LABELS,
   REVIEW_WINDOW_LABELS,
@@ -120,7 +118,6 @@ interface ExamFormState {
   startTime: string;
   endTime: string;
   selectedClassIds: number[];
-  gradeComponentType: GradeComponentType | '';
 }
 
 const defaultForm: ExamFormState = {
@@ -143,7 +140,6 @@ const defaultForm: ExamFormState = {
   startTime: '',
   endTime: '',
   selectedClassIds: [],
-  gradeComponentType: '',
 };
 
 export default function CreateExamPage() {
@@ -414,8 +410,6 @@ export default function CreateExamPage() {
       if (form.selectedClassIds.length > 0) {
         await assignExam(exam.id, {
           classIds: form.selectedClassIds,
-          gradeComponentType:
-            form.gradeComponentType === '' ? null : form.gradeComponentType,
         });
       }
 
@@ -1220,61 +1214,6 @@ export default function CreateExamPage() {
               </div>
             )}
 
-            {/* Gradebook component */}
-            <div className="rounded-xl border border-slate-200 bg-white p-4">
-              <div className="mb-2 flex items-center justify-between">
-                <h3 className="text-sm font-bold text-slate-800">
-                  Count toward gradebook
-                </h3>
-                <span className="text-[11px] uppercase tracking-wide text-slate-400">
-                  Circular 22 — High School
-                </span>
-              </div>
-              <p className="mb-3 text-xs text-slate-500">
-                When a grade component is selected, each student's best result is
-                automatically added to the class gradebook with the matching coefficient.
-              </p>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                <button
-                  type="button"
-                  onClick={() => updateForm('gradeComponentType', '')}
-                  className={`rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
-                    form.gradeComponentType === ''
-                      ? 'border-slate-600 bg-slate-600 text-white shadow-sm'
-                      : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-                  }`}
-                >
-                  <div className="font-bold">Not graded</div>
-                  <div className="text-[11px] opacity-75">Practice only</div>
-                </button>
-                {(Object.keys(GRADE_COMPONENT_INFO) as GradeComponentType[]).map(
-                  (key) => {
-                    const info = GRADE_COMPONENT_INFO[key];
-                    const checked = form.gradeComponentType === key;
-                    return (
-                      <button
-                        key={key}
-                        type="button"
-                        onClick={() => updateForm('gradeComponentType', key)}
-                        className={`rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
-                          checked
-                            ? 'border-indigo-600 bg-indigo-600 text-white shadow-sm'
-                            : 'border-slate-200 bg-white text-slate-700 hover:border-indigo-300'
-                        }`}
-                      >
-                        <div className="font-bold">
-                          {info.abbr} (coefficient {info.coefficient})
-                        </div>
-                        <div className="text-[11px] opacity-75">
-                          {info.label}
-                        </div>
-                      </button>
-                    );
-                  },
-                )}
-              </div>
-            </div>
-
             {/* Compact Review Summary */}
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
               <h3 className="mb-2 text-sm font-bold text-slate-800">Review Summary</h3>
@@ -1304,14 +1243,6 @@ export default function CreateExamPage() {
                 />
                 <SummaryItem label="Scheduled" value={form.scheduleEnabled ? 'Yes' : 'No'} />
                 <SummaryItem label="Classes" value={form.selectedClassIds.length} />
-                <SummaryItem
-                  label="Gradebook"
-                  value={
-                    form.gradeComponentType
-                      ? GRADE_COMPONENT_INFO[form.gradeComponentType].abbr
-                      : '—'
-                  }
-                />
               </dl>
             </div>
           </div>

@@ -90,7 +90,6 @@ const initialActivityForm: ActivityFormValues = {
   dueAt: '',
   maxScore: '',
   status: 'PUBLISHED',
-  gradeComponentType: '',
 };
 
 export default function ClassesPage() {
@@ -549,8 +548,6 @@ export default function ClassesPage() {
         dueAt: activityForm.dueAt || undefined,
         maxScore: activityForm.maxScore ? Number(activityForm.maxScore) : undefined,
         status: activityForm.status,
-        gradeComponentType:
-          activityForm.gradeComponentType === '' ? null : activityForm.gradeComponentType,
       });
       toast.success('Activity created.');
       setShowActivityModal(false);

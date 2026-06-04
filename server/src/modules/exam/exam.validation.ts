@@ -29,11 +29,6 @@ const reviewOptionsSchema = z
 
 const maxAttemptsSchema = z.coerce.number().int().min(1).max(99);
 
-const gradeComponentTypeSchema = z.preprocess(
-  (value) => (value === '' ? null : value),
-  z.enum(['REGULAR', 'MIDTERM', 'FINAL']).nullable().optional(),
-);
-
 export const createExamSchema = z.object({
   title: z.string().min(1, 'Title is required').max(200),
   subjectId: z.coerce.number().int().positive('Subject is required'),
@@ -125,10 +120,6 @@ export const assignExamSchema = z.object({
   classIds: z
     .array(z.coerce.number().int().positive())
     .min(1, 'At least one class is required'),
-  // Optional: when set, the exam's best attempt per student auto-feeds the
-  // class gradebook as the given component (REGULAR/MIDTERM/FINAL). Applies to
-  // every class in `classIds`.
-  gradeComponentType: gradeComponentTypeSchema,
 });
 
 // ═══════════════════════════════════════════════

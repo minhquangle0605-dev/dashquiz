@@ -47,7 +47,6 @@ const ServerErrorPage = lazy(() => import('./pages/common/ServerErrorPage'));
 const ProfilePage = lazy(() => import('./pages/common/ProfilePage'));
 const NotificationsPage = lazy(() => import('./pages/common/NotificationsPage'));
 const DiscussionsPage = lazy(() => import('./pages/common/DiscussionsPage'));
-const GradebookPage = lazy(() => import('./pages/common/GradebookPage'));
 const AdminDiscussionsPage = lazy(() => import('./pages/admin/DiscussionsPage'));
 
 function LoadingSpinner() {
@@ -103,7 +102,6 @@ export default function App() {
             <Route path="exams/:id/reports" element={<ExamReportsPage />} />
             <Route path="classes" element={<ClassesPage />} />
             <Route path="timetable" element={<TeacherTimetablePage />} />
-            <Route path="gradebook" element={<GradebookPage />} />
             <Route path="discussions" element={<DiscussionsPage />} />
             <Route path="notifications" element={<NotificationsPage />} />
             <Route path="profile" element={<ProfilePage />} />
@@ -132,7 +130,6 @@ export default function App() {
             <Route path="exams" element={<AdminExamsPage />} />
             <Route path="academic" element={<AcademicPage />} />
             <Route path="timetable" element={<AdminTimetablePage />} />
-            <Route path="gradebook" element={<GradebookPage />} />
             <Route path="discussions" element={<AdminDiscussionsPage />} />
             <Route path="system" element={<SystemPage />} />
             <Route path="notifications" element={<NotificationsPage />} />

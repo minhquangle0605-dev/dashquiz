@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
 import * as classController from './class.controller';
-import * as gradebookController from './gradebook.controller';
 import { authenticate, authorize } from '../../middlewares/auth';
 import { validate } from '../../middlewares/validate';
 import { activityLogger } from '../../middlewares/activityLogger';
@@ -25,10 +24,6 @@ import {
   recordAttendanceSchema,
   markCompletionSchema,
   assignClassRoleSchema,
-  createManualGradeSchema,
-  updateGradeScoreSchema,
-  deleteGradeSchema,
-  linkClassSchema,
 } from './class.validation';
 import { ROLES } from '../../utils/constants';
 import { FILE_UPLOAD } from '../../utils/constants';
@@ -117,78 +112,6 @@ router.get(
 );
 
 router.get('/:id/course', authenticate, classController.getCourse);
-
-// ── Gradebook (Vietnamese MOET style) ──────────────
-router.get(
-  '/gradebooks',
-  authenticate,
-  authorize(ROLES.TEACHER, ROLES.ADMIN),
-  gradebookController.getAccessibleGradebooks,
-);
-
-router.get(
-  '/:id/gradebook',
-  authenticate,
-  authorize(ROLES.TEACHER, ROLES.ADMIN),
-  gradebookController.getClassGradebook,
-);
-
-router.get(
-  '/:id/gradebook/my',
-  authenticate,
-  authorize(ROLES.STUDENT, ROLES.PARENT),
-  gradebookController.getMyGradebook,
-);
-
-router.post(
-  '/:id/gradebook/grades',
-  authenticate,
-  authorize(ROLES.TEACHER, ROLES.ADMIN),
-  validate(createManualGradeSchema),
-  activityLogger('CREATE_STUDENT_GRADE', 'student_grade'),
-  gradebookController.createManualGrade,
-);
-
-router.put(
-  '/:id/gradebook/grades/:gradeId',
-  authenticate,
-  authorize(ROLES.TEACHER, ROLES.ADMIN),
-  validate(updateGradeScoreSchema),
-  activityLogger('UPDATE_STUDENT_GRADE', 'student_grade'),
-  gradebookController.updateGradeScore,
-);
-
-router.delete(
-  '/:id/gradebook/grades/:gradeId',
-  authenticate,
-  authorize(ROLES.TEACHER, ROLES.ADMIN),
-  validate(deleteGradeSchema),
-  activityLogger('DELETE_STUDENT_GRADE', 'student_grade'),
-  gradebookController.deleteGrade,
-);
-
-router.get(
-  '/:id/gradebook/grades/:gradeId/history',
-  authenticate,
-  authorize(ROLES.TEACHER, ROLES.ADMIN),
-  gradebookController.listGradeHistory,
-);
-
-router.get(
-  '/:id/gradebook/history',
-  authenticate,
-  authorize(ROLES.TEACHER, ROLES.ADMIN),
-  gradebookController.listClassHistory,
-);
-
-router.put(
-  '/:id/gradebook/link',
-  authenticate,
-  authorize(ROLES.TEACHER, ROLES.ADMIN),
-  validate(linkClassSchema),
-  activityLogger('LINK_CLASS_SEMESTER', 'class'),
-  gradebookController.linkClass,
-);
 
 router.post(
   '/:id/sections',

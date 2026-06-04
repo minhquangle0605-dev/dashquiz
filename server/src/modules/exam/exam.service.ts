@@ -664,23 +664,12 @@ export class ExamService {
       throw new AppError(`Classes not found: ${missing.join(', ')}`, 404);
     }
 
-    const gradeComponentType = data.gradeComponentType ?? null;
-
     const existing = await prisma.examAssignment.findMany({
       where: { examId, classId: { in: data.classIds } },
       select: { classId: true },
     });
     const alreadyAssigned = new Set(existing.map((ea) => ea.classId));
     const newClassIds = data.classIds.filter((cid) => !alreadyAssigned.has(cid));
-
-    // Update grade component type on existing assignments too — teachers
-    // may re-assign solely to flip the gradebook flag.
-    if (gradeComponentType && alreadyAssigned.size > 0) {
-      await prisma.examAssignment.updateMany({
-        where: { examId, classId: { in: Array.from(alreadyAssigned) } },
-        data: { gradeComponentType },
-      });
-    }
 
     if (newClassIds.length === 0) {
       return {
@@ -719,7 +708,6 @@ export class ExamService {
       data: newClassIds.map((classId) => ({
         examId,
         classId,
-        gradeComponentType,
         assignedBy: userId,
       })),
     });
@@ -783,7 +771,7 @@ export class ExamService {
     }
 
     // Related rows (examQuestions, examSchedules, examAssignments, examAttempts)
-    // cascade via FK; StudentGrade keeps its row (examAssignmentId set to null).
+    // cascade via FK.
     await prisma.exam.delete({ where: { id: examId } });
     await this.invalidateExamDetail(examId);
 

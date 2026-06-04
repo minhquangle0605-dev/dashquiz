@@ -408,7 +408,6 @@ export class ClassCourseService {
       data: {
         classId,
         sectionId: data.sectionId ?? null,
-        gradeComponentType: data.gradeComponentType ?? null,
         type: data.type,
         title: data.title,
         instructions: data.instructions,
@@ -441,7 +440,6 @@ export class ClassCourseService {
       where: { id: activityId },
       data: {
         ...(data.sectionId !== undefined && { sectionId: data.sectionId }),
-        ...(data.gradeComponentType !== undefined && { gradeComponentType: data.gradeComponentType }),
         ...(data.type !== undefined && { type: data.type }),
         ...(data.title !== undefined && { title: data.title }),
         ...(data.instructions !== undefined && { instructions: data.instructions }),

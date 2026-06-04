@@ -131,16 +131,6 @@ export const API_ENDPOINTS = {
     ATTENDANCE: (activityId: number) =>
       `/api/classes/activities/${activityId}/attendance`,
     COMPLETIONS: (id: number) => `/api/classes/${id}/completions`,
-    GRADEBOOKS: '/api/classes/gradebooks',
-    GRADEBOOK: (id: number) => `/api/classes/${id}/gradebook`,
-    MY_GRADEBOOK: (id: number) => `/api/classes/${id}/gradebook/my`,
-    GRADEBOOK_GRADES: (id: number) => `/api/classes/${id}/gradebook/grades`,
-    GRADEBOOK_GRADE_BY_ID: (classId: number, gradeId: number) =>
-      `/api/classes/${classId}/gradebook/grades/${gradeId}`,
-    GRADEBOOK_GRADE_HISTORY: (classId: number, gradeId: number) =>
-      `/api/classes/${classId}/gradebook/grades/${gradeId}/history`,
-    GRADEBOOK_HISTORY: (id: number) => `/api/classes/${id}/gradebook/history`,
-    GRADEBOOK_LINK: (id: number) => `/api/classes/${id}/gradebook/link`,
     ROLES: (id: number) => `/api/classes/${id}/roles`,
     LOGS: (id: number) => `/api/classes/${id}/logs`,
     STUDENTS: (id: number) => `/api/classes/${id}/students`,

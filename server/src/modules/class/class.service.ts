@@ -126,6 +126,27 @@ export class ClassService {
     });
   }
 
+  private async assertClassNameAvailable(
+    name: string,
+    gradeLevel: number,
+    semesterId: number,
+    excludeId?: number,
+  ) {
+    const existing = await prisma.class.findFirst({
+      where: {
+        name: { equals: name, mode: 'insensitive' },
+        gradeLevel,
+        semesterId,
+        ...(excludeId ? { id: { not: excludeId } } : {}),
+      },
+      select: { id: true },
+    });
+
+    if (existing) {
+      throw new AppError(`A class named "${name}" already exists for this grade and semester`, 409);
+    }
+  }
+
   private sanitizeFilename(filename: string): string {
     return filename.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-160);
   }
@@ -278,9 +299,12 @@ export class ClassService {
     if (!semester) throw new AppError('Semester not found', 404);
     if (!subject || !isCoreSubjectCode(subject.code)) throw new AppError('Subject not found', 404);
 
+    const name = data.name.trim();
+    await this.assertClassNameAvailable(name, data.gradeLevel, resolvedSemesterId);
+
     const classEntity = await prisma.class.create({
       data: {
-        name: data.name,
+        name,
         gradeLevel: data.gradeLevel,
         semesterId: resolvedSemesterId,
         teacherId,
@@ -366,10 +390,15 @@ export class ClassService {
       if (!subject || !isCoreSubjectCode(subject.code)) throw new AppError('Subject not found', 404);
     }
 
+    const name = data.name?.trim() ?? classEntity.name;
+    const gradeLevel = data.gradeLevel ?? classEntity.gradeLevel;
+    const semesterId = resolvedSemesterId ?? classEntity.semesterId;
+    await this.assertClassNameAvailable(name, gradeLevel, semesterId, id);
+
     const updated = await prisma.class.update({
       where: { id },
       data: {
-        ...(data.name !== undefined && { name: data.name }),
+        ...(data.name !== undefined && { name }),
         ...(data.gradeLevel !== undefined && { gradeLevel: data.gradeLevel }),
         ...(resolvedSemesterId !== undefined && { semesterId: resolvedSemesterId }),
         ...(data.subjectId !== undefined && { subjectId: data.subjectId }),

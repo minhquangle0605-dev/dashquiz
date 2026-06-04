@@ -498,7 +498,7 @@ async function main() {
   }
   console.log(`✓ ${configs.length} system configs seeded`);
 
-  console.log('\n✅ Database seeding completed!');
+  console.log('\n Database seeding completed!');
 }
 
 main()

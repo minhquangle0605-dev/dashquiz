@@ -4,9 +4,7 @@ import { Modal } from '@/components/ui/Modal';
 import type {
   ClassActivity,
   ClassCourseOverview,
-  GradeComponentType,
 } from '@/types/exam';
-import { GRADE_COMPONENT_INFO } from '@/types/exam';
 
 export interface ActivityFormValues {
   title: string;
@@ -16,7 +14,6 @@ export interface ActivityFormValues {
   dueAt: string;
   maxScore: string;
   status: ClassActivity['status'];
-  gradeComponentType: GradeComponentType | '';
 }
 
 interface ActivityModalProps {
@@ -109,34 +106,6 @@ export function ActivityModal({
             value={form.maxScore}
             onChange={(e) => onChange({ ...form, maxScore: e.target.value })}
           />
-        </div>
-        <div>
-          <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
-            Count toward gradebook
-          </label>
-          <p className="mb-1.5 text-xs text-[var(--color-text-muted)]">
-            Choose a grade component (per Circular 22). Leave blank if the activity is not graded.
-          </p>
-          <select
-            className={selectBase}
-            value={form.gradeComponentType}
-            onChange={(e) =>
-              onChange({
-                ...form,
-                gradeComponentType: (e.target.value || '') as GradeComponentType | '',
-              })
-            }
-          >
-            <option value="">Not graded</option>
-            {(Object.keys(GRADE_COMPONENT_INFO) as GradeComponentType[]).map((key) => {
-              const info = GRADE_COMPONENT_INFO[key];
-              return (
-                <option key={key} value={key}>
-                  {info.abbr} — {info.label} (coefficient {info.coefficient})
-                </option>
-              );
-            })}
-          </select>
         </div>
         <div>
           <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">

@@ -288,7 +288,6 @@ export interface ExamAssignmentItem {
   id: number;
   examId: number;
   classId: number;
-  gradeComponentType?: GradeComponentType | null;
   assignedBy: number;
   assignedAt: string;
   class?: { id: number; name: string; gradeLevel: number };
@@ -338,7 +337,6 @@ export interface ScheduleExamPayload {
 
 export interface AssignExamPayload {
   classIds: number[];
-  gradeComponentType?: GradeComponentType | null;
 }
 
 export type AttemptMonitoringEventType =
@@ -606,38 +604,10 @@ export interface ClassResource {
   orderIndex: number;
 }
 
-export type GradeComponentType = 'REGULAR' | 'MIDTERM' | 'FINAL';
-export type GradeEntrySource = 'EXAM' | 'ACTIVITY' | 'MANUAL';
-
-export const GRADE_COMPONENT_INFO: Record<
-  GradeComponentType,
-  { abbr: string; label: string; coefficient: 1 | 2 | 3; color: string }
-> = {
-  REGULAR: {
-    abbr: 'REG',
-    label: 'Regular assessment',
-    coefficient: 1,
-    color: 'sky',
-  },
-  MIDTERM: {
-    abbr: 'MID',
-    label: 'Midterm assessment',
-    coefficient: 2,
-    color: 'amber',
-  },
-  FINAL: {
-    abbr: 'FIN',
-    label: 'Final assessment',
-    coefficient: 3,
-    color: 'rose',
-  },
-};
-
 export interface ClassActivity {
   id: number;
   classId: number;
   sectionId: number | null;
-  gradeComponentType?: GradeComponentType | null;
   type: ClassActivityType;
   title: string;
   instructions: string | null;
@@ -648,100 +618,6 @@ export interface ClassActivity {
   allowLate: boolean;
   showGrades: boolean;
   allowStudentPosts: boolean;
-}
-
-export interface GradebookEntry {
-  id: number;
-  componentType: GradeComponentType;
-  source: GradeEntrySource;
-  label: string | null;
-  score: number;
-  examAssignmentId: number | null;
-  classActivityId: number | null;
-  examTitle: string | null;
-  activityTitle: string | null;
-  recordedBy: { id: number; fullName: string | null } | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface GradebookAverages {
-  regular: number | null;
-  midterm: number | null;
-  final: number | null;
-  semester: number | null;
-}
-
-export interface GradebookStudentRow {
-  student: {
-    id: number;
-    username: string;
-    fullName: string | null;
-    avatar: string | null;
-  };
-  entries: GradebookEntry[];
-  averages: GradebookAverages;
-  yearAverage?: number | null;
-  subjectStatus?: 'TOT' | 'KHA' | 'DAT' | 'CHUA_DAT' | null;
-}
-
-export interface GradebookClassSummary {
-  id: number;
-  name: string;
-  gradeLevel: number;
-  linkedClassId?: number | null;
-  subject?: { id: number; name: string; code: string };
-  semester?: { id: number; name: string; academicYear?: { id: number; name: string } };
-}
-
-export interface LinkedClassSummary {
-  id: number;
-  name: string;
-  semester?: { id: number; name: string } | null;
-}
-
-export interface ClassGradebook {
-  class: GradebookClassSummary;
-  linkedClassSummary: LinkedClassSummary | null;
-  students: GradebookStudentRow[];
-}
-
-export interface GradebookCollection {
-  scope: 'all' | 'teacher';
-  gradebooks: ClassGradebook[];
-}
-
-export interface MyGradebook {
-  class: GradebookClassSummary;
-  student: GradebookStudentRow | null;
-  yearAverage: number | null;
-  linkedClass: LinkedClassSummary | null;
-}
-
-export interface GradeChangeLogItem {
-  id: number;
-  action: string;
-  oldScore: number | null;
-  newScore: number | null;
-  oldComponentType: GradeComponentType | null;
-  newComponentType: GradeComponentType | null;
-  reason: string | null;
-  changedAt: string;
-  changedBy: {
-    id: number;
-    fullName: string | null;
-    role: string;
-  } | null;
-}
-
-export interface ClassGradeChangeLogItem extends GradeChangeLogItem {
-  gradeId: number;
-  componentType: GradeComponentType | null;
-  student: {
-    id: number;
-    username: string;
-    fullName: string | null;
-  } | null;
 }
 
 export interface ClassCourseOverview {

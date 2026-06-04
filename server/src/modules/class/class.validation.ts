@@ -138,7 +138,6 @@ export const updateResourceSchema = resourceSchemaBase.partial().superRefine((va
 
 export const createActivitySchema = z.object({
   sectionId: z.coerce.number().int().positive().nullable().optional(),
-  gradeComponentType: z.enum(['REGULAR', 'MIDTERM', 'FINAL']).nullable().optional(),
   type: activityTypeSchema,
   title: z.string().min(1).max(200),
   instructions: z.string().max(50000).optional(),
@@ -194,43 +193,6 @@ export const assignClassRoleSchema = z.object({
 });
 
 // ═══════════════════════════════════════════════
-// MOET-STYLE GRADEBOOK (Circular 22)
-// ═══════════════════════════════════════════════
-
-export const gradeComponentTypeSchema = z.enum(['REGULAR', 'MIDTERM', 'FINAL']);
-
-export const createManualGradeSchema = z.object({
-  studentId: z.coerce.number().int().positive(),
-  componentType: gradeComponentTypeSchema,
-  score: z.coerce.number().min(0).max(10),
-  label: z.string().max(200).optional(),
-  reason: z.string().max(500).optional(),
-});
-
-export const updateGradeScoreSchema = z
-  .object({
-    score: z.coerce.number().min(0).max(10).optional(),
-    componentType: gradeComponentTypeSchema.optional(),
-    label: z.string().max(200).nullable().optional(),
-    reason: z.string().max(500).optional(),
-  })
-  .refine(
-    (val) =>
-      val.score !== undefined ||
-      val.componentType !== undefined ||
-      val.label !== undefined,
-    { message: 'Provide at least one field to update' },
-  );
-
-export const deleteGradeSchema = z.object({
-  reason: z.string().max(500).optional(),
-});
-
-export const linkClassSchema = z.object({
-  linkedClassId: z.coerce.number().int().positive().nullable(),
-});
-
-// ═══════════════════════════════════════════════
 // TYPE EXPORTS
 // ═══════════════════════════════════════════════
 
@@ -253,8 +215,3 @@ export type CreateForumPostInput = z.infer<typeof createForumPostSchema>;
 export type RecordAttendanceInput = z.infer<typeof recordAttendanceSchema>;
 export type MarkCompletionInput = z.infer<typeof markCompletionSchema>;
 export type AssignClassRoleInput = z.infer<typeof assignClassRoleSchema>;
-export type CreateManualGradeInput = z.infer<typeof createManualGradeSchema>;
-export type UpdateGradeScoreInput = z.infer<typeof updateGradeScoreSchema>;
-export type DeleteGradeInput = z.infer<typeof deleteGradeSchema>;
-export type LinkClassInput = z.infer<typeof linkClassSchema>;
-export type GradeComponentTypeInput = z.infer<typeof gradeComponentTypeSchema>;

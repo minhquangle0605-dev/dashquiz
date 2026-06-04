@@ -149,22 +149,6 @@ enum DiscussionAttachmentType {
   VIDEO
 }
 
-// MOET grade components (Circular 22)
-// REGULAR: coefficient 1
-// MIDTERM: coefficient 2
-// FINAL:   coefficient 3
-enum GradeComponentType {
-  REGULAR
-  MIDTERM
-  FINAL
-}
-
-enum GradeEntrySource {
-  EXAM
-  ACTIVITY
-  MANUAL
-}
-
 // Distinguishes timetable slots that map to a managed Subject (MATH/PHY/CHEM —
 // used for exam-conflict checking) from display-only slots (every other subject,
 // flag ceremony, class meeting, …) that exist purely for viewing.
@@ -219,9 +203,6 @@ model User {
   discussions            Discussion[]
   discussionReplies      DiscussionReply[]
   discussionAttachments  DiscussionAttachment[]
-  studentGrades          StudentGrade[]              @relation("StudentGradeStudent")
-  recordedStudentGrades  StudentGrade[]              @relation("StudentGradeRecorder")
-  gradeChangeLogs        GradeChangeLog[]
   createdTimetableSlots  ClassTimetableSlot[]
   proctoredSchedules     ExamSchedule[]              @relation("ExamProctor")
 
@@ -296,14 +277,11 @@ model Class {
   semesterId    Int      @map("semester_id")
   teacherId     Int      @map("teacher_id")
   subjectId     Int      @map("subject_id")
-  linkedClassId Int?     @map("linked_class_id")
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
   semester        Semester                    @relation(fields: [semesterId], references: [id], onDelete: Cascade)
   teacher         User                        @relation("TeacherClasses", fields: [teacherId], references: [id], onDelete: Restrict)
   subject         Subject                     @relation(fields: [subjectId], references: [id], onDelete: Restrict)
-  linkedClass     Class?                      @relation("LinkedClasses", fields: [linkedClassId], references: [id], onDelete: SetNull)
-  linkedByClasses Class[]                     @relation("LinkedClasses")
   classStudents   ClassStudent[]
   studentProfiles StudentProfile[]
   examAssignments ExamAssignment[]
@@ -314,11 +292,9 @@ model Class {
   completions     ClassCompletion[]
   courseLogs      ClassActivityLog[]
   discussions     Discussion[]
-  studentGrades   StudentGrade[]
   timetableSlots  ClassTimetableSlot[]
   examSchedules   ExamSchedule[]
 
-  @@index([linkedClassId])
   @@map("classes")
 }
 
@@ -400,7 +376,6 @@ model ClassActivity {
   id                 Int                 @id @default(autoincrement())
   classId            Int                 @map("class_id")
   sectionId          Int?                @map("section_id")
-  gradeComponentType GradeComponentType? @map("grade_component_type")
   type               ClassActivityType
   title              String              @db.VarChar(200)
   instructions       String?             @db.Text
@@ -422,61 +397,10 @@ model ClassActivity {
   forumPosts        ClassForumPost[]
   attendanceRecords ClassAttendanceRecord[]
   completions       ClassCompletion[]
-  studentGrades     StudentGrade[]
 
   @@index([classId, sectionId, status])
-  @@index([gradeComponentType])
   @@index([type])
   @@map("class_activities")
-}
-
-// Vietnamese MOET gradebook entries: one row per (student, source).
-// score is on the 0–10 scale; coefficient is implicit in `componentType`.
-model StudentGrade {
-  id               Int                @id @default(autoincrement())
-  classId          Int                @map("class_id")
-  studentId        Int                @map("student_id")
-  componentType    GradeComponentType @map("component_type")
-  source           GradeEntrySource   @default(MANUAL)
-  label            String?            @db.VarChar(200)
-  score            Decimal            @db.Decimal(4, 2)
-  examAssignmentId Int?               @map("exam_assignment_id")
-  classActivityId  Int?               @map("class_activity_id")
-  recordedById     Int                @map("recorded_by")
-  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz()
-  updatedAt        DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
-
-  class          Class            @relation(fields: [classId], references: [id], onDelete: Cascade)
-  student        User             @relation("StudentGradeStudent", fields: [studentId], references: [id], onDelete: Cascade)
-  examAssignment ExamAssignment?  @relation(fields: [examAssignmentId], references: [id], onDelete: SetNull)
-  classActivity  ClassActivity?   @relation(fields: [classActivityId], references: [id], onDelete: SetNull)
-  recordedBy     User             @relation("StudentGradeRecorder", fields: [recordedById], references: [id], onDelete: Restrict)
-  changes        GradeChangeLog[]
-
-  @@unique([studentId, examAssignmentId])
-  @@unique([studentId, classActivityId])
-  @@index([classId, componentType])
-  @@index([classId, studentId])
-  @@map("student_grades")
-}
-
-model GradeChangeLog {
-  id               Int                 @id @default(autoincrement())
-  studentGradeId   Int                 @map("student_grade_id")
-  changedById      Int                 @map("changed_by")
-  oldScore         Decimal?            @map("old_score") @db.Decimal(4, 2)
-  newScore         Decimal?            @map("new_score") @db.Decimal(4, 2)
-  oldComponentType GradeComponentType? @map("old_component_type")
-  newComponentType GradeComponentType? @map("new_component_type")
-  action           String              @db.VarChar(20)
-  reason           String?             @db.Text
-  changedAt        DateTime            @default(now()) @map("changed_at") @db.Timestamptz()
-
-  studentGrade StudentGrade @relation(fields: [studentGradeId], references: [id], onDelete: Cascade)
-  changedBy    User         @relation(fields: [changedById], references: [id], onDelete: Restrict)
-
-  @@index([studentGradeId, changedAt])
-  @@map("student_grade_changes")
 }
 
 model ClassSubmission {
@@ -756,16 +680,13 @@ model ExamAssignment {
   id                 Int                 @id @default(autoincrement())
   examId             Int                 @map("exam_id")
   classId            Int                 @map("class_id")
-  gradeComponentType GradeComponentType? @map("grade_component_type")
   assignedBy         Int                 @map("assigned_by")
   assignedAt         DateTime            @default(now()) @map("assigned_at") @db.Timestamptz()
 
   exam          Exam           @relation(fields: [examId], references: [id], onDelete: Cascade)
   class         Class          @relation(fields: [classId], references: [id], onDelete: Cascade)
   assignedTo    User           @relation(fields: [assignedBy], references: [id], onDelete: Restrict)
-  studentGrades StudentGrade[]
 
-  @@index([gradeComponentType])
   @@map("exam_assignments")
 }
 
