@@ -70,8 +70,19 @@ export const examResultsQuerySchema = z.object({
 
 export const exportReportBodySchema = z.object({
   format: z.enum(['pdf', 'excel']),
-  reportType: z.enum(['class_results', 'exam_results', 'student_progress']),
+  reportType: z.enum([
+    'class_results',
+    'exam_results',
+    'student_progress',
+    'exam_summary',
+    'question_analysis',
+    'student_results',
+  ]),
   classId: z.number().int().positive().optional(),
   examId: z.number().int().positive().optional(),
   title: z.string().max(200).optional(),
+});
+
+export const exportDownloadParamSchema = z.object({
+  id: z.coerce.number().int().positive(),
 });

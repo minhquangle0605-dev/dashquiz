@@ -15,6 +15,7 @@ const LoginPage = lazy(() => import('./pages/auth/LoginPage'));
 const StudentDashboard = lazy(() => import('./pages/student/DashboardPage'));
 const KnowledgeGraphPage = lazy(() => import('./pages/student/KnowledgeGraphPage'));
 const ExamListPage = lazy(() => import('./pages/student/ExamListPage'));
+const ExamLobbyPage = lazy(() => import('./pages/student/ExamLobbyPage'));
 const TakeExamPage = lazy(() => import('./pages/student/TakeExamPage'));
 const ExamResultPage = lazy(() => import('./pages/student/ExamResultPage'));
 const AIPracticePage = lazy(() => import('./pages/student/AIPracticePage'));
@@ -40,6 +41,7 @@ const AcademicPage = lazy(() => import('./pages/admin/AcademicPage'));
 const SystemPage = lazy(() => import('./pages/admin/SystemPage'));
 const AdminTimetablePage = lazy(() => import('./pages/admin/TimetablePage'));
 const AdminExamsPage = lazy(() => import('./pages/admin/ExamsPage'));
+const AdminAnalyticsPage = lazy(() => import('./pages/admin/AnalyticsPage'));
 
 const NotFoundPage = lazy(() => import('./pages/common/NotFoundPage'));
 const ForbiddenPage = lazy(() => import('./pages/common/ForbiddenPage'));
@@ -81,6 +83,7 @@ export default function App() {
             <Route path="timetable" element={<StudentTimetablePage />} />
             <Route path="knowledge-graph" element={<KnowledgeGraphPage />} />
             <Route path="exams" element={<ExamListPage />} />
+            <Route path="exams/:id" element={<ExamLobbyPage />} />
             <Route path="exams/:id/take" element={<TakeExamPage />} />
             <Route path="attempts/:attemptId/result" element={<ExamResultPage />} />
             <Route path="ai-practice" element={<AIPracticePage />} />
@@ -128,6 +131,7 @@ export default function App() {
             <Route path="users" element={<UsersPage />} />
             <Route path="questions" element={<QuestionBankPage />} />
             <Route path="exams" element={<AdminExamsPage />} />
+            <Route path="analytics" element={<AdminAnalyticsPage />} />
             <Route path="academic" element={<AcademicPage />} />
             <Route path="timetable" element={<AdminTimetablePage />} />
             <Route path="discussions" element={<AdminDiscussionsPage />} />

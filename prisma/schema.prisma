@@ -582,6 +582,7 @@ model Question {
   tags           QuestionTag[]
   examQuestions  ExamQuestion[]
   attemptAnswers AttemptAnswer[]
+  review         QuestionReview?
 
   @@map("questions")
 }
@@ -637,6 +638,12 @@ model Exam {
   examSchedules   ExamSchedule[]
   examAssignments ExamAssignment[]
   examAttempts    ExamAttempt[]
+
+  reportSnapshots       ExamReportSnapshot[]
+  questionStats         QuestionStat[]
+  questionOptionStats   QuestionOptionStat[]
+  topicPerformanceStats TopicPerformanceStat[]
+  studentExamInsights   StudentExamInsight[]
 
   @@map("exams")
 }
@@ -786,6 +793,142 @@ model AttemptAnswer {
   selectedOption QuestionOption? @relation(fields: [selectedOptionId], references: [id], onDelete: SetNull)
 
   @@map("attempt_answers")
+}
+
+// ADVANCED ANALYTICS — snapshot cache for the reporting upgrade (5 models)
+// These tables cache heavy per-exam analytics so dashboards load fast. They are
+// recomputed by the analytics engine and invalidated on submit / grade / delete,
+// so they are treated as a derived cache (no FK to question/option/topic needed —
+// rows are scoped + cascade-deleted by exam, and overwritten on each recompute).
+// classId = 0 is the sentinel for "all assigned classes" (keeps @@unique usable).
+
+enum ReportSnapshotStatus {
+  PENDING
+  READY
+  STALE
+}
+
+model ExamReportSnapshot {
+  id                    Int                  @id @default(autoincrement())
+  examId                Int                  @map("exam_id")
+  classId               Int                  @default(0) @map("class_id")
+  status                ReportSnapshotStatus @default(READY)
+  generatedAt           DateTime             @default(now()) @map("generated_at") @db.Timestamptz()
+  summaryJson           Json                 @map("summary_json")
+  scoreDistributionJson Json                 @map("score_distribution_json")
+  topicSummaryJson      Json                 @map("topic_summary_json")
+
+  exam Exam @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  @@unique([examId, classId])
+  @@map("exam_report_snapshots")
+}
+
+model QuestionStat {
+  id                  Int      @id @default(autoincrement())
+  examId              Int      @map("exam_id")
+  questionId          Int      @map("question_id")
+  attempts            Int      @default(0)
+  correctRate         Float    @default(0) @map("correct_rate")
+  skippedRate         Float    @default(0) @map("skipped_rate")
+  avgTimeSec          Int      @default(0) @map("avg_time_sec")
+  difficultyIndex     Float    @default(0) @map("difficulty_index")
+  discriminationIndex Float?   @map("discrimination_index")
+  qualityFlag         String   @default("insufficient_data") @map("quality_flag") @db.VarChar(30)
+  generatedAt         DateTime @default(now()) @map("generated_at") @db.Timestamptz()
+
+  exam Exam @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  @@unique([examId, questionId])
+  @@index([questionId])
+  @@map("question_stats")
+}
+
+model QuestionOptionStat {
+  id             Int     @id @default(autoincrement())
+  examId         Int     @map("exam_id")
+  questionId     Int     @map("question_id")
+  optionId       Int     @map("option_id")
+  selectedCount  Int     @default(0) @map("selected_count")
+  selectedRate   Float   @default(0) @map("selected_rate")
+  isCorrect      Boolean @default(false) @map("is_correct")
+  distractorFlag String? @map("distractor_flag") @db.VarChar(30)
+
+  exam Exam @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  @@unique([examId, optionId])
+  @@index([examId, questionId])
+  @@map("question_option_stats")
+}
+
+model TopicPerformanceStat {
+  id           Int   @id @default(autoincrement())
+  examId       Int   @map("exam_id")
+  classId      Int   @default(0) @map("class_id")
+  subjectId    Int   @map("subject_id")
+  chapterId    Int   @map("chapter_id")
+  topicId      Int   @map("topic_id")
+  masteryRate  Float @default(0) @map("mastery_rate")
+  correctCount Int   @default(0) @map("correct_count")
+  totalCount   Int   @default(0) @map("total_count")
+
+  exam Exam @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  @@unique([examId, classId, topicId])
+  @@index([topicId])
+  @@map("topic_performance_stats")
+}
+
+model StudentExamInsight {
+  id                  Int      @id @default(autoincrement())
+  attemptId           Int      @unique @map("attempt_id")
+  studentId           Int      @map("student_id")
+  examId              Int      @map("exam_id")
+  riskLevel           String   @default("none") @map("risk_level") @db.VarChar(20)
+  riskScore           Float    @default(0) @map("risk_score")
+  weakTopicsJson      Json?    @map("weak_topics_json")
+  strengthsJson       Json?    @map("strengths_json")
+  recommendationsJson Json?    @map("recommendations_json")
+  generatedAt         DateTime @default(now()) @map("generated_at") @db.Timestamptz()
+
+  exam Exam @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  @@index([examId])
+  @@index([studentId])
+  @@map("student_exam_insights")
+}
+
+// Question review workflow — lets teachers/leaders validate flagged items (PDF §4).
+// One current review row per question (upserted); reviewerId is an audit field.
+model QuestionReview {
+  id          Int      @id @default(autoincrement())
+  questionId  Int      @unique @map("question_id")
+  reviewerId  Int      @map("reviewer_id")
+  status      String   @default("needs_review") @db.VarChar(30)
+  qualityFlag String?  @map("quality_flag") @db.VarChar(30)
+  comment     String?  @db.Text
+  reviewedAt  DateTime @default(now()) @map("reviewed_at") @db.Timestamptz()
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@map("question_reviews")
+}
+
+// Generated report export history (PDF §4 / §8). userId/objectName kept as plain
+// columns; objectName lets the download endpoint re-presign the MinIO object.
+model ReportExport {
+  id         Int      @id @default(autoincrement())
+  userId     Int      @map("user_id")
+  reportType String   @map("report_type") @db.VarChar(40)
+  targetId   Int?     @map("target_id")
+  format     String   @db.VarChar(10)
+  fileUrl    String?  @map("file_url") @db.Text
+  objectName String?  @map("object_name") @db.Text
+  status     String   @default("completed") @db.VarChar(20)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  @@index([userId, createdAt])
+  @@map("report_exports")
 }
 
 // AI ADAPTIVE (2 models)

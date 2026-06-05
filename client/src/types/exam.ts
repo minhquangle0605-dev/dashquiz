@@ -71,6 +71,8 @@ export interface StudentExamItem {
   attemptsRemaining: number;
   hasInProgress: boolean;
   canStart: boolean;
+  /** Most recently finished attempt; target of the "View Results" CTA. */
+  lastAttemptId: number | null;
 }
 
 export interface StartExamData {
@@ -503,6 +505,129 @@ export interface ExamReportData {
     medianScore: number | null;
     passRate: number | null;
   };
+}
+
+/* ── Advanced exam analytics (Reporting upgrade) ────── */
+
+export interface ExamAnalyticsSummaryData {
+  totalAttempts: number;
+  assignedCount: number;
+  completionRate: number | null;
+  maxScore: number;
+  totalQuestions: number;
+  avgScore: number | null;
+  medianScore: number | null;
+  minScore: number | null;
+  maxScoreAchieved: number | null;
+  passingScore: number | null;
+  passRate: number | null;
+  avgTimeSec: number | null;
+}
+
+export interface ExamAnalyticsSummary {
+  exam: { id: number; title: string; durationMin: number } | null;
+  generatedAt: string | null;
+  summary: ExamAnalyticsSummaryData | null;
+  scoreDistribution: {
+    distribution: Array<{ bucket: string; count: number }>;
+    timeline: Array<{ date: string; count: number }>;
+  } | null;
+}
+
+export type QuestionQualityFlag =
+  | 'good'
+  | 'ok'
+  | 'too_easy'
+  | 'too_hard'
+  | 'needs_review'
+  | 'insufficient_data';
+
+export interface ExamAnalyticsOption {
+  id: number;
+  label: string;
+  content: string;
+  isCorrect: boolean;
+  selectedCount: number;
+  selectedRate: number; // percentage 0–100
+  distractorFlag: 'never_selected' | 'too_attractive' | null;
+}
+
+export interface ExamAnalyticsQuestion {
+  questionId: number;
+  orderIndex: number;
+  points: number;
+  content: string;
+  questionType: string;
+  explanation: string | null;
+  topic: { id: number; name: string } | null;
+  attempts: number;
+  correctRate: number | null; // percentage 0–100
+  skippedRate: number | null; // percentage 0–100
+  avgTimeSec: number | null;
+  difficultyIndex: number | null; // facility 0–1
+  difficultyLabel: string;
+  discrimination: number | null;
+  qualityFlag: QuestionQualityFlag | string;
+  options: ExamAnalyticsOption[];
+}
+
+export interface ExamAnalyticsTopic {
+  topicId: number;
+  topicName: string;
+  chapterName: string;
+  subjectName: string;
+  masteryRate: number; // percentage 0–100
+  correctCount: number;
+  totalCount: number;
+  weak: boolean;
+}
+
+export interface ExamAnalyticsStudent {
+  rank: number;
+  attemptId: number;
+  student: {
+    id: number;
+    name: string | null;
+    username: string;
+    studentCode: string | null;
+  };
+  score: number;
+  passed: boolean | null;
+  timeSpentSec: number | null;
+  submittedAt: string | null;
+  isAutoSubmitted: boolean;
+  riskLevel: string;
+  riskScore: number | null;
+  weakTopics: Array<{ topicId: number; topicName: string; masteryRate: number }>;
+  recommendations: string[];
+}
+
+export type ReviewStatus = 'needs_review' | 'needs_revision' | 'approved' | 'good' | 'rejected';
+
+export interface QuestionReviewData {
+  status: string;
+  qualityFlag: string | null;
+  comment: string | null;
+  reviewedAt: string;
+  reviewerId: number;
+}
+
+export interface QuestionQuality {
+  question: {
+    id: number;
+    content: string;
+    questionType: string;
+    difficulty: number;
+    topic: { id: number; name: string } | null;
+  };
+  usage: { examCount: number; totalAttempts: number };
+  aggregate: {
+    correctRate: number | null;
+    discrimination: number | null;
+    avgTimeSec: number | null;
+    suggestedFlag: string;
+  };
+  review: QuestionReviewData | null;
 }
 
 export interface RecordAttemptEventPayload {

@@ -133,3 +133,17 @@ teacherAnalyticsRouter.post(
   validate(exportReportBodySchema, 'body'),
   analyticsController.exportReport,
 );
+
+teacherAnalyticsRouter.get(
+  '/reports/history',
+  authenticate,
+  authorize(ROLES.TEACHER),
+  analyticsController.getExportHistory,
+);
+
+teacherAnalyticsRouter.get(
+  '/reports/:id/download',
+  authenticate,
+  authorize(ROLES.TEACHER),
+  analyticsController.getExportDownload,
+);

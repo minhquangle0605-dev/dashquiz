@@ -1,12 +1,11 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import toast from 'react-hot-toast';
 
 import { Card } from '@/components/ui/Card';
 import { Badge, type BadgeVariant } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
-import { useStudentExams, useStartStudentExam } from '@/hooks/useExam';
+import { useStudentExams } from '@/hooks/useExam';
 import { formatDate } from '@/utils/format';
 import type { StudentExamItem } from '@/types/exam';
 
@@ -43,29 +42,13 @@ const phaseBarClass: Record<StudentExamItem['phase'], string> = {
 
 function ExamCard({ exam }: { exam: StudentExamItem }) {
   const navigate = useNavigate();
-  const startMutation = useStartStudentExam();
   const badge = phaseBadge(exam.phase);
   const schedule = exam.examSchedules?.[0];
 
-  const handleStart = async () => {
-    // Password-protected exams are unlocked inside TakeExamPage, so skip the
-    // pre-start (which would 403) and navigate straight to the runner.
-    if (exam.hasPassword) {
-      navigate(`/student/exams/${exam.id}/take`);
-      return;
-    }
-    try {
-      await startMutation.mutateAsync({ examId: exam.id });
-      navigate(`/student/exams/${exam.id}/take`);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to start exam';
-      toast.error(msg);
-    }
-  };
-
-  const handleResume = () => {
-    navigate(`/student/exams/${exam.id}/take`);
-  };
+  // Open the pre-exam lobby; it shows the details/rules and owns start vs
+  // resume. The exam is passed in state so the lobby renders instantly.
+  const openLobby = () =>
+    navigate(`/student/exams/${exam.id}`, { state: { exam } });
 
   return (
     <Card padding="none" className="card-lift overflow-hidden">
@@ -146,28 +129,30 @@ function ExamCard({ exam }: { exam: StudentExamItem }) {
 
           <div className="border-t border-[var(--color-border-subtle)] pt-3">
             {exam.hasInProgress ? (
-              <Button variant="primary" size="md" fullWidth onClick={handleResume}>
+              <Button variant="primary" size="md" fullWidth onClick={openLobby}>
                 Resume
               </Button>
             ) : exam.canStart ? (
-              <Button
-                variant="primary"
-                size="md"
-                fullWidth
-                isLoading={startMutation.isPending}
-                onClick={handleStart}
-              >
+              <Button variant="primary" size="md" fullWidth onClick={openLobby}>
                 Start
               </Button>
             ) : exam.phase === 'completed' ? (
-              <Button
-                variant="outline"
-                size="md"
-                fullWidth
-                onClick={() => navigate(`/student/exams/${exam.id}/result`)}
-              >
-                View Results
-              </Button>
+              exam.lastAttemptId != null ? (
+                <Button
+                  variant="outline"
+                  size="md"
+                  fullWidth
+                  onClick={() =>
+                    navigate(`/student/attempts/${exam.lastAttemptId}/result`)
+                  }
+                >
+                  View Results
+                </Button>
+              ) : (
+                <Button variant="secondary" size="md" fullWidth disabled>
+                  Closed
+                </Button>
+              )
             ) : (
               <Button variant="secondary" size="md" fullWidth disabled>
                 Not yet available

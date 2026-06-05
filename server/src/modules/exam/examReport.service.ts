@@ -3,6 +3,7 @@ import { prisma } from '../../config/database';
 import { AppError } from '../../middlewares/errorHandler';
 import { logger } from '../../utils/logger';
 import { invalidateStudentCache } from '../analytics/analytics.service';
+import { invalidateExamAnalytics } from '../exam-analytics/examAnalytics.service';
 import { pearson, median, facility } from './examStats';
 import type { GradeAnswerInput } from './exam.validation';
 
@@ -374,6 +375,9 @@ export class ExamReportService {
     invalidateStudentCache(attempt.studentId).catch((err) =>
       logger.warn('Failed to invalidate analytics cache after manual grade:', err),
     );
+    invalidateExamAnalytics(examId).catch((err) =>
+      logger.warn('Failed to invalidate exam analytics after manual grade:', err),
+    );
 
     return {
       success: true,
@@ -398,6 +402,9 @@ export class ExamReportService {
 
     invalidateStudentCache(attempt.studentId).catch((err) =>
       logger.warn('Failed to invalidate analytics cache after attempt deletion:', err),
+    );
+    invalidateExamAnalytics(examId).catch((err) =>
+      logger.warn('Failed to invalidate exam analytics after attempt deletion:', err),
     );
 
     return {

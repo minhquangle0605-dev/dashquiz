@@ -9,6 +9,8 @@ import { getMinioClient } from '../../config/minio';
 import { env } from '../../config/env';
 import { logger } from '../../utils/logger';
 import { cacheGet, cacheSet } from '../../utils/cache';
+import { examAnalyticsService } from '../exam-analytics/examAnalytics.service';
+import { AppError } from '../../middlewares/errorHandler';
 
 const REPORTS_BUCKET = 'reports';
 
@@ -1066,6 +1068,12 @@ export class TeacherAnalyticsService {
       reportData = await this.buildExamResultsReport(opts.examId, teacherId);
     } else if (opts.reportType === 'class_results' && opts.classId) {
       reportData = await this.buildClassResultsReport(opts.classId, teacherId);
+    } else if (opts.reportType === 'exam_summary' && opts.examId) {
+      reportData = await this.buildExamSummaryReport(opts.examId, teacherId);
+    } else if (opts.reportType === 'question_analysis' && opts.examId) {
+      reportData = await this.buildQuestionAnalysisReport(opts.examId, teacherId);
+    } else if (opts.reportType === 'student_results' && opts.examId) {
+      reportData = await this.buildStudentResultsReport(opts.examId, teacherId);
     } else {
       reportData = { title: opts.title || 'Report', headers: ['No data'], rows: [] };
     }
@@ -1094,12 +1102,120 @@ export class TeacherAnalyticsService {
 
     const downloadUrl = await minio.presignedGetObject(REPORTS_BUCKET, objectName, 3600);
 
+    // Record export history so it can be listed and re-downloaded later (PDF §4/§8).
+    const record = await prisma.reportExport.create({
+      data: {
+        userId: teacherId,
+        reportType: opts.reportType,
+        targetId: opts.examId ?? opts.classId ?? null,
+        format: opts.format,
+        fileUrl: downloadUrl,
+        objectName,
+        status: 'completed',
+      },
+      select: { id: true, createdAt: true },
+    });
+
     return {
+      id: record.id,
       filename,
       format: opts.format,
       size: buffer.length,
       downloadUrl,
       expiresIn: '1 hour',
+      createdAt: record.createdAt,
+    };
+  }
+
+  /** Paginated-free export history for a teacher (most recent first). */
+  async getExportHistory(teacherId: number, limit = 30) {
+    const rows = await prisma.reportExport.findMany({
+      where: { userId: teacherId },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      select: {
+        id: true,
+        reportType: true,
+        targetId: true,
+        format: true,
+        status: true,
+        createdAt: true,
+      },
+    });
+    return rows;
+  }
+
+  /** Re-presign a previously generated export the teacher owns. */
+  async getDownloadUrl(exportId: number, teacherId: number) {
+    const record = await prisma.reportExport.findFirst({
+      where: { id: exportId, userId: teacherId },
+      select: { objectName: true, format: true },
+    });
+    if (!record || !record.objectName) {
+      throw new AppError('Export not found', 404);
+    }
+    const minio = getMinioClient();
+    const downloadUrl = await minio.presignedGetObject(REPORTS_BUCKET, record.objectName, 3600);
+    return { downloadUrl, format: record.format, expiresIn: '1 hour' };
+  }
+
+  // ── Report builders for the analytics export bundles (PDF §8) ──
+
+  private async buildExamSummaryReport(examId: number, teacherId: number) {
+    const data = await examAnalyticsService.getSummary(examId, teacherId, 'teacher');
+    const exam = data.exam;
+    const s = (data.summary ?? {}) as unknown as Record<string, number | null>;
+    const fmt = (v: number | null | undefined) => (v == null ? '—' : String(v));
+    return {
+      title: `Exam Summary: ${exam?.title ?? `#${examId}`}`,
+      headers: ['Metric', 'Value'],
+      rows: [
+        ['Submitted attempts', fmt(s.totalAttempts)],
+        ['Assigned students', fmt(s.assignedCount)],
+        ['Completion rate (%)', fmt(s.completionRate)],
+        ['Average score', fmt(s.avgScore)],
+        ['Median score', fmt(s.medianScore)],
+        ['Highest score', fmt(s.maxScoreAchieved)],
+        ['Lowest score', fmt(s.minScore)],
+        ['Max score', fmt(s.maxScore)],
+        ['Passing score', fmt(s.passingScore)],
+        ['Pass rate (%)', fmt(s.passRate)],
+        ['Average time (sec)', fmt(s.avgTimeSec)],
+      ] as (string | number)[][],
+    };
+  }
+
+  private async buildQuestionAnalysisReport(examId: number, teacherId: number) {
+    const questions = await examAnalyticsService.getQuestions(examId, teacherId, 'teacher');
+    return {
+      title: `Question Analysis (Exam #${examId})`,
+      headers: ['#', 'Topic', 'Correct %', 'Skipped %', 'Avg time (s)', 'Discrimination', 'Quality'],
+      rows: questions.map((q) => [
+        q.orderIndex + 1,
+        q.topic?.name ?? '—',
+        q.correctRate ?? '—',
+        q.skippedRate ?? '—',
+        q.avgTimeSec ?? '—',
+        q.discrimination ?? '—',
+        q.qualityFlag,
+      ]) as (string | number)[][],
+    };
+  }
+
+  private async buildStudentResultsReport(examId: number, teacherId: number) {
+    const students = await examAnalyticsService.getStudents(examId, teacherId, 'teacher');
+    return {
+      title: `Student Results (Exam #${examId})`,
+      headers: ['Rank', 'Student', 'Score', 'Passed', 'Time (min)', 'Risk', 'Weak topics'],
+      rows: students.map((s) => [
+        s.rank,
+        s.student.name || s.student.username,
+        s.score,
+        s.passed === null ? '—' : s.passed ? 'Pass' : 'Fail',
+        s.timeSpentSec ? Math.round(s.timeSpentSec / 60) : 0,
+        s.riskLevel,
+        (s.weakTopics as Array<{ topicName: string }>).map((t) => t.topicName).join(', '),
+      ]) as (string | number)[][],
     };
   }
 

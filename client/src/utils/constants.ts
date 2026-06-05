@@ -66,6 +66,11 @@ export const API_ENDPOINTS = {
       BACKUPS: '/api/admin/system/backups',
       BACKUP_RESTORE: (id: number) => `/api/admin/system/backups/${id}/restore`,
     },
+    ANALYTICS: {
+      OVERVIEW: '/api/admin/analytics/overview',
+      CLASSES: '/api/admin/analytics/classes',
+      SUBJECTS: '/api/admin/analytics/subjects',
+    },
   },
   STUDENT_EXAMS: {
     LIST: '/api/student/exams',
@@ -105,6 +110,18 @@ export const API_ENDPOINTS = {
       `/api/exams/${id}/attempts/${attemptId}/answers/${answerId}/grade`,
     DELETE_ATTEMPT: (id: number, attemptId: number) =>
       `/api/exams/${id}/attempts/${attemptId}`,
+    // Advanced analytics (served under /api/teacher/exams/:id/analytics/*)
+    ANALYTICS_SUMMARY: (id: number) => `/api/teacher/exams/${id}/analytics/summary`,
+    ANALYTICS_QUESTIONS: (id: number) => `/api/teacher/exams/${id}/analytics/questions`,
+    ANALYTICS_TOPICS: (id: number) => `/api/teacher/exams/${id}/analytics/topics`,
+    ANALYTICS_STUDENTS: (id: number) => `/api/teacher/exams/${id}/analytics/students`,
+    ANALYTICS_STATUS: (id: number) => `/api/teacher/exams/${id}/analytics/status`,
+    ANALYTICS_RECALCULATE: (id: number) => `/api/teacher/exams/${id}/analytics/recalculate`,
+  },
+  REPORTS: {
+    EXPORT: '/api/teacher/reports/export',
+    HISTORY: '/api/teacher/reports/history',
+    DOWNLOAD: (id: number) => `/api/teacher/reports/${id}/download`,
   },
   CLASSES: {
     BASE: '/api/classes',
@@ -181,6 +198,8 @@ export const API_ENDPOINTS = {
   QUESTIONS: {
     BASE: '/api/questions',
     BY_ID: (id: number) => `/api/questions/${id}`,
+    QUALITY: (id: number) => `/api/questions/${id}/quality`,
+    REVIEW_STATUS: (id: number) => `/api/questions/${id}/review-status`,
     IMPORT: '/api/questions/import',
     IMPORT_TEMPLATE: '/api/questions/import-template',
     DOCUMENT_IMPORT_TEMPLATE: '/api/questions/document-import-template',

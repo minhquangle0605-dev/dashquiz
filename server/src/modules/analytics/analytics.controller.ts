@@ -330,3 +330,35 @@ export async function exportReport(req: Request, res: Response, next: NextFuncti
     next(error instanceof Error ? error : new Error('Unexpected error'));
   }
 }
+
+export async function getExportHistory(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const teacherId = req.user!.id;
+    const data = await teacherAnalyticsService.getExportHistory(teacherId);
+    res.json({
+      success: true,
+      message: 'Export history retrieved',
+      data,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    next(error instanceof Error ? error : new Error('Unexpected error'));
+  }
+}
+
+export async function getExportDownload(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const teacherId = req.user!.id;
+    const exportId = parseInt(req.params.id, 10);
+    if (isNaN(exportId)) throw new AppError('Invalid export ID', 400);
+    const data = await teacherAnalyticsService.getDownloadUrl(exportId, teacherId);
+    res.json({
+      success: true,
+      message: 'Download URL retrieved',
+      data,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    next(error instanceof Error ? error : new Error('Unexpected error'));
+  }
+}

@@ -6,7 +6,6 @@ import { Badge, type BadgeVariant } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
 import { listStudentExams } from '@/services/studentExam.api';
-import { startStudentExam } from '@/services/studentExam.api';
 import { formatDate } from '@/utils/format';
 import type { ClassItem, StudentExamItem } from '@/types/exam';
 
@@ -34,7 +33,6 @@ export function StudentClassExamsTab({ selectedClass }: StudentClassExamsTabProp
   const navigate = useNavigate();
   const [exams, setExams] = useState<StudentExamItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [startingId, setStartingId] = useState<number | null>(null);
 
   const fetchExams = useCallback(async () => {
     setLoading(true);
@@ -56,23 +54,10 @@ export function StudentClassExamsTab({ selectedClass }: StudentClassExamsTabProp
     fetchExams();
   }, [fetchExams]);
 
-  const handleStart = async (exam: StudentExamItem) => {
-    // Password-protected exams are unlocked inside TakeExamPage.
-    if (exam.hasPassword) {
-      navigate(`/student/exams/${exam.id}/take`);
-      return;
-    }
-    setStartingId(exam.id);
-    try {
-      await startStudentExam(exam.id);
-      navigate(`/student/exams/${exam.id}/take`);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Could not start the exam';
-      toast.error(msg);
-    } finally {
-      setStartingId(null);
-    }
-  };
+  // Open the pre-exam lobby; it shows the details/rules and owns start vs
+  // resume. The exam is passed in state so the lobby renders instantly.
+  const openLobby = (exam: StudentExamItem) =>
+    navigate(`/student/exams/${exam.id}`, { state: { exam } });
 
   return (
     <div className="space-y-4">
@@ -165,7 +150,7 @@ export function StudentClassExamsTab({ selectedClass }: StudentClassExamsTabProp
                       <Button
                         variant="primary"
                         size="sm"
-                        onClick={() => navigate(`/student/exams/${exam.id}/take`)}
+                        onClick={() => openLobby(exam)}
                       >
                         Resume
                       </Button>
@@ -173,19 +158,26 @@ export function StudentClassExamsTab({ selectedClass }: StudentClassExamsTabProp
                       <Button
                         variant="primary"
                         size="sm"
-                        isLoading={startingId === exam.id}
-                        onClick={() => handleStart(exam)}
+                        onClick={() => openLobby(exam)}
                       >
                         Start
                       </Button>
                     ) : exam.phase === 'completed' ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => navigate(`/student/exams`)}
-                      >
-                        View Results
-                      </Button>
+                      exam.lastAttemptId != null ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            navigate(`/student/attempts/${exam.lastAttemptId}/result`)
+                          }
+                        >
+                          View Results
+                        </Button>
+                      ) : (
+                        <Button variant="secondary" size="sm" disabled>
+                          Closed
+                        </Button>
+                      )
                     ) : (
                       <Button variant="secondary" size="sm" disabled>
                         Not yet available

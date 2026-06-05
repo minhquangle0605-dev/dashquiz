@@ -5,6 +5,7 @@ import { AppError } from '../../middlewares/errorHandler';
 import { logger } from '../../utils/logger';
 import { PAGINATION, COMPLETED_ATTEMPT_STATUSES } from '../../utils/constants';
 import { invalidateStudentCache } from '../analytics/analytics.service';
+import { invalidateExamAnalytics } from '../exam-analytics/examAnalytics.service';
 import { computeFinalScore } from '../exam/grading';
 import { getReviewWindowFlags, hasAnyReview } from '../exam/reviewOptions';
 import { buildAttemptQuestions } from './attemptQuestions';
@@ -308,6 +309,16 @@ export class StudentExamService {
       const finalScore = computeFinalScore(completedAttempts, exam.gradingMethod);
       const maxedOut = completedAttempts.length >= exam.maxAttempts;
       const attemptsRemaining = Math.max(0, exam.maxAttempts - completedAttempts.length);
+      // The most recently finished attempt — what the "View Results" CTA opens
+      // (the result page is keyed by attemptId, not examId).
+      const lastAttemptId =
+        completedAttempts.length > 0
+          ? [...completedAttempts].sort(
+              (a, b) =>
+                new Date(b.submittedAt ?? b.startedAt).getTime() -
+                new Date(a.submittedAt ?? a.startedAt).getTime(),
+            )[0].id
+          : null;
 
       // Phase 5: schedules relevant to THIS student = global (classId null) plus any
       // scoped to a class the student is in. Per-class gating is opt-in: it only
@@ -369,6 +380,7 @@ export class StudentExamService {
         attemptsRemaining,
         hasInProgress,
         canStart,
+        lastAttemptId,
       };
     });
 
@@ -1057,6 +1069,9 @@ export class StudentExamService {
 
     invalidateStudentCache(attempt.studentId).catch((err) =>
       logger.warn('Failed to invalidate analytics cache:', err),
+    );
+    invalidateExamAnalytics(attempt.examId).catch((err) =>
+      logger.warn('Failed to invalidate exam analytics cache:', err),
     );
 
     // Real-time: emit exam:student-submitted so teacher sees it live
