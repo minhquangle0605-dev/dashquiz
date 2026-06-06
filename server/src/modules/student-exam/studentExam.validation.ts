@@ -12,6 +12,17 @@ export const startExamSchema = z
   .object({ password: z.string().max(100).optional() })
   .optional();
 
+export const studentPrecheckSchema = z
+  .object({
+    deviceId: z.string().trim().max(191).optional(),
+    userAgent: z.string().max(512).optional(),
+    supportsFullscreen: z.boolean().optional(),
+    cameraPermission: z.enum(['granted', 'denied', 'prompt', 'unknown']).optional(),
+    screenSize: z.string().max(40).optional(),
+    timezoneOffsetMin: z.coerce.number().int().min(-1440).max(1440).optional(),
+  })
+  .optional();
+
 const answerValueSchema = z.union([
   z.number().int().positive(),
   z.array(z.number().int().positive()),
@@ -41,16 +52,45 @@ export const attemptEventSchema = z.object({
     'HEARTBEAT',
     'TAB_HIDDEN',
     'WINDOW_BLUR',
+    'FULLSCREEN_EXITED',
+    'FULLSCREEN_RESTORED',
     'COPY',
     'PASTE',
+    'CUT',
     'CONTEXT_MENU',
     'SHORTCUT_BLOCKED',
     'OFFLINE',
     'ONLINE',
+    'CAMERA_PERMISSION_MISSING',
+    'DEVICE_CHANGED',
   ]),
   clientElapsedSec: z.coerce.number().int().min(0).optional(),
   questionId: z.coerce.number().int().positive().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
+});
+
+export const attemptEventsBatchSchema = z.object({
+  events: z.array(attemptEventSchema).min(1).max(50),
+});
+
+export const securitySessionSchema = z.object({
+  deviceId: z.string().trim().min(8).max(191),
+  userAgent: z.string().max(512).optional(),
+  fullscreenState: z.boolean().optional(),
+  cameraPermission: z.string().max(30).optional().nullable(),
+  screenSize: z.string().max(40).optional().nullable(),
+});
+
+export const securityHeartbeatSchema = z.object({
+  deviceId: z.string().trim().max(191).optional(),
+  fullscreenState: z.boolean().optional(),
+  focusState: z.boolean().optional(),
+  cameraPermission: z.string().max(30).optional().nullable(),
+  screenSize: z.string().max(40).optional().nullable(),
+  answeredCount: z.coerce.number().int().min(0).optional(),
+  unansweredCount: z.coerce.number().int().min(0).optional(),
+  timeRemainingSec: z.coerce.number().int().min(0).optional(),
+  currentQuestionId: z.coerce.number().int().positive().optional().nullable(),
 });
 
 export const listAttemptsQuerySchema = z.object({
@@ -62,5 +102,9 @@ export const listAttemptsQuerySchema = z.object({
 export type ListStudentExamsQuery = z.infer<typeof listStudentExamsQuerySchema>;
 export type SaveAnswersInput = z.infer<typeof saveAnswersSchema>;
 export type SubmitAttemptInput = z.infer<typeof submitAttemptSchema>;
+export type StudentPrecheckInput = z.infer<typeof studentPrecheckSchema>;
 export type AttemptEventInput = z.infer<typeof attemptEventSchema>;
+export type AttemptEventsBatchInput = z.infer<typeof attemptEventsBatchSchema>;
+export type SecuritySessionInput = z.infer<typeof securitySessionSchema>;
+export type SecurityHeartbeatInput = z.infer<typeof securityHeartbeatSchema>;
 export type ListAttemptsQuery = z.infer<typeof listAttemptsQuerySchema>;

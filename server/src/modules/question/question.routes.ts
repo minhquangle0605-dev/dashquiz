@@ -9,6 +9,7 @@ import {
   updateQuestionSchema,
   listQuestionsQuerySchema,
   addTagsSchema,
+  bulkUpdateSchema,
 } from './question.validation';
 import { ROLES } from '../../utils/constants';
 import { FILE_UPLOAD } from '../../utils/constants';
@@ -188,6 +189,24 @@ router.post(
   questionController.bulkDeleteQuestions,
 );
 
+// ── AI enrichment suggestions (teacher/admin) ──
+router.post(
+  '/ai-suggest',
+  authenticate,
+  authorize(ROLES.TEACHER, ROLES.ADMIN),
+  questionController.aiSuggestQuestion,
+);
+
+// ── Bulk update (difficulty / review status) (teacher/admin) ──
+router.post(
+  '/bulk-update',
+  authenticate,
+  authorize(ROLES.TEACHER, ROLES.ADMIN),
+  validate(bulkUpdateSchema),
+  activityLogger('BULK_UPDATE_QUESTIONS', 'question'),
+  questionController.bulkUpdateQuestions,
+);
+
 // ── Get single question ─────────────────────────
 router.get(
   '/:id',
@@ -240,6 +259,22 @@ router.delete(
   authorize(ROLES.TEACHER, ROLES.ADMIN),
   activityLogger('REMOVE_QUESTION_TAG', 'question_tag'),
   questionController.removeTag,
+);
+
+// ── Version history (teacher/admin) ─────────────
+router.get(
+  '/:id/versions',
+  authenticate,
+  authorize(ROLES.TEACHER, ROLES.ADMIN),
+  questionController.getQuestionVersions,
+);
+
+router.post(
+  '/:id/versions/:versionId/restore',
+  authenticate,
+  authorize(ROLES.TEACHER, ROLES.ADMIN),
+  activityLogger('RESTORE_QUESTION_VERSION', 'question'),
+  questionController.restoreQuestionVersion,
 );
 
 export default router;

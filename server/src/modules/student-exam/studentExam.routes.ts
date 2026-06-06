@@ -5,9 +5,13 @@ import { validate } from '../../middlewares/validate';
 import { activityLogger } from '../../middlewares/activityLogger';
 import {
   listStudentExamsQuerySchema,
+  studentPrecheckSchema,
   saveAnswersSchema,
   submitAttemptSchema,
   attemptEventSchema,
+  attemptEventsBatchSchema,
+  securitySessionSchema,
+  securityHeartbeatSchema,
   listAttemptsQuerySchema,
 } from './studentExam.validation';
 import { ROLES } from '../../utils/constants';
@@ -26,6 +30,12 @@ router.get(
 );
 
 // ── Start exam (POST /api/student/exams/:id/start) ──────
+router.post(
+  '/exams/:id/precheck',
+  validate(studentPrecheckSchema),
+  studentExamController.runPrecheck,
+);
+
 router.post(
   '/exams/:id/start',
   activityLogger('START_EXAM', 'exam_attempt'),
@@ -52,6 +62,24 @@ router.post(
   '/attempts/:id/events',
   validate(attemptEventSchema),
   studentExamController.recordAttemptEvent,
+);
+
+router.post(
+  '/attempts/:id/events/batch',
+  validate(attemptEventsBatchSchema),
+  studentExamController.recordAttemptEventsBatch,
+);
+
+router.post(
+  '/attempts/:id/security-session',
+  validate(securitySessionSchema),
+  studentExamController.createSecuritySession,
+);
+
+router.post(
+  '/attempts/:id/heartbeat',
+  validate(securityHeartbeatSchema),
+  studentExamController.recordSecurityHeartbeat,
 );
 
 // ── Get result (GET /api/student/attempts/:id/result) ───

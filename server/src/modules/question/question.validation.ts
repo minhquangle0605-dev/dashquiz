@@ -170,8 +170,24 @@ export const listQuestionsQuerySchema = z.object({
     }),
   questionType: z.enum(QUESTION_TYPES).optional(),
   keyword: z.string().max(200).optional(),
+  reviewStatus: z
+    .enum(['needs_review', 'needs_revision', 'approved', 'good', 'rejected'])
+    .optional(),
+  tag: z.string().max(50).optional(),
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(20),
+});
+
+// ═══════════════════════════════════════════════
+// BULK UPDATE (set difficulty / review status for many)
+// ═══════════════════════════════════════════════
+
+export const bulkUpdateSchema = z.object({
+  ids: z.array(z.coerce.number().int().positive()).min(1, 'At least one question is required'),
+  difficulty: z.coerce.number().int().min(1).max(5).optional(),
+  reviewStatus: z
+    .enum(['needs_review', 'needs_revision', 'approved', 'good', 'rejected'])
+    .optional(),
 });
 
 // ═══════════════════════════════════════════════
@@ -202,4 +218,5 @@ export type CreateQuestionInput = z.infer<typeof createQuestionSchema>;
 export type UpdateQuestionInput = z.infer<typeof updateQuestionSchema>;
 export type ListQuestionsQuery = z.infer<typeof listQuestionsQuerySchema>;
 export type AddTagsInput = z.infer<typeof addTagsSchema>;
+export type BulkUpdateInput = z.infer<typeof bulkUpdateSchema>;
 export type ImportQuestionsInput = z.infer<typeof importQuestionsSchema>;

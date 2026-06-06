@@ -4,6 +4,9 @@ import type { PaginatedResponse } from '@/types/api';
 import type {
   Question,
   QuestionFilter,
+  QuestionVersion,
+  ReviewStatus,
+  AiSuggestion,
   CreateQuestionPayload,
   UpdateQuestionPayload,
   ImportQuestionResult,
@@ -79,6 +82,34 @@ export async function updateQuestion(
 
 export async function deleteQuestion(id: number): Promise<void> {
   await api.delete(API_ENDPOINTS.QUESTIONS.BY_ID(id));
+}
+
+export async function bulkUpdateQuestions(
+  ids: number[],
+  changes: { difficulty?: number; reviewStatus?: ReviewStatus },
+): Promise<void> {
+  await api.post(API_ENDPOINTS.QUESTIONS.BULK_UPDATE, { ids, ...changes });
+}
+
+export async function aiSuggestQuestion(input: {
+  content: string;
+  questionType: string;
+  options: Array<{ label: string; content: string; isCorrect: boolean }>;
+  subjectName?: string;
+  chapterName?: string;
+  currentDifficulty?: number;
+}): Promise<AiSuggestion> {
+  const { data } = await api.post(API_ENDPOINTS.QUESTIONS.AI_SUGGEST, input);
+  return data.data;
+}
+
+export async function getQuestionVersions(id: number): Promise<QuestionVersion[]> {
+  const { data } = await api.get(API_ENDPOINTS.QUESTIONS.VERSIONS(id));
+  return data.data ?? [];
+}
+
+export async function restoreQuestionVersion(id: number, versionId: number): Promise<void> {
+  await api.post(API_ENDPOINTS.QUESTIONS.VERSION_RESTORE(id, versionId), {});
 }
 
 export async function bulkDeleteQuestions(ids: number[]): Promise<void> {

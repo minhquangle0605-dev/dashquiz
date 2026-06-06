@@ -1,0 +1,21 @@
+{
+  "name": "WebQuiz Assessment & Learning Analytics",
+  "short_name": "WebQuiz",
+  "description": "Mobile-ready assessment and learning analytics for schools.",
+  "start_url": "/student/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#4f46e5",
+  "background_color": "#f8fafc",
+  "icons": [
+    {
+      "src": "/webquiz-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["education", "productivity"],
+  "lang": "en"
+}

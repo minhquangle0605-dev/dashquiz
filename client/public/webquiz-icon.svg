@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="WebQuiz">
+  <rect width="512" height="512" rx="112" fill="#4f46e5"/>
+  <path d="M132 144c0-24.3 19.7-44 44-44h160c24.3 0 44 19.7 44 44v224c0 24.3-19.7 44-44 44H176c-24.3 0-44-19.7-44-44V144Z" fill="#fff"/>
+  <path d="M190 184h132M190 238h132M190 292h72" stroke="#4f46e5" stroke-width="28" stroke-linecap="round"/>
+  <circle cx="326" cy="320" r="42" fill="#06b6d4"/>
+  <path d="m306 319 14 14 30-34" fill="none" stroke="#fff" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

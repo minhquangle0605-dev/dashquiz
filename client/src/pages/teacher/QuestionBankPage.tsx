@@ -12,17 +12,29 @@ import {
 } from '@/components/shared/SubjectChapterTopicSelect';
 import { MathText } from '@/components/shared/MathText';
 import { QuestionFormModal } from '@/components/shared/QuestionFormModal';
-import { ImportExcelModal } from '@/components/shared/ImportExcelModal';
-import { ImportDocumentModal } from '@/components/shared/ImportDocumentModal';
-import { ImportZipModal } from '@/components/shared/ImportZipModal';
+import { ImportWizard } from '@/components/shared/ImportWizard';
+import { DuplicatesModal } from '@/components/shared/DuplicatesModal';
+import { ReviewStatusBadge, REVIEW_STATUS_OPTIONS } from '@/components/shared/ReviewStatusBadge';
+import { VersionHistoryModal } from '@/components/shared/VersionHistoryModal';
 import { useDebounce } from '@/hooks/useDebounce';
 import {
   listQuestions,
   deleteQuestion,
   bulkDeleteQuestions,
+  bulkUpdateQuestions,
   exportQuestionsGift,
+  updateQuestion,
+  addTags,
+  aiSuggestQuestion,
 } from '@/services/question.api';
-import type { Question, QuestionFilter, QuestionKind } from '@/types/question';
+import { AiSuggestionPanel } from '@/components/shared/AiSuggestionPanel';
+import type {
+  Question,
+  QuestionFilter,
+  QuestionKind,
+  ReviewStatus,
+  AiSuggestion,
+} from '@/types/question';
 import type { PaginatedResponse } from '@/types/api';
 
 const PAGE_SIZE = 12;
@@ -41,6 +53,7 @@ export default function QuestionBankPage() {
   );
   const [questionTypeFilter, setQuestionTypeFilter] = useState<QuestionKind | ''>('');
   const [difficultyFilter, setDifficultyFilter] = useState<string>('');
+  const [reviewStatusFilter, setReviewStatusFilter] = useState<ReviewStatus | ''>('');
   const [searchText, setSearchText] = useState('');
   const debouncedSearch = useDebounce(searchText, 400);
   const [page, setPage] = useState(1);
@@ -53,9 +66,12 @@ export default function QuestionBankPage() {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editQuestion, setEditQuestion] = useState<Question | null>(null);
-  const [showImportModal, setShowImportModal] = useState(false);
-  const [showImportDocModal, setShowImportDocModal] = useState(false);
-  const [showImportZipModal, setShowImportZipModal] = useState(false);
+  const [showWizard, setShowWizard] = useState(false);
+  const [showDuplicates, setShowDuplicates] = useState(false);
+  const [versionQuestion, setVersionQuestion] = useState<Question | null>(null);
+  const [bulkUpdating, setBulkUpdating] = useState(false);
+  const [aiSuggestions, setAiSuggestions] = useState<Record<number, AiSuggestion>>({});
+  const [aiLoadingId, setAiLoadingId] = useState<number | null>(null);
   const [deleting, setDeleting] = useState<number | null>(null);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [exportingGift, setExportingGift] = useState(false);
@@ -77,6 +93,7 @@ export default function QuestionBankPage() {
       if (curriculum.chapterId) params.chapterId = Number(curriculum.chapterId);
       if (questionTypeFilter) params.questionType = questionTypeFilter;
       if (difficultyFilter) params.difficulty = Number(difficultyFilter);
+      if (reviewStatusFilter) params.reviewStatus = reviewStatusFilter;
       if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
 
       const res = await listQuestions(params);
@@ -86,7 +103,7 @@ export default function QuestionBankPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, curriculum, questionTypeFilter, difficultyFilter, debouncedSearch]);
+  }, [page, curriculum, questionTypeFilter, difficultyFilter, reviewStatusFilter, debouncedSearch]);
 
   useEffect(() => {
     fetchQuestions();
@@ -96,7 +113,7 @@ export default function QuestionBankPage() {
   useEffect(() => {
     setPage(1);
     setSelectedIds([]);
-  }, [curriculum, questionTypeFilter, difficultyFilter, debouncedSearch]);
+  }, [curriculum, questionTypeFilter, difficultyFilter, reviewStatusFilter, debouncedSearch]);
 
   // ── Handlers ──────────────────────────────────────
   const handleDelete = async (q: Question) => {
@@ -141,6 +158,59 @@ export default function QuestionBankPage() {
     }
   };
 
+  const handleBulkUpdate = async (changes: { difficulty?: number; reviewStatus?: ReviewStatus }) => {
+    if (selectedIds.length === 0) return;
+    setBulkUpdating(true);
+    try {
+      await bulkUpdateQuestions(selectedIds, changes);
+      toast.success(`Updated ${selectedIds.length} question(s).`);
+      fetchQuestions();
+    } catch (err) {
+      const e = err as { response?: { data?: { message?: string } } };
+      toast.error(e?.response?.data?.message || 'Failed to update questions.');
+    } finally {
+      setBulkUpdating(false);
+    }
+  };
+
+  const handleAiSuggest = async (q: Question) => {
+    setAiLoadingId(q.id);
+    try {
+      const suggestion = await aiSuggestQuestion({
+        content: q.content,
+        questionType: q.questionType,
+        options: q.options.map((o) => ({ label: o.label, content: o.content, isCorrect: o.isCorrect })),
+        subjectName: q.subject?.name,
+        chapterName: q.chapter?.name,
+        currentDifficulty: q.difficulty,
+      });
+      setAiSuggestions((prev) => ({ ...prev, [q.id]: suggestion }));
+      if (!suggestion.available) toast.error('AI suggestions are not configured on the server.');
+    } catch (err) {
+      const e = err as { response?: { data?: { message?: string } } };
+      toast.error(e?.response?.data?.message || 'AI suggestion failed.');
+    } finally {
+      setAiLoadingId(null);
+    }
+  };
+
+  const applyAi = async (fn: () => Promise<unknown>) => {
+    try {
+      await fn();
+      toast.success('Suggestion applied.');
+      fetchQuestions();
+    } catch {
+      toast.error('Failed to apply the suggestion.');
+    }
+  };
+
+  const dismissAi = (id: number) =>
+    setAiSuggestions((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+
   const handleExportGift = async () => {
     const ids = selectedIds.length > 0 ? selectedIds : questions.map((q) => q.id);
     if (ids.length === 0) return;
@@ -167,6 +237,7 @@ export default function QuestionBankPage() {
     setCurriculum(emptyCurriculumSelection());
     setQuestionTypeFilter('');
     setDifficultyFilter('');
+    setReviewStatusFilter('');
     setSearchText('');
     setPage(1);
   };
@@ -181,6 +252,7 @@ export default function QuestionBankPage() {
     curriculum.chapterId !== '' ||
     questionTypeFilter !== '' ||
     difficultyFilter !== '' ||
+    reviewStatusFilter !== '' ||
     searchText.trim() !== '';
 
   return (
@@ -252,6 +324,25 @@ export default function QuestionBankPage() {
               >
                 <option value="">All question types</option>
                 {QUESTION_TYPE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Review status filter (review queue) */}
+            <div className="mt-5">
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                Review status
+              </label>
+              <select
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                value={reviewStatusFilter}
+                onChange={(e) => setReviewStatusFilter(e.target.value as ReviewStatus | '')}
+              >
+                <option value="">All review statuses</option>
+                {REVIEW_STATUS_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
@@ -370,6 +461,42 @@ export default function QuestionBankPage() {
                   Delete Selected ({selectedIds.length})
                 </Button>
               )}
+              {selectedIds.length > 0 && (
+                <>
+                  <select
+                    disabled={bulkUpdating}
+                    value=""
+                    onChange={(e) => {
+                      if (e.target.value) handleBulkUpdate({ reviewStatus: e.target.value as ReviewStatus });
+                    }}
+                    className="rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm text-slate-700 disabled:opacity-50"
+                    title="Set review status for selected"
+                  >
+                    <option value="">Set status…</option>
+                    {REVIEW_STATUS_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    disabled={bulkUpdating}
+                    value=""
+                    onChange={(e) => {
+                      if (e.target.value) handleBulkUpdate({ difficulty: Number(e.target.value) });
+                    }}
+                    className="rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm text-slate-700 disabled:opacity-50"
+                    title="Set difficulty for selected"
+                  >
+                    <option value="">Set difficulty…</option>
+                    {[1, 2, 3, 4, 5].map((d) => (
+                      <option key={d} value={d}>
+                        Difficulty {d}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              )}
               <Button
                 variant="outline"
                 size="md"
@@ -396,49 +523,8 @@ export default function QuestionBankPage() {
               <Button
                 variant="outline"
                 size="md"
-                onClick={() => setShowImportDocModal(true)}
-                title="Extract questions from Word or PDF using AI"
-              >
-                <svg
-                  className="mr-1.5 h-4 w-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
-                  />
-                </svg>
-                AI Import (Word/PDF)
-              </Button>
-              <Button
-                variant="outline"
-                size="md"
-                onClick={() => setShowImportZipModal(true)}
-                title="Import questions with images from a ZIP bundle"
-              >
-                <svg
-                  className="mr-1.5 h-4 w-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"
-                  />
-                </svg>
-                Import ZIP (Images)
-              </Button>
-              <Button
-                variant="outline"
-                size="md"
-                onClick={() => setShowImportModal(true)}
+                onClick={() => setShowWizard(true)}
+                title="Import questions from Excel, Word, PDF, TXT, GIFT, or a ZIP bundle"
               >
                 <svg
                   className="mr-1.5 h-4 w-4"
@@ -453,7 +539,28 @@ export default function QuestionBankPage() {
                     d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"
                   />
                 </svg>
-                Import Excel
+                Import Questions
+              </Button>
+              <Button
+                variant="outline"
+                size="md"
+                onClick={() => setShowDuplicates(true)}
+                title="Find and resolve near-duplicate questions"
+              >
+                <svg
+                  className="mr-1.5 h-4 w-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"
+                  />
+                </svg>
+                Duplicates
               </Button>
               <Button
                 variant="primary"
@@ -628,6 +735,7 @@ export default function QuestionBankPage() {
                           <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
                             {q.questionType.replace('_', ' ')}
                           </span>
+                          <ReviewStatusBadge status={q.review?.status} />
                           {q.subject && (
                             <span className="rounded bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">
                               {q.subject.name}
@@ -765,6 +873,24 @@ export default function QuestionBankPage() {
                           )}
                         </div>
 
+                        {/* AI suggestions */}
+                        {aiSuggestions[q.id] && (
+                          <div className="mb-4">
+                            <AiSuggestionPanel
+                              suggestion={aiSuggestions[q.id]}
+                              current={{ difficulty: q.difficulty, explanation: q.explanation }}
+                              onApplyDifficulty={(d) =>
+                                applyAi(() => updateQuestion(q.id, { difficulty: d }))
+                              }
+                              onApplyExplanation={(t) =>
+                                applyAi(() => updateQuestion(q.id, { explanation: t }))
+                              }
+                              onApplyTags={(tags) => applyAi(() => addTags(q.id, tags))}
+                              onDismiss={() => dismissAi(q.id)}
+                            />
+                          </div>
+                        )}
+
                         {/* Actions */}
                         <div className="flex items-center gap-2">
                           <Button
@@ -786,6 +912,36 @@ export default function QuestionBankPage() {
                               />
                             </svg>
                             Edit
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setVersionQuestion(q)}
+                            title="View version history"
+                          >
+                            <svg
+                              className="mr-1 h-3.5 w-3.5"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                              strokeWidth={2}
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                              />
+                            </svg>
+                            History
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={aiLoadingId === q.id}
+                            onClick={() => handleAiSuggest(q)}
+                            title="Get AI enrichment suggestions"
+                          >
+                            ✨ {aiLoadingId === q.id ? 'Thinking…' : 'AI suggest'}
                           </Button>
                           <Button
                             variant="danger"
@@ -858,22 +1014,24 @@ export default function QuestionBankPage() {
         editQuestion={editQuestion}
       />
 
-      <ImportExcelModal
-        isOpen={showImportModal}
-        onClose={() => setShowImportModal(false)}
+      <ImportWizard
+        isOpen={showWizard}
+        onClose={() => setShowWizard(false)}
         onImported={fetchQuestions}
       />
 
-      <ImportDocumentModal
-        isOpen={showImportDocModal}
-        onClose={() => setShowImportDocModal(false)}
-        onImported={fetchQuestions}
+      <DuplicatesModal
+        isOpen={showDuplicates}
+        onClose={() => setShowDuplicates(false)}
+        subjectId={curriculum.subjectId ? Number(curriculum.subjectId) : undefined}
+        onChanged={fetchQuestions}
       />
 
-      <ImportZipModal
-        isOpen={showImportZipModal}
-        onClose={() => setShowImportZipModal(false)}
-        onImported={fetchQuestions}
+      <VersionHistoryModal
+        isOpen={versionQuestion !== null}
+        onClose={() => setVersionQuestion(null)}
+        question={versionQuestion}
+        onRestored={fetchQuestions}
       />
     </div>
   );

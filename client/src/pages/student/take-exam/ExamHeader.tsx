@@ -1,6 +1,7 @@
 interface ExamHeaderProps {
   title: string;
   lastSaved: Date | null;
+  saveStatus: 'idle' | 'saving' | 'saved' | 'pending' | 'offline' | 'error';
   tabSwitchCount: number;
   timeLeft: number;
   isWarning: boolean;
@@ -17,12 +18,33 @@ function formatTime(sec: number) {
 export function ExamHeader({
   title,
   lastSaved,
+  saveStatus,
   tabSwitchCount,
   timeLeft,
   isWarning,
   isCritical,
   onToggleSidebar,
 }: ExamHeaderProps) {
+  const savedAt = lastSaved?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const saveLabel =
+    saveStatus === 'saving'
+      ? 'Saving...'
+      : saveStatus === 'pending'
+        ? 'Unsynced changes'
+        : saveStatus === 'offline'
+          ? 'Offline draft'
+          : saveStatus === 'error'
+            ? 'Save retrying'
+            : savedAt
+              ? `Saved ${savedAt}`
+              : 'Autosave ready';
+  const saveTone =
+    saveStatus === 'offline' || saveStatus === 'error'
+      ? 'bg-[var(--color-warning-soft)] text-[var(--color-warning)]'
+      : saveStatus === 'pending' || saveStatus === 'saving'
+        ? 'bg-[var(--color-primary-soft)] text-[var(--color-primary)]'
+        : 'bg-[var(--color-success-soft)] text-[var(--color-success)]';
+
   return (
     <header className="flex items-center justify-between gap-4 border-b border-[var(--color-border-subtle)] bg-[var(--color-bg-card)] px-4 py-3 shadow-[var(--shadow-sm)] sm:px-6">
       <div className="flex min-w-0 items-center gap-3">
@@ -35,14 +57,30 @@ export function ExamHeader({
           <h1 className="truncate text-sm font-semibold tracking-tight text-[var(--color-text-primary)] sm:text-base">
             {title}
           </h1>
-          {lastSaved && (
-            <span className="hidden items-center gap-1 text-[11px] font-medium text-[var(--color-success)] sm:inline-flex">
+          <span
+            className={`mt-1 inline-flex max-w-full items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${saveTone}`}
+            aria-live="polite"
+          >
+            {saveStatus === 'saving' ? (
+              <span
+                className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent"
+                aria-hidden
+              />
+            ) : (
               <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d={
+                    saveStatus === 'offline' || saveStatus === 'error'
+                      ? 'M12 9v3.75m0 3.75h.008v.008H12v-.008zM10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z'
+                      : 'M4.5 12.75l6 6 9-13.5'
+                  }
+                />
               </svg>
-              Auto-saved
-            </span>
-          )}
+            )}
+            <span className="truncate">{saveLabel}</span>
+          </span>
         </div>
       </div>
 

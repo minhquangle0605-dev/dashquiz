@@ -63,6 +63,15 @@ const iconDiscussions = (
     />
   </svg>
 );
+const iconNotifications = (
+  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M14.857 17.082a4.5 4.5 0 01-5.714 0M18 8.25a6 6 0 10-12 0c0 7-3 7-3 8.25h18C21 15.25 18 15.25 18 8.25z"
+    />
+  </svg>
+);
 const iconTimetable = (
   <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
     <path
@@ -74,20 +83,30 @@ const iconTimetable = (
 );
 
 export default function StudentLayout() {
+  const navItems = [
+    { to: '/student/dashboard', label: 'Dashboard', end: true, icon: iconDashboard },
+    { to: '/student/classes', label: 'My Classes', icon: iconClasses },
+    { to: '/student/timetable', label: 'Timetable', icon: iconTimetable },
+    { to: '/student/knowledge-graph', label: 'Knowledge Graph', icon: iconGraph },
+    { to: '/student/exams', label: 'Exams', icon: iconExam },
+    { to: '/student/ai-practice', label: 'AI Practice', icon: iconAI },
+    { to: '/student/discussions', label: 'Discussions', icon: iconDiscussions },
+    { to: '/student/notifications', label: 'Notifications', icon: iconNotifications },
+    { to: '/student/profile', label: 'Profile', icon: iconProfile },
+  ];
+
   return (
     <DashboardShell
       roleLabel="Student"
       sidebarClassName="bg-gradient-to-b from-indigo-600 via-indigo-800 to-violet-950"
       activeNavClassName="bg-white text-indigo-900"
-      navItems={[
-        { to: '/student/dashboard', label: 'Dashboard', end: true, icon: iconDashboard },
-        { to: '/student/classes', label: 'My Classes', icon: iconClasses },
-        { to: '/student/timetable', label: 'Timetable', icon: iconTimetable },
-        { to: '/student/knowledge-graph', label: 'Knowledge Graph', icon: iconGraph },
-        { to: '/student/exams', label: 'Exams', icon: iconExam },
-        { to: '/student/ai-practice', label: 'AI Practice', icon: iconAI },
-        { to: '/student/discussions', label: 'Discussions', icon: iconDiscussions },
-        { to: '/student/profile', label: 'Profile', icon: iconProfile },
+      navItems={navItems}
+      mobileNavItems={[
+        navItems[0],
+        navItems[4],
+        navItems[1],
+        navItems[7],
+        navItems[8],
       ]}
     />
   );

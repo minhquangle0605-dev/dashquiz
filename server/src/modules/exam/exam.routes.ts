@@ -11,6 +11,8 @@ import {
   assignExamSchema,
   listExamsQuerySchema,
   examMonitoringQuerySchema,
+  examSecuritySettingsSchema,
+  proctorReviewSchema,
   gradeAnswerSchema,
 } from './exam.validation';
 import { ROLES } from '../../utils/constants';
@@ -117,6 +119,46 @@ router.get(
   authorize(ROLES.TEACHER, ROLES.ADMIN),
   validate(examMonitoringQuerySchema, 'query'),
   examController.getMonitoring,
+);
+
+router.get(
+  '/:id/proctoring/live',
+  authenticate,
+  authorize(ROLES.TEACHER, ROLES.ADMIN),
+  validate(examMonitoringQuerySchema, 'query'),
+  examController.getMonitoring,
+);
+
+router.get(
+  '/:id/security-settings',
+  authenticate,
+  authorize(ROLES.TEACHER, ROLES.ADMIN),
+  examController.getSecuritySettings,
+);
+
+router.put(
+  '/:id/security-settings',
+  authenticate,
+  authorize(ROLES.TEACHER, ROLES.ADMIN),
+  validate(examSecuritySettingsSchema),
+  activityLogger('UPDATE_EXAM_SECURITY_SETTINGS', 'exam'),
+  examController.updateSecuritySettings,
+);
+
+router.get(
+  '/:id/attempts/:attemptId/evidence',
+  authenticate,
+  authorize(ROLES.TEACHER, ROLES.ADMIN),
+  examController.getEvidenceReport,
+);
+
+router.put(
+  '/:id/attempts/:attemptId/review',
+  authenticate,
+  authorize(ROLES.TEACHER, ROLES.ADMIN),
+  validate(proctorReviewSchema),
+  activityLogger('REVIEW_EXAM_ATTEMPT_SECURITY', 'exam_attempt'),
+  examController.saveProctorReview,
 );
 
 // ── Reports (Grades / Responses / Statistics / Manual grading) ──

@@ -11,11 +11,16 @@ import { getReviewWindowFlags, hasAnyReview } from '../exam/reviewOptions';
 import { buildAttemptQuestions } from './attemptQuestions';
 import { notificationService } from '../notification/notification.service';
 import { emitStudentSubmitted, emitDashboardUpdate, emitAttemptEvent } from '../../socket';
+import { examSecurityService } from '../exam/examSecurity.service';
 import type {
   ListStudentExamsQuery,
   SaveAnswersInput,
   SubmitAttemptInput,
+  StudentPrecheckInput,
   AttemptEventInput,
+  AttemptEventsBatchInput,
+  SecuritySessionInput,
+  SecurityHeartbeatInput,
   ListAttemptsQuery,
 } from './studentExam.validation';
 
@@ -183,6 +188,8 @@ export class StudentExamService {
       questionId: data.questionId,
       metadata: data.metadata,
     });
+    const violationResult = await examSecurityService.normalizeAttemptEvent(event, attempt);
+    const risk = violationResult ? await examSecurityService.getAttemptRiskSummary(attemptId) : null;
 
     emitAttemptEvent(attempt.examId, {
       attemptId,
@@ -203,8 +210,80 @@ export class StudentExamService {
         attemptId: event.attemptId,
         type: event.type,
         occurredAt: event.occurredAt,
+        risk: risk
+          ? { ...risk, violation: violationResult?.violation ?? null }
+          : null,
       },
     };
+  }
+
+  async recordAttemptEventsBatch(
+    attemptId: number,
+    data: AttemptEventsBatchInput,
+    studentId: number,
+  ) {
+    const results = [];
+    for (const event of data.events) {
+      const result = await this.recordAttemptEvent(attemptId, event, studentId);
+      results.push(result.data);
+    }
+
+    const risk = await examSecurityService.getAttemptRiskSummary(attemptId);
+    return {
+      success: true,
+      message: 'Attempt events recorded',
+      data: {
+        count: results.length,
+        events: results,
+        risk,
+      },
+    };
+  }
+
+  async runPrecheck(
+    examId: number,
+    studentId: number,
+    data: NonNullable<StudentPrecheckInput>,
+    ipAddress: string,
+  ) {
+    return examSecurityService.runStudentPrecheck(examId, studentId, data, ipAddress);
+  }
+
+  async createSecuritySession(
+    attemptId: number,
+    data: SecuritySessionInput,
+    studentId: number,
+    ipAddress: string,
+  ) {
+    return examSecurityService.createOrUpdateSecuritySession(attemptId, studentId, data, ipAddress);
+  }
+
+  async recordSecurityHeartbeat(
+    attemptId: number,
+    data: SecurityHeartbeatInput,
+    studentId: number,
+    ipAddress: string,
+  ) {
+    await examSecurityService.touchSecuritySession(attemptId, studentId, data, ipAddress);
+    return this.recordAttemptEvent(
+      attemptId,
+      {
+        type: 'HEARTBEAT',
+        questionId: data.currentQuestionId ?? undefined,
+        metadata: {
+          answeredCount: data.answeredCount,
+          unansweredCount: data.unansweredCount,
+          timeRemainingSec: data.timeRemainingSec,
+          currentQuestionId: data.currentQuestionId ?? null,
+          fullscreenState: data.fullscreenState,
+          focusState: data.focusState,
+          cameraPermission: data.cameraPermission ?? null,
+          screenSize: data.screenSize ?? null,
+          deviceId: data.deviceId,
+        },
+      },
+      studentId,
+    );
   }
 
   // ═══════════════════════════════════════════════
@@ -406,7 +485,7 @@ export class StudentExamService {
   // UC06: Take exam — create attempt, return questions
   // ═══════════════════════════════════════════════
 
-  async startExam(examId: number, studentId: number, password?: string) {
+  async startExam(examId: number, studentId: number, password?: string, ipAddress?: string) {
     const exam = await prisma.exam.findUnique({
       where: { id: examId },
       include: {
@@ -430,6 +509,16 @@ export class StudentExamService {
     });
 
     if (!exam) throw new AppError('Exam not found', 404);
+    const securitySettings = ipAddress
+      ? await examSecurityService.validateStartAccess(examId, ipAddress)
+      : await examSecurityService.getEffectiveSettings(examId);
+    const securitySettingsResponse = {
+      id: null,
+      examId: exam.id,
+      ...securitySettings,
+      createdAt: null,
+      updatedAt: null,
+    };
 
     const assignedClassIds = exam.examAssignments.map((a) => a.classId);
 
@@ -517,6 +606,7 @@ export class StudentExamService {
               navigationMode: exam.navigationMode,
               questionsPerPage: exam.questionsPerPage,
             },
+            securitySettings: securitySettingsResponse,
             questions,
             savedAnswers,
           },
@@ -603,6 +693,7 @@ export class StudentExamService {
           navigationMode: exam.navigationMode,
           questionsPerPage: exam.questionsPerPage,
         },
+        securitySettings: securitySettingsResponse,
         questions,
         savedAnswers: {},
       },
@@ -1060,6 +1151,18 @@ export class StudentExamService {
         },
       });
     });
+
+    const submissionEvent = await prisma.examAttemptEvent.findFirst({
+      where: {
+        attemptId: attempt.id,
+        type: isAuto ? ExamAttemptEventType.AUTO_SUBMITTED : ExamAttemptEventType.SUBMITTED,
+      },
+      orderBy: { occurredAt: 'desc' },
+    });
+    if (submissionEvent) {
+      await examSecurityService.normalizeAttemptEvent(submissionEvent, attempt);
+    }
+    await examSecurityService.closeSecuritySession(attempt.id);
 
     try {
       await redis.del(key);

@@ -5,6 +5,7 @@ import {
   questionExtractService,
 } from './question.extract.service';
 import { questionZipService } from './question.zip.service';
+import { aiEnrichService } from './ai.enrich.service';
 import {
   decodeImageKey,
   getQuestionImageObject,
@@ -80,7 +81,7 @@ export async function updateQuestion(
   try {
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) throw new AppError('Invalid question ID', 400);
-    const result = await questionService.updateQuestion(id, req.body);
+    const result = await questionService.updateQuestion(id, req.body, req.user?.id);
     res.json(result);
   } catch (error: unknown) {
     next(error instanceof Error ? error : new Error('Unexpected error'));
@@ -408,6 +409,106 @@ export async function removeTag(
     const tagId = parseInt(req.params.tagId, 10);
     if (isNaN(id) || isNaN(tagId)) throw new AppError('Invalid ID parameter', 400);
     const result = await questionService.removeTag(id, tagId);
+    res.json(result);
+  } catch (error: unknown) {
+    next(error instanceof Error ? error : new Error('Unexpected error'));
+  }
+}
+
+// ═══════════════════════════════════════════════
+// VERSION HISTORY (GET /api/questions/:id/versions)
+// ═══════════════════════════════════════════════
+
+export async function getQuestionVersions(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) throw new AppError('Invalid question ID', 400);
+    const result = await questionService.getVersions(id);
+    res.json(result);
+  } catch (error: unknown) {
+    next(error instanceof Error ? error : new Error('Unexpected error'));
+  }
+}
+
+// POST /api/questions/:id/versions/:versionId/restore
+export async function restoreQuestionVersion(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (!req.user) throw new AppError('Authentication required', 401);
+    const id = parseInt(req.params.id, 10);
+    const versionId = parseInt(req.params.versionId, 10);
+    if (isNaN(id) || isNaN(versionId)) throw new AppError('Invalid ID parameter', 400);
+    const result = await questionService.restoreVersion(id, versionId, req.user.id);
+    res.json(result);
+  } catch (error: unknown) {
+    next(error instanceof Error ? error : new Error('Unexpected error'));
+  }
+}
+
+// ═══════════════════════════════════════════════
+// AI ENRICHMENT SUGGESTIONS (POST /api/questions/ai-suggest)
+// ═══════════════════════════════════════════════
+
+export async function aiSuggestQuestion(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (!req.user) throw new AppError('Authentication required', 401);
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const content = String(body.content ?? '');
+    const options = Array.isArray(body.options)
+      ? body.options.map((o) => {
+          const opt = (o ?? {}) as Record<string, unknown>;
+          return {
+            label: String(opt.label ?? ''),
+            content: String(opt.content ?? ''),
+            isCorrect: Boolean(opt.isCorrect),
+          };
+        })
+      : [];
+    if (!content.trim() && options.length === 0) {
+      throw new AppError('Question content is required', 400);
+    }
+    const suggestion = await aiEnrichService.suggestForQuestion({
+      content,
+      questionType: String(body.questionType ?? 'SINGLE_CHOICE'),
+      options,
+      subjectName: body.subjectName ? String(body.subjectName) : undefined,
+      chapterName: body.chapterName ? String(body.chapterName) : undefined,
+      currentDifficulty: body.currentDifficulty ? Number(body.currentDifficulty) : undefined,
+    });
+    res.json({ success: true, data: suggestion });
+  } catch (error: unknown) {
+    next(error instanceof Error ? error : new Error('Unexpected error'));
+  }
+}
+
+// ═══════════════════════════════════════════════
+// BULK UPDATE (POST /api/questions/bulk-update)
+// ═══════════════════════════════════════════════
+
+export async function bulkUpdateQuestions(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (!req.user) throw new AppError('Authentication required', 401);
+    const { ids, difficulty, reviewStatus } = req.body;
+    const result = await questionService.bulkUpdate(
+      Array.isArray(ids) ? ids.map((v: unknown) => Number(v)) : [],
+      { difficulty: difficulty !== undefined ? Number(difficulty) : undefined, reviewStatus },
+      req.user.id,
+    );
     res.json(result);
   } catch (error: unknown) {
     next(error instanceof Error ? error : new Error('Unexpected error'));

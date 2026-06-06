@@ -1,8 +1,15 @@
 import type { Request, Response, NextFunction } from 'express';
 import { examService } from './exam.service';
 import { examReportService } from './examReport.service';
+import { examSecurityService } from './examSecurity.service';
 import { AppError } from '../../middlewares/errorHandler';
-import type { ExamMonitoringQuery, ListExamsQuery, GradeAnswerInput } from './exam.validation';
+import type {
+  ExamMonitoringQuery,
+  ListExamsQuery,
+  GradeAnswerInput,
+  ExamSecuritySettingsInput,
+  ProctorReviewInput,
+} from './exam.validation';
 
 // ═══════════════════════════════════════════════
 // LIST EXAMS (GET /api/exams)
@@ -167,6 +174,92 @@ export async function getMonitoring(req: Request, res: Response, next: NextFunct
     if (isNaN(id)) throw new AppError('Invalid exam ID', 400);
     const query = (req as Request & { validatedQuery?: ExamMonitoringQuery }).validatedQuery ?? {};
     const result = await examService.getExamMonitoring(id, req.user.id, req.user.role, query);
+    res.json(result);
+  } catch (error: unknown) {
+    next(error instanceof Error ? error : new Error('Unexpected error'));
+  }
+}
+
+export async function getSecuritySettings(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (!req.user) throw new AppError('Authentication required', 401);
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) throw new AppError('Invalid exam ID', 400);
+    const result = await examSecurityService.getExamSecuritySettings(
+      id,
+      req.user.id,
+      req.user.role,
+    );
+    res.json(result);
+  } catch (error: unknown) {
+    next(error instanceof Error ? error : new Error('Unexpected error'));
+  }
+}
+
+export async function updateSecuritySettings(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (!req.user) throw new AppError('Authentication required', 401);
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) throw new AppError('Invalid exam ID', 400);
+    const result = await examSecurityService.updateExamSecuritySettings(
+      id,
+      req.body as ExamSecuritySettingsInput,
+      req.user.id,
+      req.user.role,
+    );
+    res.json(result);
+  } catch (error: unknown) {
+    next(error instanceof Error ? error : new Error('Unexpected error'));
+  }
+}
+
+export async function getEvidenceReport(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (!req.user) throw new AppError('Authentication required', 401);
+    const examId = parseInt(req.params.id, 10);
+    const attemptId = parseInt(req.params.attemptId, 10);
+    if (isNaN(examId) || isNaN(attemptId)) throw new AppError('Invalid identifier', 400);
+    const result = await examSecurityService.getEvidenceReport(
+      examId,
+      attemptId,
+      req.user.id,
+      req.user.role,
+    );
+    res.json(result);
+  } catch (error: unknown) {
+    next(error instanceof Error ? error : new Error('Unexpected error'));
+  }
+}
+
+export async function saveProctorReview(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (!req.user) throw new AppError('Authentication required', 401);
+    const examId = parseInt(req.params.id, 10);
+    const attemptId = parseInt(req.params.attemptId, 10);
+    if (isNaN(examId) || isNaN(attemptId)) throw new AppError('Invalid identifier', 400);
+    const result = await examSecurityService.saveProctorReview(
+      examId,
+      attemptId,
+      req.body as ProctorReviewInput,
+      req.user.id,
+      req.user.role,
+    );
     res.json(result);
   } catch (error: unknown) {
     next(error instanceof Error ? error : new Error('Unexpected error'));

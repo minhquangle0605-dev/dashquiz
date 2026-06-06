@@ -10,6 +10,57 @@ export const GRADING_METHOD_LABELS: Record<GradingMethod, string> = {
 };
 
 export type NavigationMode = 'FREE' | 'SEQUENTIAL';
+export type ExamSecurityLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'LOCKDOWN';
+export type SecurityRiskLevel = 'LOW' | 'WATCH' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+export type SecuritySeverity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+export type ViolationReviewStatus = 'PENDING' | 'CONFIRMED' | 'FALSE_POSITIVE' | 'DISMISSED';
+export type ProctorReviewDecision = 'NO_ACTION' | 'WATCH' | 'FLAGGED' | 'CLEARED';
+
+export interface ExamSecuritySettings {
+  id: number | null;
+  examId: number | null;
+  securityLevel: ExamSecurityLevel;
+  requireFullscreen: boolean;
+  blockCopyPaste: boolean;
+  blockRightClick: boolean;
+  blockShortcuts: boolean;
+  requireCamera: boolean;
+  requirePreCheck: boolean;
+  allowedIpRanges: string[];
+  maxDevices: number;
+  allowResume: boolean;
+  warningThreshold: number;
+  autoSubmitThreshold: number | null;
+  snapshotIntervalSec: number | null;
+  retentionDays: number;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface StudentPrecheckPayload {
+  deviceId?: string;
+  userAgent?: string;
+  supportsFullscreen?: boolean;
+  cameraPermission?: 'granted' | 'denied' | 'prompt' | 'unknown';
+  screenSize?: string;
+  timezoneOffsetMin?: number;
+}
+
+export interface StudentPrecheckCheck {
+  key: string;
+  label: string;
+  status: 'passed' | 'failed';
+  required: boolean;
+  message: string;
+}
+
+export interface StudentPrecheckData {
+  canStart: boolean;
+  serverTime: string;
+  ipAddress: string;
+  settings: ExamSecuritySettings;
+  checks: StudentPrecheckCheck[];
+}
 
 /* ── Review options (§8) ────────────────────────────── */
 
@@ -93,6 +144,7 @@ export interface StartExamData {
     navigationMode: NavigationMode;
     questionsPerPage: number | null;
   };
+  securitySettings: ExamSecuritySettings;
   questions: ExamQuestion[];
   savedAnswers: Record<string, StudentAnswerValue>;
 }
@@ -348,12 +400,17 @@ export type AttemptMonitoringEventType =
   | 'ANSWER_SAVED'
   | 'TAB_HIDDEN'
   | 'WINDOW_BLUR'
+  | 'FULLSCREEN_EXITED'
+  | 'FULLSCREEN_RESTORED'
   | 'COPY'
   | 'PASTE'
+  | 'CUT'
   | 'CONTEXT_MENU'
   | 'SHORTCUT_BLOCKED'
   | 'OFFLINE'
   | 'ONLINE'
+  | 'CAMERA_PERMISSION_MISSING'
+  | 'DEVICE_CHANGED'
   | 'SUBMITTED'
   | 'AUTO_SUBMITTED';
 
@@ -402,10 +459,16 @@ export interface ExamMonitoringStudent {
   copyPasteCount: number;
   offlineCount: number;
   blockedShortcutCount: number;
+  fullscreenExitCount: number;
+  deviceChangeCount: number;
+  cameraIssueCount: number;
   riskScore: number;
-  riskLevel: 'low' | 'medium' | 'high';
+  riskLevel: 'low' | 'watch' | 'medium' | 'high' | 'critical';
   flags: string[];
   recentEvents: AttemptMonitoringEvent[];
+  recentViolations: AttemptViolationSummary[];
+  securitySession: AttemptSecuritySession | null;
+  review: ProctorReviewSummary | null;
 }
 
 export interface ExamMonitoringData {
@@ -427,10 +490,76 @@ export interface ExamMonitoringData {
     avgScore: number | null;
     passRate: number | null;
     suspiciousCount: number;
+    watchCount: number;
+    mediumRiskCount: number;
     highRiskCount: number;
+    criticalRiskCount: number;
   };
   students: ExamMonitoringStudent[];
   updatedAt: string;
+}
+
+export interface AttemptSecuritySession {
+  deviceId: string;
+  ipAddress: string | null;
+  userAgent: string | null;
+  lastHeartbeatAt: string;
+  fullscreenState: boolean;
+  cameraPermission: string | null;
+  screenSize: string | null;
+  status: 'ACTIVE' | 'STALE' | 'CLOSED';
+}
+
+export interface AttemptViolationSummary {
+  id: number;
+  eventType: AttemptMonitoringEventType;
+  severity: SecuritySeverity;
+  riskPoints: number;
+  message: string;
+  occurredAt: string;
+  reviewStatus: ViolationReviewStatus;
+  teacherNote: string | null;
+}
+
+export interface ProctorReviewSummary {
+  decision: ProctorReviewDecision;
+  finalRiskLevel: SecurityRiskLevel;
+  summary: string | null;
+  updatedAt: string;
+}
+
+export interface AttemptEvidenceData {
+  attempt: {
+    id: number;
+    status: string;
+    startedAt: string;
+    submittedAt: string | null;
+    isAutoSubmitted: boolean;
+    totalScore: number | null;
+    timeSpentSec: number | null;
+  };
+  student: {
+    id: number;
+    name: string | null;
+    username: string;
+    studentCode: string | null;
+    homeroomClassName: string | null;
+  };
+  risk: {
+    riskScore: number;
+    riskLevel: SecurityRiskLevel;
+  };
+  eventCounts: Record<string, number>;
+  securitySession: AttemptSecuritySession | null;
+  timeline: AttemptMonitoringEvent[];
+  violations: Array<AttemptViolationSummary & {
+    metadata: Record<string, unknown> | null;
+    reviewedBy: number | null;
+    reviewer?: { id: number; fullName: string | null; username: string } | null;
+  }>;
+  review: (ProctorReviewSummary & {
+    reviewer?: { id: number; fullName: string | null; username: string } | null;
+  }) | null;
 }
 
 /* ── Exam reports (§12) ─────────────────────────────── */
@@ -635,12 +764,17 @@ export interface RecordAttemptEventPayload {
     | 'HEARTBEAT'
     | 'TAB_HIDDEN'
     | 'WINDOW_BLUR'
+    | 'FULLSCREEN_EXITED'
+    | 'FULLSCREEN_RESTORED'
     | 'COPY'
     | 'PASTE'
+    | 'CUT'
     | 'CONTEXT_MENU'
     | 'SHORTCUT_BLOCKED'
     | 'OFFLINE'
-    | 'ONLINE';
+    | 'ONLINE'
+    | 'CAMERA_PERMISSION_MISSING'
+    | 'DEVICE_CHANGED';
   clientElapsedSec?: number;
   questionId?: number;
   metadata?: Record<string, unknown>;

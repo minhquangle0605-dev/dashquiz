@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { Prisma } from '@prisma/client';
+import { Prisma, type QuestionKind } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError } from '../../middlewares/errorHandler';
 import { isCoreSubjectCode } from '../../constants/subjects';
@@ -10,6 +10,8 @@ import {
   objectNameFromQuestionImageSrc,
   readQuestionImageAsDataUri,
 } from './question.media';
+import { normalizeForDedup } from './questionDedup.service';
+import { logger } from '../../utils/logger';
 import type {
   CreateQuestionInput,
   UpdateQuestionInput,
@@ -107,6 +109,31 @@ function extractImageSources(html: string): string[] {
   return sources;
 }
 
+// Snapshot shape stored in a QuestionVersion row.
+type VersionSnapshot = {
+  content: string;
+  questionType: QuestionKind;
+  difficulty: number;
+  explanation: string | null;
+  options: Array<{ label: string; content: string; isCorrect: boolean }>;
+};
+
+function snapFromQuestion(q: {
+  content: string;
+  questionType: QuestionKind;
+  difficulty: number;
+  explanation: string | null;
+  options: Array<{ label: string; content: string; isCorrect: boolean }>;
+}): VersionSnapshot {
+  return {
+    content: q.content,
+    questionType: q.questionType,
+    difficulty: q.difficulty,
+    explanation: q.explanation ?? null,
+    options: q.options.map((o) => ({ label: o.label, content: o.content, isCorrect: o.isCorrect })),
+  };
+}
+
 export class QuestionService {
   private listQuestionsCacheKey(query: ListQuestionsQuery, page: number, limit: number): string {
     const diff =
@@ -123,6 +150,8 @@ export class QuestionService {
       qt: query.questionType ?? null,
       d: diff,
       k: query.keyword ?? null,
+      rs: query.reviewStatus ?? null,
+      tg: query.tag ?? null,
     })}`;
   }
 
@@ -162,6 +191,24 @@ export class QuestionService {
       where.difficulty = { in: query.difficulty };
     }
 
+    if (query.tag) {
+      where.tags = { some: { tagName: { equals: query.tag, mode: 'insensitive' } } };
+    }
+
+    if (query.reviewStatus) {
+      // "needs_review" is the implicit default, so include questions with no
+      // review row yet (the review queue must surface freshly imported items).
+      // Use AND so this never clobbers the keyword OR group below.
+      if (query.reviewStatus === 'needs_review') {
+        where.AND = [
+          ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+          { OR: [{ review: { is: null } }, { review: { status: 'needs_review' } }] },
+        ];
+      } else {
+        where.review = { is: { status: query.reviewStatus } };
+      }
+    }
+
     if (query.keyword) {
       where.OR = [
         { content: { contains: query.keyword, mode: 'insensitive' } },
@@ -199,6 +246,7 @@ export class QuestionService {
           },
           tags: { select: { id: true, tagName: true } },
           creator: { select: { id: true, fullName: true } },
+          review: { select: { status: true, qualityFlag: true, reviewedAt: true } },
           _count: { select: { examQuestions: true } },
         },
         orderBy: { createdAt: 'desc' },
@@ -264,6 +312,7 @@ export class QuestionService {
         chapterId: data.chapterId,
         topicId,
         content: sanitizeRichQuestionHtml(data.content),
+        normalizedContent: normalizeForDedup(data.content),
         questionType: data.questionType,
         difficulty: data.difficulty,
         explanation: data.explanation ? sanitizeRichQuestionHtml(data.explanation) : null,
@@ -286,6 +335,7 @@ export class QuestionService {
     });
 
     await this.invalidateQuestionListCaches();
+    await this.snapshotVersion(question.id, snapFromQuestion(question), userId, 'created');
 
     return {
       success: true,
@@ -298,7 +348,7 @@ export class QuestionService {
   // UPDATE QUESTION
   // ═══════════════════════════════════════════════
 
-  async updateQuestion(id: number, data: UpdateQuestionInput) {
+  async updateQuestion(id: number, data: UpdateQuestionInput, changedBy?: number) {
     const existing = await prisma.question.findUnique({ where: { id } });
     if (!existing) {
       throw new AppError('Question not found', 404);
@@ -332,7 +382,10 @@ export class QuestionService {
       return tx.question.update({
         where: { id },
         data: {
-          ...(data.content !== undefined && { content: sanitizeRichQuestionHtml(data.content) }),
+          ...(data.content !== undefined && {
+            content: sanitizeRichQuestionHtml(data.content),
+            normalizedContent: normalizeForDedup(data.content),
+          }),
           ...(data.questionType !== undefined && { questionType: data.questionType }),
           ...(data.difficulty !== undefined && { difficulty: data.difficulty }),
           ...(data.explanation !== undefined && {
@@ -353,6 +406,7 @@ export class QuestionService {
     });
 
     await this.invalidateQuestionListCaches();
+    await this.snapshotVersion(question.id, snapFromQuestion(question), changedBy ?? null, 'updated');
 
     return {
       success: true,
@@ -568,6 +622,7 @@ export class QuestionService {
             chapterId: meta.chapterId,
             topicId,
             content: q.content,
+            normalizedContent: normalizeForDedup(q.content),
             questionType: q.questionType,
             difficulty: q.difficulty,
             explanation: q.explanation,
@@ -580,6 +635,25 @@ export class QuestionService {
 
     await this.invalidateQuestionListCaches();
 
+    // Seed version 1 for each imported question (PDF §8 traceability).
+    try {
+      await prisma.questionVersion.createMany({
+        data: created.map((q, i) => ({
+          questionId: q.id,
+          versionNo: 1,
+          content: valid[i].content,
+          questionType: valid[i].questionType,
+          difficulty: valid[i].difficulty,
+          explanation: valid[i].explanation ?? null,
+          optionsJson: valid[i].options as unknown as Prisma.InputJsonValue,
+          changedBy: userId,
+          changeReason: 'imported',
+        })),
+      });
+    } catch (error) {
+      logger.warn(`bulkCreate version snapshot failed: ${(error as Error).message}`);
+    }
+
     return {
       success: true,
       message: `Imported ${created.length} question(s) successfully`,
@@ -588,6 +662,9 @@ export class QuestionService {
         failed: questions.length - valid.length,
         total: questions.length,
         errors: errors.length > 0 ? errors : null,
+        // Created question ids in input order of the VALID items — lets the import
+        // pipeline map each committed preview item back to its saved question.
+        createdIds: created.map((q) => q.id),
       },
     };
   }
@@ -713,6 +790,7 @@ export class QuestionService {
             chapterId: meta.chapterId,
             topicId,
             content: q.content,
+            normalizedContent: normalizeForDedup(q.content),
             questionType: 'SINGLE_CHOICE',
             difficulty: q.difficulty,
             explanation: q.explanation,
@@ -994,6 +1072,138 @@ export class QuestionService {
       throw new AppError('Question image is too large to export to GIFT', 400);
     }
     return `data:${contentType};base64,${Buffer.from(arrayBuffer).toString('base64')}`;
+  }
+
+  // ═══════════════════════════════════════════════
+  // VERSIONING (PDF §8 / P2)
+  // ═══════════════════════════════════════════════
+
+  private async snapshotVersion(
+    questionId: number,
+    snap: VersionSnapshot,
+    changedBy: number | null,
+    reason?: string,
+  ): Promise<void> {
+    try {
+      const last = await prisma.questionVersion.findFirst({
+        where: { questionId },
+        orderBy: { versionNo: 'desc' },
+        select: { versionNo: true },
+      });
+      await prisma.questionVersion.create({
+        data: {
+          questionId,
+          versionNo: (last?.versionNo ?? 0) + 1,
+          content: snap.content,
+          questionType: snap.questionType,
+          difficulty: snap.difficulty,
+          explanation: snap.explanation,
+          optionsJson: snap.options as unknown as Prisma.InputJsonValue,
+          changedBy,
+          changeReason: reason ?? null,
+        },
+      });
+    } catch (error) {
+      logger.warn(`Question ${questionId} version snapshot failed: ${(error as Error).message}`);
+    }
+  }
+
+  async getVersions(id: number) {
+    const question = await prisma.question.findUnique({ where: { id }, select: { id: true } });
+    if (!question) throw new AppError('Question not found', 404);
+    const versions = await prisma.questionVersion.findMany({
+      where: { questionId: id },
+      orderBy: { versionNo: 'desc' },
+      include: { changer: { select: { id: true, fullName: true } } },
+    });
+    return { success: true, message: 'Versions retrieved', data: versions };
+  }
+
+  async restoreVersion(id: number, versionId: number, userId: number) {
+    const version = await prisma.questionVersion.findUnique({ where: { id: versionId } });
+    if (!version || version.questionId !== id) throw new AppError('Version not found', 404);
+
+    const options = Array.isArray(version.optionsJson)
+      ? (version.optionsJson as unknown as Array<{ label: string; content: string; isCorrect: boolean }>)
+      : [];
+
+    const question = await prisma.$transaction(async (tx) => {
+      await tx.questionOption.deleteMany({ where: { questionId: id } });
+      if (options.length > 0) {
+        await tx.questionOption.createMany({
+          data: options.map((o) => ({
+            questionId: id,
+            label: o.label,
+            content: o.content,
+            isCorrect: o.isCorrect,
+          })),
+        });
+      }
+      return tx.question.update({
+        where: { id },
+        data: {
+          content: version.content,
+          normalizedContent: normalizeForDedup(version.content),
+          questionType: version.questionType,
+          difficulty: version.difficulty,
+          explanation: version.explanation,
+        },
+        include: {
+          subject: { select: { id: true, name: true, code: true } },
+          chapter: { select: { id: true, name: true, gradeLevel: true } },
+          topic: { select: { id: true, name: true } },
+          options: { orderBy: { label: 'asc' } },
+          tags: { select: { id: true, tagName: true } },
+        },
+      });
+    });
+
+    await this.invalidateQuestionListCaches();
+    await this.snapshotVersion(id, snapFromQuestion(question), userId, `restored from v${version.versionNo}`);
+    return { success: true, message: `Restored to version ${version.versionNo}`, data: question };
+  }
+
+  // ═══════════════════════════════════════════════
+  // BULK EDIT (PDF §10 bulk edit)
+  // ═══════════════════════════════════════════════
+
+  async bulkUpdate(
+    ids: number[],
+    changes: { difficulty?: number; reviewStatus?: string },
+    userId: number,
+  ) {
+    if (!Array.isArray(ids) || ids.length === 0) {
+      throw new AppError('Question IDs are required', 400);
+    }
+    if (changes.difficulty === undefined && !changes.reviewStatus) {
+      throw new AppError('Nothing to update', 400);
+    }
+
+    if (changes.difficulty !== undefined) {
+      if (!Number.isInteger(changes.difficulty) || changes.difficulty < 1 || changes.difficulty > 5) {
+        throw new AppError('Difficulty must be an integer between 1 and 5', 400);
+      }
+      await prisma.question.updateMany({
+        where: { id: { in: ids } },
+        data: { difficulty: changes.difficulty },
+      });
+    }
+
+    if (changes.reviewStatus) {
+      const status = changes.reviewStatus;
+      await prisma.$transaction(
+        ids.map((qid) =>
+          prisma.questionReview.upsert({
+            where: { questionId: qid },
+            create: { questionId: qid, reviewerId: userId, status },
+            update: { reviewerId: userId, status, reviewedAt: new Date() },
+          }),
+        ),
+      );
+    }
+
+    await this.invalidateQuestionListCaches();
+    return { success: true, message: `Updated ${ids.length} question(s)`, data: { updated: ids.length } };
   }
 
   private async resolveImportTopicId(

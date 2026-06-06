@@ -17,13 +17,27 @@ import {
   useSubmitStudentExam,
 } from '@/hooks/useExam';
 import { useSocketContext } from '@/providers/SocketProvider';
-import { recordAttemptEvent } from '@/services/studentExam.api';
+import {
+  createAttemptSecuritySession,
+  recordAttemptEvent,
+  recordAttemptEventsBatch,
+  recordSecurityHeartbeat,
+  runStudentExamPrecheck,
+} from '@/services/studentExam.api';
 import type {
+  ExamSecuritySettings,
   ExamQuestion,
   RecordAttemptEventPayload,
   StartExamData,
+  StudentPrecheckData,
+  StudentPrecheckPayload,
   StudentAnswerValue,
 } from '@/types/exam';
+import {
+  clearAttemptDraft,
+  loadAttemptDraft,
+  saveAttemptDraft,
+} from '@/utils/examDraftQueue';
 
 import { ExamBanners } from './take-exam/ExamBanners';
 import { ExamHeader } from './take-exam/ExamHeader';
@@ -33,10 +47,58 @@ import { ExamFooter } from './take-exam/ExamFooter';
 import { SubmitDialog } from './take-exam/SubmitDialog';
 
 const AUTO_SAVE_INTERVAL = 30_000;
-const MONITORING_HEARTBEAT_INTERVAL = 30_000;
+const MONITORING_HEARTBEAT_INTERVAL = 15_000;
+const MONITORING_BATCH_INTERVAL = 7_000;
 const WARNING_THRESHOLD = 300;
 const CRITICAL_THRESHOLD = 60;
 const TAB_SWITCH_WARN_LIMIT = 3;
+const DEVICE_ID_STORAGE_KEY = 'webquiz_device_id';
+
+type SaveStatus = 'idle' | 'saving' | 'saved' | 'pending' | 'offline' | 'error';
+
+const DEFAULT_SECURITY_SETTINGS: ExamSecuritySettings = {
+  id: null,
+  examId: null,
+  securityLevel: 'MEDIUM',
+  requireFullscreen: true,
+  blockCopyPaste: true,
+  blockRightClick: true,
+  blockShortcuts: true,
+  requireCamera: false,
+  requirePreCheck: true,
+  allowedIpRanges: [],
+  maxDevices: 1,
+  allowResume: true,
+  warningThreshold: 15,
+  autoSubmitThreshold: 100,
+  snapshotIntervalSec: null,
+  retentionDays: 30,
+};
+
+function getOrCreateDeviceId() {
+  const existing = localStorage.getItem(DEVICE_ID_STORAGE_KEY);
+  if (existing) return existing;
+  const id =
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `device-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  localStorage.setItem(DEVICE_ID_STORAGE_KEY, id);
+  return id;
+}
+
+function getScreenSize() {
+  return `${window.screen.width}x${window.screen.height}`;
+}
+
+async function getCameraPermissionState(): Promise<StudentPrecheckPayload['cameraPermission']> {
+  if (!navigator.permissions?.query) return 'unknown';
+  try {
+    const result = await navigator.permissions.query({ name: 'camera' as PermissionName });
+    return result.state;
+  } catch {
+    return 'unknown';
+  }
+}
 
 function getAnsweredCount(
   questions: ExamQuestion[],
@@ -58,6 +120,13 @@ function getAnsweredCount(
   }).length;
 }
 
+function areAnswerSetsEqual(
+  a: Record<string, StudentAnswerValue>,
+  b: Record<string, StudentAnswerValue>,
+) {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 export default function TakeExamPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -73,6 +142,7 @@ export default function TakeExamPage() {
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [tabSwitchCount, setTabSwitchCount] = useState(0);
   const [showTabWarning, setShowTabWarning] = useState(false);
@@ -80,12 +150,22 @@ export default function TakeExamPage() {
   const [passwordInput, setPasswordInput] = useState('');
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSubmitting, setPasswordSubmitting] = useState(false);
+  const [precheckData, setPrecheckData] = useState<StudentPrecheckData | null>(null);
+  const [precheckLoading, setPrecheckLoading] = useState(true);
+  const [precheckError, setPrecheckError] = useState<string | null>(null);
+  const [rulesAccepted, setRulesAccepted] = useState(false);
+  const [enteringExam, setEnteringExam] = useState(false);
+  const [fullscreenWarning, setFullscreenWarning] = useState(false);
+  const [securityWarning, setSecurityWarning] = useState<string | null>(null);
 
   const pendingSave = useRef<Record<string, StudentAnswerValue>>({});
+  const pendingEvents = useRef<RecordAttemptEventPayload[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const autoSaveRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const hasSubmitted = useRef(false);
   const handleAutoSubmitRef = useRef<() => void>(() => {});
+  const deviceIdRef = useRef(getOrCreateDeviceId());
+  const lastServerAnswersRef = useRef<Record<string, StudentAnswerValue>>({});
 
   const startMutation = useStartStudentExam();
   const saveMutation = useSaveAnswers();
@@ -93,6 +173,7 @@ export default function TakeExamPage() {
   const { socket } = useSocketContext();
 
   const attemptId = examData?.attempt.id;
+  const securitySettings = examData?.securitySettings ?? precheckData?.settings ?? DEFAULT_SECURITY_SETTINGS;
   const questions: ExamQuestion[] = examData?.questions ?? [];
   const currentQuestion = questions[currentIndex];
   const monitoringRef = useRef({
@@ -132,6 +213,7 @@ export default function TakeExamPage() {
     (
       type: RecordAttemptEventPayload['type'],
       extra?: Record<string, unknown>,
+      immediate = false,
     ) => {
       if (!attemptId || hasSubmitted.current) return;
       const metadata = buildMonitoringMetadata(extra);
@@ -139,17 +221,36 @@ export default function TakeExamPage() {
         ? Math.max(0, examData.exam.durationMin * 60 - monitoringRef.current.timeLeft)
         : undefined;
 
-      void recordAttemptEvent(attemptId, {
+      const payload: RecordAttemptEventPayload = {
         type,
         clientElapsedSec: elapsedSec,
         questionId: monitoringRef.current.currentQuestionId ?? undefined,
         metadata,
-      }).catch(() => {});
+      };
+
+      if (immediate) {
+        void recordAttemptEvent(attemptId, payload).catch(() => {});
+        return;
+      }
+      pendingEvents.current.push(payload);
     },
     [attemptId, buildMonitoringMetadata, examData],
   );
   const sendMonitoringEventRef = useRef(sendMonitoringEvent);
   sendMonitoringEventRef.current = sendMonitoringEvent;
+
+  const flushMonitoringEvents = useCallback(() => {
+    if (!attemptId || pendingEvents.current.length === 0 || hasSubmitted.current) return;
+    const events = pendingEvents.current.splice(0, pendingEvents.current.length);
+    const request =
+      events.length === 1
+        ? recordAttemptEvent(attemptId, events[0])
+        : recordAttemptEventsBatch(attemptId, events);
+
+    void request.catch(() => {
+      pendingEvents.current = [...events, ...pendingEvents.current].slice(0, 100);
+    });
+  }, [attemptId]);
 
   // Start or resume exam (re-runnable with a password for protected exams)
   const runStart = useCallback(
@@ -167,13 +268,27 @@ export default function TakeExamPage() {
         {
           onSuccess: (res) => {
             const d = res.data;
+            const serverAnswers = d.savedAnswers ?? {};
             setExamData(d);
-            setAnswers(d.savedAnswers ?? {});
+            setAnswers(serverAnswers);
+            lastServerAnswersRef.current = serverAnswers;
             setTimeLeft(d.attempt.timeRemainingsSec);
             setNeedsPassword(false);
             setPasswordError(null);
             setPasswordSubmitting(false);
             setLoading(false);
+            setSaveStatus('idle');
+
+            void loadAttemptDraft(d.attempt.id).then((draft) => {
+              if (!draft || hasSubmitted.current) return;
+              if (areAnswerSetsEqual(draft.answers, serverAnswers)) return;
+
+              const mergedAnswers = { ...serverAnswers, ...draft.answers };
+              pendingSave.current = mergedAnswers;
+              setAnswers(mergedAnswers);
+              setSaveStatus(navigator.onLine ? 'pending' : 'offline');
+              toast.success('Recovered locally saved answers from this device.');
+            });
           },
           onError: (err) => {
             const resp = (
@@ -199,10 +314,122 @@ export default function TakeExamPage() {
     [examId],
   );
 
+  const enterSecureExam = useCallback(
+    async (password?: string) => {
+      if (precheckData && !precheckData.canStart) return;
+      setEnteringExam(true);
+      try {
+        if (
+          securitySettings.requireFullscreen &&
+          !document.fullscreenElement &&
+          document.documentElement.requestFullscreen
+        ) {
+          await document.documentElement.requestFullscreen();
+        }
+        setFullscreenWarning(false);
+        runStart(password);
+      } catch {
+        setFullscreenWarning(true);
+        toast.error('Fullscreen mode is required before this exam can start.');
+      } finally {
+        setEnteringExam(false);
+      }
+    },
+    [precheckData, runStart, securitySettings.requireFullscreen],
+  );
+
   useEffect(() => {
-    runStart();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [examId]);
+    let cancelled = false;
+
+    async function runPrecheck() {
+      if (!examId || isNaN(examId)) {
+        setError('Invalid exam ID');
+        setPrecheckLoading(false);
+        setLoading(false);
+        return;
+      }
+
+      setPrecheckLoading(true);
+      setLoading(false);
+      try {
+        const cameraPermission = await getCameraPermissionState();
+        const payload: StudentPrecheckPayload = {
+          deviceId: deviceIdRef.current,
+          userAgent: navigator.userAgent,
+          supportsFullscreen: Boolean(document.documentElement.requestFullscreen),
+          cameraPermission,
+          screenSize: getScreenSize(),
+          timezoneOffsetMin: new Date().getTimezoneOffset(),
+        };
+        const result = await runStudentExamPrecheck(examId, payload);
+        if (cancelled) return;
+        setPrecheckData(result.data);
+        setPrecheckError(null);
+
+        const needsGate =
+          result.data.settings.requirePreCheck || result.data.settings.securityLevel !== 'LOW';
+        if (result.data.canStart && !needsGate) {
+          runStart();
+        }
+      } catch (err) {
+        if (cancelled) return;
+        const message =
+          (err as { response?: { data?: { message?: string } }; message?: string }).response?.data
+            ?.message ||
+          (err as Error).message ||
+          'Pre-check failed';
+        setPrecheckError(message);
+      } finally {
+        if (!cancelled) setPrecheckLoading(false);
+      }
+    }
+
+    void runPrecheck();
+    return () => {
+      cancelled = true;
+    };
+  }, [examId, runStart]);
+
+  useEffect(() => {
+    if (!attemptId) return;
+    const interval = setInterval(flushMonitoringEvents, MONITORING_BATCH_INTERVAL);
+    return () => {
+      clearInterval(interval);
+      flushMonitoringEvents();
+    };
+  }, [attemptId, flushMonitoringEvents]);
+
+  useEffect(() => {
+    if (!attemptId || !examData || hasSubmitted.current) return;
+    let cancelled = false;
+
+    async function createSession() {
+      try {
+        const cameraPermission = await getCameraPermissionState();
+        await createAttemptSecuritySession(attemptId!, {
+          deviceId: deviceIdRef.current,
+          userAgent: navigator.userAgent,
+          fullscreenState: Boolean(document.fullscreenElement),
+          cameraPermission,
+          screenSize: getScreenSize(),
+        });
+      } catch (err) {
+        if (cancelled) return;
+        const message =
+          (err as { response?: { data?: { message?: string } }; message?: string }).response?.data
+            ?.message ||
+          (err as Error).message ||
+          'Security session could not be started.';
+        setSecurityWarning(message);
+        toast.error(message);
+      }
+    }
+
+    void createSession();
+    return () => {
+      cancelled = true;
+    };
+  }, [attemptId, examData]);
 
   useEffect(() => {
     if (!examData || !attemptId || hasSubmitted.current) return;
@@ -211,6 +438,17 @@ export default function TakeExamPage() {
 
     const sendHeartbeat = () => {
       const metadata = buildMonitoringMetadata();
+      const heartbeatPayload = {
+        deviceId: deviceIdRef.current,
+        fullscreenState: Boolean(document.fullscreenElement),
+        focusState: document.hasFocus(),
+        cameraPermission: securitySettings.requireCamera ? 'unknown' : undefined,
+        screenSize: getScreenSize(),
+        answeredCount: metadata.answeredCount,
+        unansweredCount: metadata.unansweredCount,
+        timeRemainingSec: metadata.timeRemainingSec,
+        currentQuestionId: metadata.currentQuestionId,
+      };
       socket?.emit(CLIENT_SOCKET_EVENTS.EXAM_HEARTBEAT, {
         examId,
         attemptId,
@@ -219,7 +457,13 @@ export default function TakeExamPage() {
         timeRemainingSec: metadata.timeRemainingSec,
         currentQuestionId: metadata.currentQuestionId,
       });
-      sendMonitoringEvent('HEARTBEAT');
+      void recordSecurityHeartbeat(attemptId, heartbeatPayload)
+        .then(() => setSecurityWarning(null))
+        .catch((err) => {
+          const message =
+            (err as { response?: { data?: { message?: string } } }).response?.data?.message;
+          if (message) setSecurityWarning(message);
+        });
     };
 
     sendHeartbeat();
@@ -229,7 +473,7 @@ export default function TakeExamPage() {
       clearInterval(heartbeat);
       socket?.emit(CLIENT_SOCKET_EVENTS.LEAVE_EXAM, { examId });
     };
-  }, [attemptId, buildMonitoringMetadata, examData, examId, sendMonitoringEvent, socket]);
+  }, [attemptId, buildMonitoringMetadata, examData, examId, securitySettings.requireCamera, socket]);
 
   // Countdown timer
   useEffect(() => {
@@ -285,6 +529,15 @@ export default function TakeExamPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (!attemptId || hasSubmitted.current) return;
+    if (areAnswerSetsEqual(answers, lastServerAnswersRef.current)) return;
+
+    pendingSave.current = { ...pendingSave.current, ...answers };
+    setSaveStatus(isOnline ? 'pending' : 'offline');
+    void saveAttemptDraft(attemptId, answers);
+  }, [answers, attemptId, isOnline]);
+
   // Warn before leaving
   useEffect(() => {
     if (!examData || hasSubmitted.current) return;
@@ -334,20 +587,67 @@ export default function TakeExamPage() {
     return () => window.removeEventListener('blur', handleBlur);
   }, [examData, sendMonitoringEvent]);
 
+  useEffect(() => {
+    if (!examData || hasSubmitted.current || !securitySettings.requireFullscreen) return;
+    let lastExitAt = 0;
+
+    const handleFullscreenChange = () => {
+      const isFullscreen = Boolean(document.fullscreenElement);
+      if (!isFullscreen) {
+        const now = Date.now();
+        if (now - lastExitAt < 2000) return;
+        lastExitAt = now;
+        setFullscreenWarning(true);
+        sendMonitoringEvent('FULLSCREEN_EXITED', { fullscreenState: false }, true);
+        toast.error('Fullscreen mode is required during this exam.');
+        return;
+      }
+      setFullscreenWarning(false);
+      sendMonitoringEvent('FULLSCREEN_RESTORED', { fullscreenState: true });
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, [examData, securitySettings.requireFullscreen, sendMonitoringEvent]);
+
+  useEffect(() => {
+    if (!examData || hasSubmitted.current || !securitySettings.requireCamera) return;
+    let cancelled = false;
+
+    async function checkCamera() {
+      const permission = await getCameraPermissionState();
+      if (cancelled || permission === 'granted') return;
+      sendMonitoringEvent('CAMERA_PERMISSION_MISSING', { cameraPermission: permission }, true);
+      setSecurityWarning('Camera permission is required for this exam.');
+    }
+
+    void checkCamera();
+    const interval = setInterval(() => void checkCamera(), 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [examData, securitySettings.requireCamera, sendMonitoringEvent]);
+
   // Anti-cheat: Prevent copy/paste/right-click/devtools
   useEffect(() => {
     if (!examData || hasSubmitted.current) return;
 
     const preventCopy = (e: ClipboardEvent) => {
+      if (!securitySettings.blockCopyPaste) return;
       e.preventDefault();
-      sendMonitoringEvent(e.type === 'paste' ? 'PASTE' : 'COPY');
-      toast.error('Copying is not allowed during the exam.');
+      const type =
+        e.type === 'paste' ? 'PASTE' : e.type === 'cut' ? 'CUT' : 'COPY';
+      sendMonitoringEvent(type);
+      toast.error('Clipboard actions are not allowed during this exam.');
     };
     const preventContextMenu = (e: MouseEvent) => {
+      if (!securitySettings.blockRightClick) return;
       e.preventDefault();
       sendMonitoringEvent('CONTEXT_MENU');
     };
     const preventShortcuts = (e: KeyboardEvent) => {
+      if (!securitySettings.blockShortcuts) return;
       if (
         (e.ctrlKey || e.metaKey) &&
         ['c', 'v', 'a', 'u', 'p'].includes(e.key.toLowerCase())
@@ -363,30 +663,54 @@ export default function TakeExamPage() {
 
     document.addEventListener('copy', preventCopy);
     document.addEventListener('paste', preventCopy);
+    document.addEventListener('cut', preventCopy);
     document.addEventListener('contextmenu', preventContextMenu);
     document.addEventListener('keydown', preventShortcuts);
     return () => {
       document.removeEventListener('copy', preventCopy);
       document.removeEventListener('paste', preventCopy);
+      document.removeEventListener('cut', preventCopy);
       document.removeEventListener('contextmenu', preventContextMenu);
       document.removeEventListener('keydown', preventShortcuts);
     };
-  }, [examData, sendMonitoringEvent]);
+  }, [
+    examData,
+    securitySettings.blockCopyPaste,
+    securitySettings.blockRightClick,
+    securitySettings.blockShortcuts,
+    sendMonitoringEvent,
+  ]);
 
   const performSave = useCallback(() => {
-    if (!attemptId || hasSubmitted.current || !isOnline) {
-      pendingSave.current = { ...answers };
+    if (!attemptId || hasSubmitted.current) return;
+
+    const toSave = { ...answers, ...pendingSave.current };
+    if (areAnswerSetsEqual(toSave, lastServerAnswersRef.current)) return;
+
+    if (!isOnline) {
+      pendingSave.current = toSave;
+      setSaveStatus('offline');
+      void saveAttemptDraft(attemptId, toSave);
       return;
     }
-    const toSave = { ...answers, ...pendingSave.current };
+
     pendingSave.current = {};
+    setSaveStatus('saving');
+    void saveAttemptDraft(attemptId, toSave);
 
     saveMutation.mutate(
       { attemptId, answers: toSave },
       {
-        onSuccess: () => setLastSaved(new Date()),
+        onSuccess: () => {
+          lastServerAnswersRef.current = toSave;
+          setLastSaved(new Date());
+          setSaveStatus('saved');
+          void clearAttemptDraft(attemptId);
+        },
         onError: () => {
           pendingSave.current = { ...pendingSave.current, ...toSave };
+          setSaveStatus('error');
+          void saveAttemptDraft(attemptId, toSave);
         },
       },
     );
@@ -395,6 +719,18 @@ export default function TakeExamPage() {
 
   const handleAutoSubmit = useCallback(() => {
     if (!attemptId || hasSubmitted.current) return;
+
+    if (!isOnline) {
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (autoSaveRef.current) clearInterval(autoSaveRef.current);
+      pendingSave.current = { ...answers };
+      setSaveStatus('offline');
+      void saveAttemptDraft(attemptId, answers);
+      toast.error('Time is up, but you are offline. Reconnect and submit as soon as possible.');
+      return;
+    }
+
+    flushMonitoringEvents();
     hasSubmitted.current = true;
     if (timerRef.current) clearInterval(timerRef.current);
     if (autoSaveRef.current) clearInterval(autoSaveRef.current);
@@ -403,17 +739,20 @@ export default function TakeExamPage() {
       { attemptId, answers },
       {
         onSuccess: (res) => {
+          void clearAttemptDraft(attemptId);
           toast.success('Time is up! Your exam has been submitted automatically.');
           navigate(`/student/attempts/${res.data.attemptId}/result`, { replace: true });
         },
         onError: () => {
+          setSaveStatus('error');
+          void saveAttemptDraft(attemptId, answers);
           toast.error('Auto-submit failed. Please try submitting manually.');
           hasSubmitted.current = false;
         },
       },
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [attemptId, answers, navigate]);
+  }, [attemptId, answers, flushMonitoringEvents, isOnline, navigate]);
 
   useEffect(() => {
     handleAutoSubmitRef.current = handleAutoSubmit;
@@ -421,6 +760,16 @@ export default function TakeExamPage() {
 
   const handleManualSubmit = () => {
     if (!attemptId || hasSubmitted.current) return;
+    if (!isOnline) {
+      pendingSave.current = { ...answers };
+      setSaveStatus('offline');
+      void saveAttemptDraft(attemptId, answers);
+      setShowSubmitDialog(false);
+      toast.error('You are offline. Reconnect before submitting; your answers are saved on this device.');
+      return;
+    }
+
+    flushMonitoringEvents();
     hasSubmitted.current = true;
     if (timerRef.current) clearInterval(timerRef.current);
     if (autoSaveRef.current) clearInterval(autoSaveRef.current);
@@ -430,10 +779,13 @@ export default function TakeExamPage() {
       { attemptId, answers },
       {
         onSuccess: (res) => {
+          void clearAttemptDraft(attemptId);
           toast.success('Exam submitted successfully!');
           navigate(`/student/attempts/${res.data.attemptId}/result`, { replace: true });
         },
         onError: () => {
+          setSaveStatus('error');
+          void saveAttemptDraft(attemptId, answers);
           toast.error('Submit failed. Please try again.');
           hasSubmitted.current = false;
         },
@@ -503,6 +855,40 @@ export default function TakeExamPage() {
     }).length;
   }, [questions, answers]);
 
+  if (precheckLoading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="flex flex-col items-center gap-4 animate-fade-in">
+          <Spinner size="lg" />
+          <p className="text-sm font-medium text-[var(--color-text-muted)]">
+            Running exam security checks...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (precheckError && !precheckData) {
+    return (
+      <div className="mx-auto mt-16 max-w-lg animate-fade-in-up">
+        <div className="rounded-2xl border border-[var(--color-danger)]/30 bg-[var(--color-danger-soft)] p-8 text-center">
+          <h2 className="text-lg font-bold tracking-tight text-[var(--color-text-primary)]">
+            Security Check Failed
+          </h2>
+          <p className="mt-2 text-sm text-[var(--color-text-secondary)]">{precheckError}</p>
+          <div className="mt-6 flex justify-center gap-3">
+            <Button variant="outline" onClick={() => navigate('/student/exams')}>
+              Back to Exams
+            </Button>
+            <Button variant="primary" onClick={() => window.location.reload()}>
+              Run Checks Again
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Loading state
   if (loading) {
     return (
@@ -510,7 +896,7 @@ export default function TakeExamPage() {
         <div className="flex flex-col items-center gap-4 animate-fade-in">
           <Spinner size="lg" />
           <p className="text-sm font-medium text-[var(--color-text-muted)]">
-            Preparing your exam…
+            Preparing your exam...
           </p>
         </div>
       </div>
@@ -524,7 +910,7 @@ export default function TakeExamPage() {
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            if (passwordInput.trim()) runStart(passwordInput);
+            if (passwordInput.trim()) void enterSecureExam(passwordInput);
           }}
           className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-8 text-center shadow-[var(--shadow-md)]"
         >
@@ -570,6 +956,150 @@ export default function TakeExamPage() {
             </Button>
           </div>
         </form>
+      </div>
+    );
+  }
+
+  if (!examData && precheckData) {
+    const settings = precheckData.settings;
+    const requiredChecks = precheckData.checks.filter((check) => check.required);
+    const optionalChecks = precheckData.checks.filter((check) => !check.required);
+    const rules = [
+      settings.requireFullscreen ? 'Stay in fullscreen mode until you submit.' : null,
+      settings.blockCopyPaste ? 'Clipboard actions are blocked and recorded.' : null,
+      settings.blockRightClick ? 'Right-click menu attempts are blocked and recorded.' : null,
+      settings.blockShortcuts ? 'Common browser shortcuts are blocked and recorded.' : null,
+      settings.requireCamera ? 'Camera permission is required for this exam.' : null,
+      settings.maxDevices <= 1 ? 'Use one browser/device session for this attempt.' : null,
+      settings.allowedIpRanges.length > 0 ? 'This exam is restricted to an approved network.' : null,
+    ].filter(Boolean);
+
+    return (
+      <div className="mx-auto max-w-4xl space-y-5 px-4 py-8">
+        <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-6 shadow-[var(--shadow-sm)]">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-[var(--color-text-muted)]">
+                Security Level
+              </p>
+              <h1 className="mt-1 text-2xl font-bold text-[var(--color-text-primary)]">
+                {settings.securityLevel.replace('_', ' ')} Exam Rules
+              </h1>
+              <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
+                Review the checks and rules before entering the exam. Your answers remain protected by autosave during the attempt.
+              </p>
+            </div>
+            <div className="rounded-xl bg-[var(--color-bg-muted)] px-4 py-3 text-sm font-semibold text-[var(--color-text-primary)]">
+              IP: {precheckData.ipAddress}
+            </div>
+          </div>
+
+          <div className="mt-6 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+            <div className="space-y-3">
+              <h2 className="text-sm font-bold text-[var(--color-text-primary)]">
+                Required Checks
+              </h2>
+              <div className="space-y-2">
+                {requiredChecks.map((check) => (
+                  <div
+                    key={check.key}
+                    className="flex items-start gap-3 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-bg-subtle)] px-4 py-3"
+                  >
+                    <span
+                      className={`mt-0.5 h-2.5 w-2.5 rounded-full ${
+                        check.status === 'passed'
+                          ? 'bg-[var(--color-success)]'
+                          : 'bg-[var(--color-danger)]'
+                      }`}
+                    />
+                    <div>
+                      <div className="text-sm font-bold text-[var(--color-text-primary)]">
+                        {check.label}
+                      </div>
+                      <div className="text-xs text-[var(--color-text-secondary)]">
+                        {check.message}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {optionalChecks.length > 0 && (
+                <div className="pt-2">
+                  <h2 className="text-sm font-bold text-[var(--color-text-primary)]">
+                    Informational Checks
+                  </h2>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                    {optionalChecks.map((check) => (
+                      <div
+                        key={check.key}
+                        className="rounded-xl border border-[var(--color-border-subtle)] px-4 py-3 text-xs text-[var(--color-text-secondary)]"
+                      >
+                        <span className="font-semibold text-[var(--color-text-primary)]">
+                          {check.label}:
+                        </span>{' '}
+                        {check.message}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              <h2 className="text-sm font-bold text-[var(--color-text-primary)]">
+                Exam Rules
+              </h2>
+              <ul className="space-y-2">
+                {rules.length > 0 ? (
+                  rules.map((rule) => (
+                    <li
+                      key={rule}
+                      className="rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-bg-muted)] px-4 py-3 text-sm text-[var(--color-text-secondary)]"
+                    >
+                      {rule}
+                    </li>
+                  ))
+                ) : (
+                  <li className="rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-bg-muted)] px-4 py-3 text-sm text-[var(--color-text-secondary)]">
+                    Basic activity monitoring is enabled for this attempt.
+                  </li>
+                )}
+              </ul>
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-subtle)] px-4 py-3 text-sm text-[var(--color-text-primary)]">
+                <input
+                  type="checkbox"
+                  checked={rulesAccepted}
+                  onChange={(e) => setRulesAccepted(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 accent-[var(--color-primary)]"
+                />
+                <span>
+                  I understand that suspicious activity may be recorded for teacher review.
+                </span>
+              </label>
+            </div>
+          </div>
+
+          {fullscreenWarning && (
+            <p className="mt-4 rounded-xl bg-[var(--color-danger-soft)] px-4 py-3 text-sm font-medium text-[var(--color-danger)]">
+              Fullscreen mode is required before this exam can start.
+            </p>
+          )}
+
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
+            <Button variant="outline" onClick={() => navigate('/student/exams')}>
+              Back
+            </Button>
+            <Button
+              variant="primary"
+              isLoading={enteringExam}
+              disabled={!precheckData.canStart || !rulesAccepted}
+              onClick={() => void enterSecureExam()}
+            >
+              Enter Exam
+            </Button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -628,9 +1158,34 @@ export default function TakeExamPage() {
         isOnline={isOnline}
       />
 
+      {(fullscreenWarning || securityWarning) && (
+        <div className="border-b border-[var(--color-warning)]/30 bg-[var(--color-warning-soft)] px-4 py-2 text-sm text-[var(--color-warning)]">
+          <div className="mx-auto flex max-w-6xl flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <span className="font-medium">
+              {securityWarning ||
+                'Fullscreen mode is required. Re-enter fullscreen before continuing.'}
+            </span>
+            {fullscreenWarning && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  void document.documentElement.requestFullscreen?.().then(() => {
+                    setFullscreenWarning(false);
+                  });
+                }}
+              >
+                Enter Fullscreen
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
       <ExamHeader
         title={examData.exam.title}
         lastSaved={lastSaved}
+        saveStatus={saveStatus}
         tabSwitchCount={tabSwitchCount}
         timeLeft={timeLeft}
         isWarning={isWarning}

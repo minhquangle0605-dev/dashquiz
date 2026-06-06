@@ -45,3 +45,8 @@ minio_data/
 # Temp
 tmp/
 temp/
+
+# OCR (tesseract.js downloaded language data cache)
+.ocr-cache/
+*.traineddata
+*.traineddata.gz

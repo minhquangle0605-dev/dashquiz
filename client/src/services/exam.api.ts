@@ -12,6 +12,10 @@ import type {
   AssignExamPayload,
   ExamAssignmentItem,
   ExamMonitoringData,
+  ExamSecuritySettings,
+  AttemptEvidenceData,
+  ProctorReviewDecision,
+  SecurityRiskLevel,
 } from '@/types/exam';
 import { API_ENDPOINTS } from '@/utils/constants';
 
@@ -182,4 +186,39 @@ export async function getExamMonitoring(
 ): Promise<ExamMonitoringData> {
   const { data } = await api.get(API_ENDPOINTS.EXAMS.MONITORING(id), { params });
   return data.data ?? data;
+}
+
+export async function getExamSecuritySettings(
+  id: number,
+): Promise<ExamSecuritySettings> {
+  const { data } = await api.get(API_ENDPOINTS.EXAMS.SECURITY_SETTINGS(id));
+  return data.data ?? data;
+}
+
+export async function updateExamSecuritySettings(
+  id: number,
+  payload: Partial<ExamSecuritySettings>,
+): Promise<ExamSecuritySettings> {
+  const { data } = await api.put(API_ENDPOINTS.EXAMS.SECURITY_SETTINGS(id), payload);
+  return data.data ?? data;
+}
+
+export async function getAttemptEvidence(
+  examId: number,
+  attemptId: number,
+): Promise<AttemptEvidenceData> {
+  const { data } = await api.get(API_ENDPOINTS.EXAMS.EVIDENCE(examId, attemptId));
+  return data.data ?? data;
+}
+
+export async function saveProctorReview(
+  examId: number,
+  attemptId: number,
+  payload: {
+    decision: ProctorReviewDecision;
+    finalRiskLevel: SecurityRiskLevel;
+    summary?: string | null;
+  },
+): Promise<void> {
+  await api.put(API_ENDPOINTS.EXAMS.REVIEW(examId, attemptId), payload);
 }

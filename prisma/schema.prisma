@@ -72,14 +72,61 @@ enum ExamAttemptEventType {
   ANSWER_SAVED
   TAB_HIDDEN
   WINDOW_BLUR
+  FULLSCREEN_EXITED
+  FULLSCREEN_RESTORED
   COPY
   PASTE
+  CUT
   CONTEXT_MENU
   SHORTCUT_BLOCKED
   OFFLINE
   ONLINE
+  CAMERA_PERMISSION_MISSING
+  DEVICE_CHANGED
   SUBMITTED
   AUTO_SUBMITTED
+}
+
+enum ExamSecurityLevel {
+  LOW
+  MEDIUM
+  HIGH
+  LOCKDOWN
+}
+
+enum SecuritySeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum SecurityRiskLevel {
+  LOW
+  WATCH
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum SecuritySessionStatus {
+  ACTIVE
+  STALE
+  CLOSED
+}
+
+enum ViolationReviewStatus {
+  PENDING
+  CONFIRMED
+  FALSE_POSITIVE
+  DISMISSED
+}
+
+enum ProctorReviewDecision {
+  NO_ACTION
+  WATCH
+  FLAGGED
+  CLEARED
 }
 
 enum BackupStatus {
@@ -179,6 +226,8 @@ model User {
   teachingClasses        Class[]                     @relation("TeacherClasses")
   enrolledClasses        ClassStudent[]
   createdQuestions       Question[]
+  importJobs             ImportJob[]
+  questionVersions       QuestionVersion[]
   createdExams           Exam[]
   examAssignments        ExamAssignment[]
   examAttempts           ExamAttempt[]
@@ -187,6 +236,10 @@ model User {
   activityLogs           ActivityLog[]
   backups                Backup[]
   webPushSubscriptions   WebPushSubscription[]
+  reviewedViolations     AttemptViolation[]          @relation("ViolationReviewer")
+  proctorReviews         ProctorReview[]             @relation("ProctorReviewer")
+  securitySessions       AttemptSecuritySession[]
+  securityPolicyTemplates ExamSecurityPolicyTemplate[] @relation("SecurityPolicyTemplateCreator")
   studentProfile         StudentProfile?
   parentProfile          ParentProfile?
   classMemberRoles       ClassMemberRoleAssignment[]
@@ -571,6 +624,9 @@ model Question {
   questionType QuestionKind @map("question_type")
   difficulty   Int          @db.SmallInt
   explanation  String?      @db.Text
+  // Normalized text (HTML stripped, lowercased, whitespace collapsed) used by the
+  // pg_trgm duplicate-detection index. Kept in sync on create/update.
+  normalizedContent String?  @map("normalized_content") @db.Text
   createdBy    Int          @map("created_by")
   createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz()
 
@@ -583,8 +639,55 @@ model Question {
   examQuestions  ExamQuestion[]
   attemptAnswers AttemptAnswer[]
   review         QuestionReview?
+  duplicateLinksFrom QuestionDuplicateLink[] @relation("DupOriginal")
+  duplicateLinksTo   QuestionDuplicateLink[] @relation("DupDuplicate")
+  versions       QuestionVersion[]
 
   @@map("questions")
+}
+
+// Content-history snapshot for a question (PDF §8). One row per saved version;
+// lets teachers view history and restore a previous version.
+model QuestionVersion {
+  id           Int          @id @default(autoincrement())
+  questionId   Int          @map("question_id")
+  versionNo    Int          @map("version_no")
+  content      String       @db.Text
+  questionType QuestionKind @map("question_type")
+  difficulty   Int          @db.SmallInt
+  explanation  String?      @db.Text
+  optionsJson  Json         @map("options_json")
+  changedBy    Int?         @map("changed_by")
+  changeReason String?      @map("change_reason") @db.VarChar(200)
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz()
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  changer  User?    @relation(fields: [changedBy], references: [id], onDelete: SetNull)
+
+  @@unique([questionId, versionNo])
+  @@index([questionId])
+  @@map("question_versions")
+}
+
+// Reviewed duplicate decisions between two existing questions (PDF §8). Created
+// when a teacher resolves a near-duplicate ("acceptable variation" / "dismissed")
+// so confirmed pairs stop re-appearing in the duplicates review.
+model QuestionDuplicateLink {
+  id                  Int      @id @default(autoincrement())
+  questionId          Int      @map("question_id")
+  duplicateQuestionId Int      @map("duplicate_question_id")
+  similarity          Float
+  method              String   @default("trigram") @db.VarChar(20)
+  status              String   @default("flagged") @db.VarChar(20)
+  reviewedBy          Int?     @map("reviewed_by")
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  original  Question @relation("DupOriginal", fields: [questionId], references: [id], onDelete: Cascade)
+  duplicate Question @relation("DupDuplicate", fields: [duplicateQuestionId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, duplicateQuestionId])
+  @@index([status])
+  @@map("question_duplicate_links")
 }
 
 model QuestionOption {
@@ -637,6 +740,7 @@ model Exam {
   examQuestions   ExamQuestion[]
   examSchedules   ExamSchedule[]
   examAssignments ExamAssignment[]
+  securitySetting ExamSecuritySetting?
   examAttempts    ExamAttempt[]
 
   reportSnapshots       ExamReportSnapshot[]
@@ -750,6 +854,9 @@ model ExamAttempt {
   student            User                @relation(fields: [studentId], references: [id], onDelete: Cascade)
   attemptAnswers     AttemptAnswer[]
   attemptEvents      ExamAttemptEvent[]
+  securitySession     AttemptSecuritySession?
+  attemptViolations   AttemptViolation[]
+  proctorReview       ProctorReview?
   aiPracticeSessions AiPracticeSession[]
 
   @@index([studentId, examId])
@@ -766,11 +873,117 @@ model ExamAttemptEvent {
   metadata         Json?
 
   attempt ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  violation AttemptViolation?
 
   @@index([attemptId, occurredAt])
   @@index([attemptId, type])
   @@index([type, occurredAt])
   @@map("exam_attempt_events")
+}
+
+model ExamSecuritySetting {
+  id                    Int               @id @default(autoincrement())
+  examId                Int               @unique @map("exam_id")
+  securityLevel         ExamSecurityLevel @default(MEDIUM) @map("security_level")
+  requireFullscreen     Boolean           @default(true) @map("require_fullscreen")
+  blockCopyPaste        Boolean           @default(true) @map("block_copy_paste")
+  blockRightClick       Boolean           @default(true) @map("block_right_click")
+  blockShortcuts        Boolean           @default(true) @map("block_shortcuts")
+  requireCamera         Boolean           @default(false) @map("require_camera")
+  requirePreCheck       Boolean           @default(true) @map("require_pre_check")
+  allowedIpRanges       Json?             @map("allowed_ip_ranges")
+  maxDevices            Int               @default(1) @map("max_devices") @db.SmallInt
+  allowResume           Boolean           @default(true) @map("allow_resume")
+  warningThreshold      Int               @default(15) @map("warning_threshold")
+  autoSubmitThreshold   Int?              @default(100) @map("auto_submit_threshold")
+  snapshotIntervalSec   Int?              @map("snapshot_interval_sec")
+  retentionDays         Int               @default(30) @map("retention_days")
+  createdAt             DateTime          @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt             DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  exam Exam @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  @@map("exam_security_settings")
+}
+
+model AttemptSecuritySession {
+  id                Int                   @id @default(autoincrement())
+  attemptId         Int                   @unique @map("attempt_id")
+  studentId         Int                   @map("student_id")
+  deviceId          String                @map("device_id") @db.VarChar(191)
+  userAgent         String?               @map("user_agent") @db.Text
+  ipAddress         String?               @map("ip_address") @db.VarChar(64)
+  startedAt         DateTime              @default(now()) @map("started_at") @db.Timestamptz()
+  lastHeartbeatAt   DateTime              @default(now()) @map("last_heartbeat_at") @db.Timestamptz()
+  fullscreenState   Boolean               @default(false) @map("fullscreen_state")
+  cameraPermission  String?               @map("camera_permission") @db.VarChar(30)
+  screenSize        String?               @map("screen_size") @db.VarChar(40)
+  status            SecuritySessionStatus @default(ACTIVE)
+
+  attempt ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  student User        @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@index([status, lastHeartbeatAt])
+  @@map("attempt_security_sessions")
+}
+
+model AttemptViolation {
+  id           Int                   @id @default(autoincrement())
+  attemptId    Int                   @map("attempt_id")
+  eventId      Int?                  @unique @map("event_id")
+  eventType    ExamAttemptEventType  @map("event_type")
+  severity     SecuritySeverity
+  riskPoints   Int                   @map("risk_points")
+  message      String                @db.VarChar(255)
+  metadata     Json?
+  occurredAt   DateTime              @default(now()) @map("occurred_at") @db.Timestamptz()
+  reviewedBy   Int?                  @map("reviewed_by")
+  reviewStatus ViolationReviewStatus @default(PENDING) @map("review_status")
+  teacherNote  String?               @map("teacher_note") @db.Text
+  updatedAt    DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  attempt  ExamAttempt       @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  event    ExamAttemptEvent? @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  reviewer User?             @relation("ViolationReviewer", fields: [reviewedBy], references: [id], onDelete: SetNull)
+
+  @@index([attemptId, occurredAt])
+  @@index([severity, reviewStatus])
+  @@index([eventType, occurredAt])
+  @@map("attempt_violations")
+}
+
+model ProctorReview {
+  id             Int                    @id @default(autoincrement())
+  attemptId      Int                    @unique @map("attempt_id")
+  reviewerId     Int                    @map("reviewer_id")
+  decision       ProctorReviewDecision  @default(WATCH)
+  finalRiskLevel SecurityRiskLevel      @default(WATCH) @map("final_risk_level")
+  summary        String?                @db.Text
+  createdAt      DateTime               @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt      DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  attempt  ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  reviewer User        @relation("ProctorReviewer", fields: [reviewerId], references: [id], onDelete: Restrict)
+
+  @@index([reviewerId])
+  @@map("proctor_reviews")
+}
+
+model ExamSecurityPolicyTemplate {
+  id           Int      @id @default(autoincrement())
+  name         String   @db.VarChar(100)
+  description  String?  @db.Text
+  settingsJson Json     @map("settings_json")
+  createdBy    Int?     @map("created_by")
+  isDefault    Boolean  @default(false) @map("is_default")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  creator User? @relation("SecurityPolicyTemplateCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+
+  @@index([createdBy])
+  @@map("exam_security_policy_templates")
 }
 
 model AttemptAnswer {
@@ -929,6 +1142,92 @@ model ReportExport {
 
   @@index([userId, createdAt])
   @@map("report_exports")
+}
+
+// IMPORT PIPELINE — guided multi-source question import (PDF §8 / §9)
+// An ImportJob persists one upload attempt so parsing can run in the background,
+// progress can be polled, the original file can be retried, and the teacher can
+// leave and come back. ImportPreviewItem holds each extracted question (never
+// saved to the bank until the teacher commits) with its validation result.
+
+enum ImportJobStatus {
+  PENDING     // created, original file stored, parse not started yet
+  PARSING     // background parse/validation in progress
+  READY       // parsed + validated, awaiting teacher review/commit
+  COMMITTING  // selected items being written to the question bank
+  COMPLETED   // committed (some/all items saved)
+  FAILED      // parse failed; errorMessage explains why, retry allowed
+}
+
+enum ImportPreviewItemStatus {
+  PENDING    // extracted, not yet reviewed
+  VALID      // passes validation (no critical errors) — selectable for commit
+  INVALID    // has critical errors — blocked from commit until fixed
+  SKIPPED    // teacher chose to skip this item
+  COMMITTED  // saved into the question bank (questionId set)
+}
+
+model ImportJob {
+  id            Int             @id @default(autoincrement())
+  fileName      String          @map("file_name") @db.VarChar(255)
+  fileType      String          @map("file_type") @db.VarChar(100)
+  // Detected logical source: excel | document | zip | gift (drives the parser).
+  sourceFormat  String          @map("source_format") @db.VarChar(20)
+  // MinIO object name of the stored original file (for retry / audit).
+  sourceObject  String?         @map("source_object") @db.Text
+  status        ImportJobStatus @default(PENDING)
+  progress      Int             @default(0)
+  totalItems    Int             @default(0) @map("total_items")
+  validItems    Int             @default(0) @map("valid_items")
+  invalidItems  Int             @default(0) @map("invalid_items")
+  warningCount  Int             @default(0) @map("warning_count")
+  importedCount Int             @default(0) @map("imported_count")
+  // Target taxonomy chosen on the upload step (applied on commit).
+  subjectId     Int?            @map("subject_id")
+  chapterId     Int?            @map("chapter_id")
+  topicId       Int?            @map("topic_id")
+  // Which parser produced the result (regex | openai | excel | zip) — shown in UI.
+  parserSource  String?         @map("parser_source") @db.VarChar(20)
+  errorMessage  String?         @map("error_message") @db.Text
+  createdBy     Int             @map("created_by")
+  createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt     DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+  completedAt   DateTime?       @map("completed_at") @db.Timestamptz()
+
+  creator User                @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+  items   ImportPreviewItem[]
+
+  @@index([createdBy, createdAt])
+  @@index([status])
+  @@map("import_jobs")
+}
+
+model ImportPreviewItem {
+  id             Int                     @id @default(autoincrement())
+  importJobId    Int                     @map("import_job_id")
+  orderIndex     Int                     @map("order_index")
+  rawText        String?                 @map("raw_text") @db.Text
+  // The editable question payload: { content, questionType, difficulty,
+  // explanation, options[], questionImageUrl, explanationImageUrl }.
+  normalizedJson Json                    @map("normalized_json")
+  // Validation result: { critical: string[], warnings: string[], confidence }.
+  validationJson Json                    @map("validation_json")
+  // Possible duplicates of this item already in the bank:
+  // { matches: [{ questionId, similarity, method, contentPreview, questionType }] }.
+  duplicateJson  Json?                   @map("duplicate_json")
+  confidence     Float                   @default(1)
+  sourcePage     Int?                    @map("source_page")
+  sourceLine     Int?                    @map("source_line")
+  status         ImportPreviewItemStatus @default(PENDING)
+  // Set once committed so re-commits are idempotent.
+  questionId     Int?                    @map("question_id")
+  createdAt      DateTime                @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt      DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  job ImportJob @relation(fields: [importJobId], references: [id], onDelete: Cascade)
+
+  @@index([importJobId, orderIndex])
+  @@map("import_preview_items")
 }
 
 // AI ADAPTIVE (2 models)

@@ -245,6 +245,39 @@ export class AiService {
     return { success: true, message: 'AI practice — Phase 9' };
   }
 
+  async getNextAdaptiveQuestion(
+    sessionId: string,
+  ): Promise<{ success: boolean; message: string }> {
+    return {
+      success: true,
+      message: `Adaptive question placeholder for session ${sessionId}`,
+    };
+  }
+
+  async recordPracticeOutcome(
+    sessionId: string,
+    questionId: string,
+    isCorrect: boolean,
+  ): Promise<{ success: boolean; message: string }> {
+    return {
+      success: true,
+      message: `Recorded ${isCorrect ? 'correct' : 'incorrect'} outcome for ${questionId} in ${sessionId}`,
+    };
+  }
+
+  async endPracticeSession(
+    sessionId: string,
+  ): Promise<{ success: boolean; message: string }> {
+    return {
+      success: true,
+      message: `Practice session ${sessionId} ended`,
+    };
+  }
+
+  async buildWrongAnswerPrompt(attemptId: string | number): Promise<string> {
+    return `Wrong-answer prompt placeholder for attempt ${attemptId}`;
+  }
+
   /**
    * Generates one plausible-looking distractor right-side value for a MATCHING
    * question, based on the existing correct pairs and their semantic context.

@@ -26,19 +26,28 @@ const MONITORING_VIOLATION_TYPES = new Set<ExamAttemptEventType>([
   ExamAttemptEventType.WINDOW_BLUR,
   ExamAttemptEventType.COPY,
   ExamAttemptEventType.PASTE,
+  ExamAttemptEventType.CUT,
   ExamAttemptEventType.CONTEXT_MENU,
   ExamAttemptEventType.SHORTCUT_BLOCKED,
+  ExamAttemptEventType.FULLSCREEN_EXITED,
   ExamAttemptEventType.OFFLINE,
+  ExamAttemptEventType.CAMERA_PERMISSION_MISSING,
+  ExamAttemptEventType.DEVICE_CHANGED,
 ]);
 
 const MONITORING_EVENT_WEIGHTS: Partial<Record<ExamAttemptEventType, number>> = {
-  [ExamAttemptEventType.TAB_HIDDEN]: 2,
-  [ExamAttemptEventType.WINDOW_BLUR]: 1,
-  [ExamAttemptEventType.COPY]: 3,
-  [ExamAttemptEventType.PASTE]: 3,
-  [ExamAttemptEventType.CONTEXT_MENU]: 2,
-  [ExamAttemptEventType.SHORTCUT_BLOCKED]: 3,
-  [ExamAttemptEventType.OFFLINE]: 1,
+  [ExamAttemptEventType.TAB_HIDDEN]: 8,
+  [ExamAttemptEventType.WINDOW_BLUR]: 8,
+  [ExamAttemptEventType.FULLSCREEN_EXITED]: 10,
+  [ExamAttemptEventType.COPY]: 8,
+  [ExamAttemptEventType.PASTE]: 8,
+  [ExamAttemptEventType.CUT]: 8,
+  [ExamAttemptEventType.CONTEXT_MENU]: 4,
+  [ExamAttemptEventType.SHORTCUT_BLOCKED]: 6,
+  [ExamAttemptEventType.OFFLINE]: 4,
+  [ExamAttemptEventType.CAMERA_PERMISSION_MISSING]: 20,
+  [ExamAttemptEventType.DEVICE_CHANGED]: 20,
+  [ExamAttemptEventType.AUTO_SUBMITTED]: 100,
 };
 
 type MonitoringEvent = {
@@ -58,6 +67,14 @@ function metadataNumber(metadata: Prisma.JsonValue | null, key: string): number 
 
 function countEvents(events: MonitoringEvent[], type: ExamAttemptEventType): number {
   return events.filter((event) => event.type === type).length;
+}
+
+function monitoringRiskLevel(score: number): 'low' | 'watch' | 'medium' | 'high' | 'critical' {
+  if (score >= 80) return 'critical';
+  if (score >= 60) return 'high';
+  if (score >= 35) return 'medium';
+  if (score >= 15) return 'watch';
+  return 'low';
 }
 
 export class ExamService {
@@ -935,6 +952,40 @@ export class ExamService {
             timeSpentSec: true,
             status: true,
             attemptAnswers: { select: { isCorrect: true } },
+            securitySession: {
+              select: {
+                deviceId: true,
+                ipAddress: true,
+                userAgent: true,
+                lastHeartbeatAt: true,
+                fullscreenState: true,
+                cameraPermission: true,
+                screenSize: true,
+                status: true,
+              },
+            },
+            attemptViolations: {
+              orderBy: { occurredAt: 'desc' },
+              take: 100,
+              select: {
+                id: true,
+                eventType: true,
+                severity: true,
+                riskPoints: true,
+                message: true,
+                occurredAt: true,
+                reviewStatus: true,
+                teacherNote: true,
+              },
+            },
+            proctorReview: {
+              select: {
+                decision: true,
+                finalRiskLevel: true,
+                summary: true,
+                updatedAt: true,
+              },
+            },
             attemptEvents: {
               orderBy: { occurredAt: 'desc' },
               take: 200,
@@ -987,10 +1038,16 @@ export class ExamService {
           copyPasteCount: 0,
           offlineCount: 0,
           blockedShortcutCount: 0,
+          fullscreenExitCount: 0,
+          deviceChangeCount: 0,
+          cameraIssueCount: 0,
           riskScore: 0,
           riskLevel: 'low' as const,
           flags: [] as string[],
           recentEvents: [] as MonitoringEvent[],
+          recentViolations: [],
+          securitySession: null,
+          review: null,
         };
       }
 
@@ -1022,23 +1079,34 @@ export class ExamService {
       const tabSwitchCount = countEvents(events, ExamAttemptEventType.TAB_HIDDEN);
       const copyPasteCount =
         countEvents(events, ExamAttemptEventType.COPY) +
-        countEvents(events, ExamAttemptEventType.PASTE);
+        countEvents(events, ExamAttemptEventType.PASTE) +
+        countEvents(events, ExamAttemptEventType.CUT);
       const offlineCount = countEvents(events, ExamAttemptEventType.OFFLINE);
       const blockedShortcutCount = countEvents(events, ExamAttemptEventType.SHORTCUT_BLOCKED);
-      const violationCount = events.filter((event) => MONITORING_VIOLATION_TYPES.has(event.type)).length;
-
-      let riskScore = events.reduce(
-        (total, event) => total + (MONITORING_EVENT_WEIGHTS[event.type] ?? 0),
-        0,
+      const fullscreenExitCount = countEvents(events, ExamAttemptEventType.FULLSCREEN_EXITED);
+      const deviceChangeCount = countEvents(events, ExamAttemptEventType.DEVICE_CHANGED);
+      const cameraIssueCount = countEvents(events, ExamAttemptEventType.CAMERA_PERMISSION_MISSING);
+      const activeViolations = attempt.attemptViolations.filter(
+        (violation) =>
+          violation.reviewStatus !== 'FALSE_POSITIVE' && violation.reviewStatus !== 'DISMISSED',
       );
+      const rawViolationCount = events.filter((event) => MONITORING_VIOLATION_TYPES.has(event.type)).length;
+      const violationCount = activeViolations.length > 0 ? activeViolations.length : rawViolationCount;
+
+      let riskScore =
+        activeViolations.length > 0
+          ? activeViolations.reduce((total, violation) => total + violation.riskPoints, 0)
+          : events.reduce((total, event) => total + (MONITORING_EVENT_WEIGHTS[event.type] ?? 0), 0);
       const flags: string[] = [];
 
       if (tabSwitchCount >= 3) flags.push(`Tab switched ${tabSwitchCount} times`);
       if (copyPasteCount > 0) flags.push(`Copy/paste ${copyPasteCount} times`);
+      if (fullscreenExitCount > 0) flags.push(`Fullscreen exited ${fullscreenExitCount} times`);
       if (blockedShortcutCount > 0) flags.push(`Blocked shortcut ${blockedShortcutCount} times`);
       if (offlineCount > 0) flags.push(`Disconnected ${offlineCount} times`);
+      if (deviceChangeCount > 0) flags.push('Device/session changed');
+      if (cameraIssueCount > 0) flags.push('Camera permission issue');
       if (attempt.isAutoSubmitted) {
-        riskScore += 1;
         flags.push('Auto-submitted');
       }
 
@@ -1047,7 +1115,7 @@ export class ExamService {
           (now.getTime() - new Date(latestHeartbeat.occurredAt).getTime()) / 1000,
         );
         if (secondsSinceHeartbeat > 75) {
-          riskScore += 2;
+          riskScore += 10;
           flags.push('No recent heartbeat');
         }
       }
@@ -1059,11 +1127,12 @@ export class ExamService {
         score !== null &&
         score >= 8
       ) {
-        riskScore += 2;
+        riskScore += 10;
         flags.push('High score with very short time');
       }
 
-      const riskLevel = riskScore >= 8 ? 'high' : riskScore >= 3 ? 'medium' : 'low';
+      riskScore = Math.min(100, riskScore);
+      const riskLevel = monitoringRiskLevel(riskScore);
 
       return {
         student,
@@ -1087,10 +1156,16 @@ export class ExamService {
         copyPasteCount,
         offlineCount,
         blockedShortcutCount,
+        fullscreenExitCount,
+        deviceChangeCount,
+        cameraIssueCount,
         riskScore,
         riskLevel,
         flags,
         recentEvents: events.slice(0, 10),
+        recentViolations: attempt.attemptViolations.slice(0, 10),
+        securitySession: attempt.securitySession,
+        review: attempt.proctorReview,
       };
     });
 
@@ -1102,7 +1177,7 @@ export class ExamService {
     const passedCount = passableRows.filter((row) => row.passed).length;
 
     rows.sort((a, b) => {
-      const riskOrder: Record<string, number> = { high: 0, medium: 1, low: 2 };
+      const riskOrder: Record<string, number> = { critical: 0, high: 1, medium: 2, watch: 3, low: 4 };
       const statusOrder: Record<string, number> = {
         IN_PROGRESS: 0,
         NOT_STARTED: 1,
@@ -1149,7 +1224,10 @@ export class ExamService {
             ? Math.round((passedCount / passableRows.length) * 10000) / 100
             : null,
           suspiciousCount: rows.filter((row) => row.riskLevel !== 'low').length,
+          watchCount: rows.filter((row) => row.riskLevel === 'watch').length,
+          mediumRiskCount: rows.filter((row) => row.riskLevel === 'medium').length,
           highRiskCount: rows.filter((row) => row.riskLevel === 'high').length,
+          criticalRiskCount: rows.filter((row) => row.riskLevel === 'critical').length,
         },
         students: rows,
         updatedAt: now,

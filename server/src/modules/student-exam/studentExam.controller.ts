@@ -1,7 +1,12 @@
 import type { Request, Response, NextFunction } from 'express';
 import { studentExamService } from './studentExam.service';
 import { AppError } from '../../middlewares/errorHandler';
-import type { ListStudentExamsQuery, ListAttemptsQuery } from './studentExam.validation';
+import { getClientIp } from '../../utils/request';
+import type {
+  ListStudentExamsQuery,
+  ListAttemptsQuery,
+  StudentPrecheckInput,
+} from './studentExam.validation';
 
 // ═══════════════════════════════════════════════
 // LIST ASSIGNED EXAMS (GET /api/student/exams)
@@ -37,8 +42,29 @@ export async function startExam(
     if (isNaN(examId)) throw new AppError('Invalid exam ID', 400);
     const password =
       typeof req.body?.password === 'string' ? req.body.password : undefined;
-    const result = await studentExamService.startExam(examId, req.user.id, password);
+    const result = await studentExamService.startExam(examId, req.user.id, password, getClientIp(req));
     res.status(201).json(result);
+  } catch (error: unknown) {
+    next(error instanceof Error ? error : new Error('Unexpected error'));
+  }
+}
+
+export async function runPrecheck(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (!req.user) throw new AppError('Authentication required', 401);
+    const examId = parseInt(req.params.id, 10);
+    if (isNaN(examId)) throw new AppError('Invalid exam ID', 400);
+    const result = await studentExamService.runPrecheck(
+      examId,
+      req.user.id,
+      (req.body ?? {}) as NonNullable<StudentPrecheckInput>,
+      getClientIp(req),
+    );
+    res.json(result);
   } catch (error: unknown) {
     next(error instanceof Error ? error : new Error('Unexpected error'));
   }
@@ -94,6 +120,64 @@ export async function recordAttemptEvent(
     const attemptId = parseInt(req.params.id, 10);
     if (isNaN(attemptId)) throw new AppError('Invalid attempt ID', 400);
     const result = await studentExamService.recordAttemptEvent(attemptId, req.body, req.user.id);
+    res.status(201).json(result);
+  } catch (error: unknown) {
+    next(error instanceof Error ? error : new Error('Unexpected error'));
+  }
+}
+
+export async function recordAttemptEventsBatch(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (!req.user) throw new AppError('Authentication required', 401);
+    const attemptId = parseInt(req.params.id, 10);
+    if (isNaN(attemptId)) throw new AppError('Invalid attempt ID', 400);
+    const result = await studentExamService.recordAttemptEventsBatch(attemptId, req.body, req.user.id);
+    res.status(201).json(result);
+  } catch (error: unknown) {
+    next(error instanceof Error ? error : new Error('Unexpected error'));
+  }
+}
+
+export async function createSecuritySession(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (!req.user) throw new AppError('Authentication required', 401);
+    const attemptId = parseInt(req.params.id, 10);
+    if (isNaN(attemptId)) throw new AppError('Invalid attempt ID', 400);
+    const result = await studentExamService.createSecuritySession(
+      attemptId,
+      req.body,
+      req.user.id,
+      getClientIp(req),
+    );
+    res.status(201).json(result);
+  } catch (error: unknown) {
+    next(error instanceof Error ? error : new Error('Unexpected error'));
+  }
+}
+
+export async function recordSecurityHeartbeat(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (!req.user) throw new AppError('Authentication required', 401);
+    const attemptId = parseInt(req.params.id, 10);
+    if (isNaN(attemptId)) throw new AppError('Invalid attempt ID', 400);
+    const result = await studentExamService.recordSecurityHeartbeat(
+      attemptId,
+      req.body,
+      req.user.id,
+      getClientIp(req),
+    );
     res.status(201).json(result);
   } catch (error: unknown) {
     next(error instanceof Error ? error : new Error('Unexpected error'));

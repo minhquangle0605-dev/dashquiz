@@ -1158,40 +1158,29 @@ export function generateDocumentImportTemplatePdf(): Promise<Buffer> {
 }
 
 export class QuestionExtractService {
-  async extractFromDocument(
-    buffer: Buffer,
-    mimetype: string,
-    filename = '',
-  ): Promise<ExtractionResult> {
-    const text = await extractTextFromDocument(buffer, mimetype, filename);
-    if (!text) {
-      throw new AppError(
-        'Could not extract any text from this file. Scanned PDFs need OCR before import.',
-        400,
-      );
-    }
-
+  /**
+   * Turn already-extracted plain text (from a document text layer OR from OCR)
+   * into questions using the same AI-then-regex pipeline. Shared by the document
+   * extractor and the OCR import path so every source lands in one parser.
+   */
+  async extractFromText(text: string): Promise<ExtractionResult> {
     const warnings: string[] = [];
-    if (filename.toLowerCase().endsWith('.pdf') && text.length < 120) {
-      warnings.push(
-        'Very little text was extracted from this PDF. If it is a scanned image PDF, run OCR first.',
-      );
-    }
-
     let questions: ExtractedQuestion[] = [];
     let source: 'openai' | 'regex' = 'regex';
 
-    if (env.openai.apiKey) {
-      const aiResult = await openaiExtract(text);
-      if (aiResult && aiResult.length > 0) {
-        questions = aiResult;
-        source = 'openai';
+    if (text && text.trim()) {
+      if (env.openai.apiKey) {
+        const aiResult = await openaiExtract(text);
+        if (aiResult && aiResult.length > 0) {
+          questions = aiResult;
+          source = 'openai';
+        } else {
+          warnings.push('AI parser was unavailable or returned no questions; used template parser.');
+          questions = regexExtract(text);
+        }
       } else {
-        warnings.push('AI parser was unavailable or returned no questions; used template parser.');
         questions = regexExtract(text);
       }
-    } else {
-      questions = regexExtract(text);
     }
 
     if (questions.length === 0) {
@@ -1209,6 +1198,28 @@ export class QuestionExtractService {
       warnings,
       templateRules: TEMPLATE_RULES,
     };
+  }
+
+  async extractFromDocument(
+    buffer: Buffer,
+    mimetype: string,
+    filename = '',
+  ): Promise<ExtractionResult> {
+    const text = await extractTextFromDocument(buffer, mimetype, filename);
+    if (!text) {
+      throw new AppError(
+        'Could not extract any text from this file. Scanned PDFs need OCR before import.',
+        400,
+      );
+    }
+
+    const result = await this.extractFromText(text);
+    if (filename.toLowerCase().endsWith('.pdf') && text.length < 120) {
+      result.warnings.unshift(
+        'Very little text was extracted from this PDF. If it is a scanned image PDF, run OCR first.',
+      );
+    }
+    return result;
   }
 }
 

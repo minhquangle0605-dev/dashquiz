@@ -10,10 +10,15 @@ import { facility, median, discrimination27 } from '../exam/examStats';
 const VIOLATION_EVENTS: ExamAttemptEventType[] = [
   ExamAttemptEventType.TAB_HIDDEN,
   ExamAttemptEventType.WINDOW_BLUR,
+  ExamAttemptEventType.FULLSCREEN_EXITED,
   ExamAttemptEventType.COPY,
   ExamAttemptEventType.PASTE,
+  ExamAttemptEventType.CUT,
   ExamAttemptEventType.CONTEXT_MENU,
   ExamAttemptEventType.SHORTCUT_BLOCKED,
+  ExamAttemptEventType.OFFLINE,
+  ExamAttemptEventType.CAMERA_PERMISSION_MISSING,
+  ExamAttemptEventType.DEVICE_CHANGED,
 ];
 
 // ════════════════════════════════════════════════════════════════════

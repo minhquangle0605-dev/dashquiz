@@ -22,6 +22,7 @@ type DashboardShellProps = {
   sidebarClassName: string;
   activeNavClassName: string;
   navItems: DashboardNavItem[];
+  mobileNavItems?: DashboardNavItem[];
 };
 
 function CollapseIcon({ collapsed }: { collapsed: boolean }) {
@@ -44,6 +45,7 @@ export function DashboardShell({
   sidebarClassName,
   activeNavClassName,
   navItems,
+  mobileNavItems,
 }: DashboardShellProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -256,11 +258,57 @@ export function DashboardShell({
             <UserMenu roleLabel={roleLabel} />
           </div>
         </header>
-        <main className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
+        <main
+          className={`flex-1 overflow-auto p-4 sm:p-6 lg:p-8 ${
+            mobileNavItems?.length ? 'pb-24 sm:pb-24 lg:pb-8' : ''
+          }`}
+        >
           <PageTransition transitionKey={location.pathname}>
             <Outlet />
           </PageTransition>
         </main>
+
+        {mobileNavItems?.length ? (
+          <nav
+            className="fixed inset-x-0 bottom-0 z-20 border-t border-[var(--color-border)] bg-[var(--color-bg-card)] px-2 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_-18px_rgba(15,23,42,0.45)] lg:hidden"
+            aria-label={`${roleLabel} primary navigation`}
+          >
+            <div
+              className="mx-auto grid max-w-md"
+              style={{
+                gridTemplateColumns: `repeat(${Math.min(mobileNavItems.length, 5)}, minmax(0, 1fr))`,
+              }}
+            >
+              {mobileNavItems.slice(0, 5).map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.end}
+                  className={({ isActive }) =>
+                    `flex min-h-[64px] flex-col items-center justify-center gap-1 rounded-lg px-1 text-[11px] font-semibold transition-colors focus-ring-brand ${
+                      isActive
+                        ? 'text-[var(--color-primary)]'
+                        : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'
+                    }`
+                  }
+                >
+                  {({ isActive }) => (
+                    <>
+                      <span
+                        className={`flex h-8 w-8 items-center justify-center rounded-lg [&>svg]:h-5 [&>svg]:w-5 ${
+                          isActive ? 'bg-[var(--color-primary-soft)]' : ''
+                        }`}
+                      >
+                        {item.icon}
+                      </span>
+                      <span className="max-w-full truncate">{item.label}</span>
+                    </>
+                  )}
+                </NavLink>
+              ))}
+            </div>
+          </nav>
+        ) : null}
       </div>
     </div>
   );

@@ -7,6 +7,8 @@ import type {
   AttemptResultData,
   StudentAnswerValue,
   RecordAttemptEventPayload,
+  StudentPrecheckPayload,
+  StudentPrecheckData,
 } from '@/types/exam';
 import { API_ENDPOINTS } from '@/utils/constants';
 
@@ -53,6 +55,17 @@ export async function startStudentExam(
   return data;
 }
 
+export async function runStudentExamPrecheck(
+  examId: number,
+  payload: StudentPrecheckPayload,
+): Promise<ServerResponse<StudentPrecheckData>> {
+  const { data } = await api.post<ServerResponse<StudentPrecheckData>>(
+    API_ENDPOINTS.STUDENT_EXAMS.PRECHECK(examId),
+    payload,
+  );
+  return data;
+}
+
 export async function saveStudentAnswers(
   attemptId: number,
   answers: Record<string, StudentAnswerValue>,
@@ -89,4 +102,42 @@ export async function recordAttemptEvent(
   payload: RecordAttemptEventPayload,
 ): Promise<void> {
   await api.post(API_ENDPOINTS.STUDENT_EXAMS.EVENT(attemptId), payload);
+}
+
+export async function recordAttemptEventsBatch(
+  attemptId: number,
+  events: RecordAttemptEventPayload[],
+): Promise<void> {
+  if (events.length === 0) return;
+  await api.post(API_ENDPOINTS.STUDENT_EXAMS.EVENTS_BATCH(attemptId), { events });
+}
+
+export async function createAttemptSecuritySession(
+  attemptId: number,
+  payload: {
+    deviceId: string;
+    userAgent?: string;
+    fullscreenState?: boolean;
+    cameraPermission?: string | null;
+    screenSize?: string | null;
+  },
+): Promise<void> {
+  await api.post(API_ENDPOINTS.STUDENT_EXAMS.SECURITY_SESSION(attemptId), payload);
+}
+
+export async function recordSecurityHeartbeat(
+  attemptId: number,
+  payload: {
+    deviceId?: string;
+    fullscreenState?: boolean;
+    focusState?: boolean;
+    cameraPermission?: string | null;
+    screenSize?: string | null;
+    answeredCount?: number;
+    unansweredCount?: number;
+    timeRemainingSec?: number;
+    currentQuestionId?: number | null;
+  },
+): Promise<void> {
+  await api.post(API_ENDPOINTS.STUDENT_EXAMS.HEARTBEAT(attemptId), payload);
 }

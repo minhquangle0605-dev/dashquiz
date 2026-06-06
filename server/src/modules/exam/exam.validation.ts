@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ExamSecurityLevel, ProctorReviewDecision, SecurityRiskLevel } from '@prisma/client';
 
 // ═══════════════════════════════════════════════
 // REVIEW OPTIONS (§8) — per-window visibility matrix
@@ -139,6 +140,43 @@ export const examMonitoringQuerySchema = z.object({
   classId: z.coerce.number().int().positive().optional(),
 });
 
+export const examSecuritySettingsSchema = z
+  .object({
+    securityLevel: z.nativeEnum(ExamSecurityLevel).default(ExamSecurityLevel.MEDIUM),
+    requireFullscreen: z.boolean().optional(),
+    blockCopyPaste: z.boolean().optional(),
+    blockRightClick: z.boolean().optional(),
+    blockShortcuts: z.boolean().optional(),
+    requireCamera: z.boolean().optional(),
+    requirePreCheck: z.boolean().optional(),
+    allowedIpRanges: z.array(z.string().trim().min(1).max(64)).max(20).optional().nullable(),
+    maxDevices: z.coerce.number().int().min(1).max(10).optional(),
+    allowResume: z.boolean().optional(),
+    warningThreshold: z.coerce.number().int().min(1).max(100).optional(),
+    autoSubmitThreshold: z.coerce.number().int().min(1).max(100).optional().nullable(),
+    snapshotIntervalSec: z.coerce.number().int().min(30).max(3600).optional().nullable(),
+    retentionDays: z.coerce.number().int().min(1).max(365).optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (
+      data.autoSubmitThreshold != null &&
+      data.warningThreshold != null &&
+      data.autoSubmitThreshold < data.warningThreshold
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['autoSubmitThreshold'],
+        message: 'Auto-submit threshold must be greater than or equal to warning threshold',
+      });
+    }
+  });
+
+export const proctorReviewSchema = z.object({
+  decision: z.nativeEnum(ProctorReviewDecision),
+  finalRiskLevel: z.nativeEnum(SecurityRiskLevel),
+  summary: z.string().max(4000).optional().nullable(),
+});
+
 // ═══════════════════════════════════════════════
 // MANUAL GRADING (§12)
 // ═══════════════════════════════════════════════
@@ -161,3 +199,5 @@ export type ScheduleExamInput = z.infer<typeof scheduleExamSchema>;
 export type AssignExamInput = z.infer<typeof assignExamSchema>;
 export type ListExamsQuery = z.infer<typeof listExamsQuerySchema>;
 export type ExamMonitoringQuery = z.infer<typeof examMonitoringQuerySchema>;
+export type ExamSecuritySettingsInput = z.infer<typeof examSecuritySettingsSchema>;
+export type ProctorReviewInput = z.infer<typeof proctorReviewSchema>;

@@ -19,6 +19,7 @@ import userRoutes from './modules/user/user.routes';
 import adminUserRoutes from './modules/user/user.admin.routes';
 import examRoutes from './modules/exam/exam.routes';
 import questionRoutes from './modules/question/question.routes';
+import { importJobRouter } from './modules/question/importJob.routes';
 import { studentAnalyticsRouter, teacherAnalyticsRouter } from './modules/analytics/analytics.routes';
 import { examAnalyticsRouter } from './modules/exam-analytics/examAnalytics.routes';
 import { questionQualityRouter } from './modules/exam-analytics/questionQuality.routes';
@@ -84,6 +85,9 @@ app.get('/health', async (_req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/exams', examRoutes);
+// Import pipeline routes must come BEFORE questionRoutes so that
+// /api/questions/import-jobs/* is not captured by questionRoutes' GET /:id.
+app.use('/api/questions', importJobRouter);
 app.use('/api/questions', questionRoutes);
 app.use('/api/questions', questionQualityRouter);
 app.use('/api/ai', aiRoutes);

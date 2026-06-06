@@ -6,6 +6,8 @@ import { Toaster } from 'react-hot-toast';
 import App from './App';
 import { ThemeRoot } from '@/components/ThemeRoot';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
+import { PwaInstallPrompt } from '@/components/shared/PwaInstallPrompt';
+import { PwaUpdatePrompt } from '@/components/shared/PwaUpdatePrompt';
 import { SocketProvider } from '@/providers/SocketProvider';
 import './index.css';
 
@@ -28,6 +30,8 @@ createRoot(document.getElementById('root')!).render(
             <ErrorBoundary>
               <App />
             </ErrorBoundary>
+            <PwaInstallPrompt />
+            <PwaUpdatePrompt />
             <Toaster
               position="top-right"
               toastOptions={{
