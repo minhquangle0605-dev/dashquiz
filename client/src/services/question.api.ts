@@ -16,7 +16,6 @@ import type {
   BulkCreateResult,
   CurriculumSubject,
   CurriculumChapter,
-  CurriculumTopic,
 } from '@/types/question';
 
 // ── Questions CRUD ─────────────────────────────────
@@ -145,13 +144,11 @@ export async function importQuestions(
   file: File,
   subjectId: number,
   chapterId: number,
-  topicId?: number,
 ): Promise<ImportQuestionResult> {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('subjectId', String(subjectId));
   if (chapterId) formData.append('chapterId', String(chapterId));
-  if (topicId) formData.append('topicId', String(topicId));
   const { data } = await api.post(API_ENDPOINTS.QUESTIONS.IMPORT, formData);
   return data.data ?? data;
 }
@@ -229,18 +226,16 @@ export async function bulkCreateQuestions(
   questions: ExtractedQuestion[],
   subjectId: number,
   chapterId: number,
-  topicId?: number,
 ): Promise<BulkCreateResult> {
   const { data } = await api.post(API_ENDPOINTS.QUESTIONS.BULK_CREATE, {
     subjectId,
     chapterId,
-    ...(topicId ? { topicId } : {}),
     questions,
   });
   return data.data ?? data;
 }
 
-// ── Curriculum (Subject → Chapter → Topic) ────────
+// ── Curriculum (Subject → Chapter) ────────
 
 export async function listSubjects(): Promise<CurriculumSubject[]> {
   const { data } = await api.get(API_ENDPOINTS.CURRICULUM.SUBJECTS);
@@ -255,14 +250,4 @@ export async function getChaptersBySubject(
   );
   const result = data.data ?? data;
   return Array.isArray(result) ? result : (result?.chapters ?? result ?? []);
-}
-
-export async function getTopicsByChapter(
-  chapterId: number,
-): Promise<CurriculumTopic[]> {
-  const { data } = await api.get(
-    API_ENDPOINTS.CURRICULUM.TOPICS_BY_CHAPTER(chapterId),
-  );
-  const result = data.data ?? data;
-  return Array.isArray(result) ? result : (result?.topics ?? result ?? []);
 }

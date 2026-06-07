@@ -1,7 +1,7 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middlewares/errorHandler';
 import { CORE_SUBJECT_CODES, isCoreSubjectCode } from '../../constants/subjects';
-import type { CreateChapterInput, CreateTopicInput } from './curriculum.validation';
+import type { CreateChapterInput } from './curriculum.validation';
 
 export class CurriculumService {
   // ═══════════════════════════════════════════════
@@ -37,7 +37,7 @@ export class CurriculumService {
     const chapters = await prisma.chapter.findMany({
       where: { subjectId },
       include: {
-        _count: { select: { topics: true, questions: true } },
+        _count: { select: { questions: true } },
       },
       orderBy: [{ gradeLevel: 'asc' }, { orderIndex: 'asc' }, { name: 'asc' }],
     });
@@ -48,44 +48,6 @@ export class CurriculumService {
       data: {
         subject: { id: subject.id, name: subject.name, code: subject.code },
         chapters,
-      },
-    };
-  }
-
-  // ═══════════════════════════════════════════════
-  // TOPICS BY CHAPTER
-  // ═══════════════════════════════════════════════
-
-  async getTopicsByChapter(chapterId: number) {
-    const chapter = await prisma.chapter.findUnique({
-      where: { id: chapterId },
-      include: {
-        subject: { select: { id: true, name: true, code: true } },
-      },
-    });
-    if (!chapter) {
-      throw new AppError('Chapter not found', 404);
-    }
-
-    const topics = await prisma.topic.findMany({
-      where: { chapterId },
-      include: {
-        _count: { select: { questions: true, fromRelations: true, toRelations: true } },
-      },
-      orderBy: { id: 'asc' },
-    });
-
-    return {
-      success: true,
-      message: 'Topics retrieved successfully',
-      data: {
-        chapter: {
-          id: chapter.id,
-          name: chapter.name,
-          gradeLevel: chapter.gradeLevel,
-          subject: chapter.subject,
-        },
-        topics,
       },
     };
   }
@@ -116,7 +78,7 @@ export class CurriculumService {
       },
       include: {
         subject: { select: { id: true, name: true, code: true } },
-        _count: { select: { topics: true, questions: true } },
+        _count: { select: { questions: true } },
       },
     });
 
@@ -127,139 +89,6 @@ export class CurriculumService {
     };
   }
 
-  // ═══════════════════════════════════════════════
-  // CREATE TOPIC (teacher)
-  // ═══════════════════════════════════════════════
-
-  async createTopic(data: CreateTopicInput) {
-    const chapter = await prisma.chapter.findUnique({
-      where: { id: data.chapterId },
-      include: { subject: { select: { id: true, name: true } } },
-    });
-    if (!chapter) {
-      throw new AppError('Chapter not found', 404);
-    }
-
-    const existing = await prisma.topic.findFirst({
-      where: { chapterId: data.chapterId, name: data.name },
-    });
-    if (existing) {
-      throw new AppError(`Topic "${data.name}" already exists in this chapter`, 409);
-    }
-
-    const topic = await prisma.topic.create({
-      data: {
-        chapterId: data.chapterId,
-        name: data.name,
-        description: data.description ?? null,
-      },
-      include: {
-        chapter: {
-          select: {
-            id: true,
-            name: true,
-            subject: { select: { id: true, name: true, code: true } },
-          },
-        },
-      },
-    });
-
-    return {
-      success: true,
-      message: 'Topic created successfully',
-      data: topic,
-    };
-  }
-
-  // ═══════════════════════════════════════════════
-  // TOPIC RELATIONS — Knowledge Graph edges (UC14)
-  // ═══════════════════════════════════════════════
-
-  async getTopicRelations(topicId: number) {
-    const topic = await prisma.topic.findUnique({
-      where: { id: topicId },
-      include: {
-        chapter: {
-          select: {
-            id: true,
-            name: true,
-            subject: { select: { id: true, name: true, code: true } },
-          },
-        },
-      },
-    });
-    if (!topic) {
-      throw new AppError('Topic not found', 404);
-    }
-
-    const [outgoing, incoming] = await Promise.all([
-      prisma.topicRelation.findMany({
-        where: { fromTopicId: topicId },
-        include: {
-          toTopic: {
-            select: {
-              id: true,
-              name: true,
-              chapter: {
-                select: {
-                  id: true,
-                  name: true,
-                  subject: { select: { id: true, name: true } },
-                },
-              },
-            },
-          },
-        },
-      }),
-      prisma.topicRelation.findMany({
-        where: { toTopicId: topicId },
-        include: {
-          fromTopic: {
-            select: {
-              id: true,
-              name: true,
-              chapter: {
-                select: {
-                  id: true,
-                  name: true,
-                  subject: { select: { id: true, name: true } },
-                },
-              },
-            },
-          },
-        },
-      }),
-    ]);
-
-    const relations = [
-      ...outgoing.map((r) => ({
-        id: r.id,
-        direction: 'outgoing' as const,
-        relationType: r.relationType,
-        relatedTopic: r.toTopic,
-      })),
-      ...incoming.map((r) => ({
-        id: r.id,
-        direction: 'incoming' as const,
-        relationType: r.relationType,
-        relatedTopic: r.fromTopic,
-      })),
-    ];
-
-    return {
-      success: true,
-      message: 'Topic relations retrieved successfully',
-      data: {
-        topic: {
-          id: topic.id,
-          name: topic.name,
-          chapter: topic.chapter,
-        },
-        relations,
-        totalRelations: relations.length,
-      },
-    };
-  }
 }
 
 export const curriculumService = new CurriculumService();

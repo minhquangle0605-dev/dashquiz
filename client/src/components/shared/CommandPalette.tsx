@@ -38,9 +38,7 @@ function commandsForRole(role: UserRole | undefined): CommandItem[] {
     case ROLES.STUDENT:
       return [
         { id: 'student-dashboard', label: 'Dashboard', to: '/student/dashboard', keywords: 'home overview' },
-        { id: 'student-graph', label: 'Knowledge Graph', to: '/student/knowledge-graph', keywords: 'graph analytics topics' },
         { id: 'student-exams', label: 'Exams', to: '/student/exams', keywords: 'tests take assignments' },
-        { id: 'student-ai', label: 'AI Practice', to: '/student/ai-practice', keywords: 'practice tutor study' },
         { id: 'student-profile', label: 'Profile', to: '/student/profile', keywords: 'account me settings' },
       ];
     case ROLES.PARENT:

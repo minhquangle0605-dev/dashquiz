@@ -19,14 +19,13 @@ interface ServerResponse<T> {
 /** Upload a file and create an import job; parsing runs in the background. */
 export async function createImportJob(
   file: File,
-  meta: { subjectId?: number; chapterId?: number; topicId?: number },
+  meta: { subjectId?: number; chapterId?: number },
   onUploadProgress?: (progress: number) => void,
 ): Promise<ImportJob> {
   const formData = new FormData();
   formData.append('file', file);
   if (meta.subjectId) formData.append('subjectId', String(meta.subjectId));
   if (meta.chapterId) formData.append('chapterId', String(meta.chapterId));
-  if (meta.topicId) formData.append('topicId', String(meta.topicId));
   const { data } = await api.post<ServerResponse<ImportJob>>(
     API_ENDPOINTS.QUESTIONS.IMPORT_JOBS,
     formData,
@@ -71,7 +70,7 @@ export async function updateImportPreviewItem(
 export type BulkFixAction =
   | { type: 'set-difficulty'; difficulty: number; itemIds?: number[] }
   | { type: 'set-type'; questionType: QuestionKind; itemIds?: number[] }
-  | { type: 'set-taxonomy'; subjectId?: number | null; chapterId?: number | null; topicId?: number | null }
+  | { type: 'set-taxonomy'; subjectId?: number | null; chapterId?: number | null }
   | { type: 'skip-invalid' }
   | { type: 'skip'; itemIds: number[] };
 

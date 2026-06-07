@@ -8,7 +8,6 @@ export interface AiSuggestionPanelProps {
   onApplyDifficulty?: (difficulty: number) => void;
   onApplyExplanation?: (text: string) => void;
   onApplyTags?: (tags: string[]) => void;
-  onApplyTopic?: (topic: string) => void;
   onDismiss?: () => void;
 }
 
@@ -27,7 +26,6 @@ export function AiSuggestionPanel({
   onApplyDifficulty,
   onApplyExplanation,
   onApplyTags,
-  onApplyTopic,
   onDismiss,
 }: AiSuggestionPanelProps) {
   if (!suggestion.available) {
@@ -46,7 +44,6 @@ export function AiSuggestionPanel({
   const hasAnything =
     suggestion.difficulty !== undefined ||
     (suggestion.tags?.length ?? 0) > 0 ||
-    suggestion.topic ||
     suggestion.explanation ||
     (suggestion.weakDistractors?.length ?? 0) > 0 ||
     suggestion.notes;
@@ -70,16 +67,6 @@ export function AiSuggestionPanel({
             Difficulty: {suggestion.difficulty} — {DIFFICULTY_LABELS[suggestion.difficulty]}
             {onApplyDifficulty && current?.difficulty !== suggestion.difficulty && (
               <button type="button" className={applyBtn} onClick={() => onApplyDifficulty(suggestion.difficulty!)}>
-                Apply
-              </button>
-            )}
-          </span>
-        )}
-        {suggestion.topic && (
-          <span className={chip}>
-            Topic: {suggestion.topic}
-            {onApplyTopic && (
-              <button type="button" className={applyBtn} onClick={() => onApplyTopic(suggestion.topic!)}>
                 Apply
               </button>
             )}

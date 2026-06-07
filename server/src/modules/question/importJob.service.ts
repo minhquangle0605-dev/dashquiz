@@ -39,7 +39,6 @@ type ItemStatus = 'PENDING' | 'VALID' | 'INVALID' | 'SKIPPED' | 'COMMITTED';
 export interface CreateJobMeta {
   subjectId?: number | null;
   chapterId?: number | null;
-  topicId?: number | null;
 }
 
 export interface UploadedFile {
@@ -125,7 +124,6 @@ class ImportJobService {
         status: 'PENDING',
         subjectId: meta.subjectId ?? null,
         chapterId: meta.chapterId ?? null,
-        topicId: meta.topicId ?? null,
         createdBy: userId,
       },
     });
@@ -348,7 +346,6 @@ class ImportJobService {
       questionType?: NormalizedImportQuestion['questionType'];
       subjectId?: number | null;
       chapterId?: number | null;
-      topicId?: number | null;
       itemIds?: number[];
     },
     userId: number,
@@ -362,7 +359,6 @@ class ImportJobService {
         data: {
           subjectId: action.subjectId ?? null,
           chapterId: action.chapterId ?? null,
-          topicId: action.topicId ?? null,
         },
       });
       return this.getPreview(jobId, userId, isAdmin);
@@ -462,7 +458,6 @@ class ImportJobService {
         {
           subjectId: job.subjectId,
           chapterId: job.chapterId,
-          topicId: job.topicId ?? undefined,
         },
         userId,
       );

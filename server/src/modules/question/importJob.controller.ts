@@ -78,7 +78,6 @@ export async function createImportJob(req: Request, res: Response, next: NextFun
       {
         subjectId: optionalId(req.body?.subjectId),
         chapterId: optionalId(req.body?.chapterId),
-        topicId: optionalId(req.body?.topicId),
       },
       id,
     );
@@ -155,7 +154,6 @@ export async function bulkFixImportJob(req: Request, res: Response, next: NextFu
             : undefined,
         subjectId: optionalId(body.subjectId),
         chapterId: optionalId(body.chapterId),
-        topicId: optionalId(body.topicId),
         itemIds: Array.isArray(body.itemIds) ? body.itemIds.map((v) => Number(v)) : undefined,
       },
       id,

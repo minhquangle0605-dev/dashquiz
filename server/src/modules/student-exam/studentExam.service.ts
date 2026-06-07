@@ -812,7 +812,6 @@ export class StudentExamService {
               include: {
                 options: { orderBy: { label: 'asc' } },
                 chapter: { select: { id: true, name: true } },
-                topic: { select: { id: true, name: true } },
               },
             },
             selectedOption: { select: { id: true, label: true, content: true } },
@@ -886,7 +885,6 @@ export class StudentExamService {
             content: ans.question.content,
             questionType: ans.question.questionType,
             chapter: ans.question.chapter,
-            topic: ans.question.topic,
             explanation: flags.generalFeedback ? ans.question.explanation : null,
             selectedOption: flags.responses ? ans.selectedOption : null,
             selectedOptions,

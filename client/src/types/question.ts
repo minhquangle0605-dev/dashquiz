@@ -36,7 +36,6 @@ export interface Question {
   id: number;
   subjectId: number;
   chapterId: number | null;
-  topicId: number | null;
   content: string;
   questionType: QuestionKind;
   difficulty: 1 | 2 | 3 | 4 | 5;
@@ -47,7 +46,6 @@ export interface Question {
   tags: QuestionTag[];
   subject?: { id: number; name: string; code: string };
   chapter?: { id: number; name: string; gradeLevel?: number } | null;
-  topic?: { id: number; name: string } | null;
   creator?: { id: number; fullName: string };
   review?: QuestionReviewSummary | null;
 }
@@ -71,7 +69,6 @@ export interface QuestionFilter {
   subjectId?: number | string;
   gradeLevel?: number | string;
   chapterId?: number | string;
-  topicId?: number | string;
   difficulty?: number | string;
   search?: string;
   questionType?: QuestionKind;
@@ -86,7 +83,6 @@ export interface QuestionFilter {
 export interface CreateQuestionPayload {
   subjectId: number;
   chapterId?: number;
-  topicId?: number;
   content: string;
   questionType: QuestionKind;
   difficulty: number;
@@ -190,7 +186,6 @@ export interface ImportJob {
   importedCount: number;
   subjectId: number | null;
   chapterId: number | null;
-  topicId: number | null;
   parserSource: string | null;
   errorMessage: string | null;
   createdBy: number;
@@ -279,7 +274,6 @@ export interface AiSuggestion {
   available: boolean;
   difficulty?: number;
   tags?: string[];
-  topic?: string;
   explanation?: string;
   weakDistractors?: AiWeakDistractor[];
   notes?: string;
@@ -301,9 +295,3 @@ export interface CurriculumChapter {
   orderIndex: number;
 }
 
-export interface CurriculumTopic {
-  id: number;
-  chapterId: number;
-  name: string;
-  description?: string;
-}

@@ -6,6 +6,7 @@ import { ROLES } from '@/utils/constants';
 
 import AuthLayout from './layouts/AuthLayout';
 import StudentLayout from './layouts/StudentLayout';
+import ExamTakingLayout from './layouts/ExamTakingLayout';
 import TeacherLayout from './layouts/TeacherLayout';
 import ParentLayout from './layouts/ParentLayout';
 import AdminLayout from './layouts/AdminLayout';
@@ -13,13 +14,10 @@ import AdminLayout from './layouts/AdminLayout';
 const LoginPage = lazy(() => import('./pages/auth/LoginPage'));
 
 const StudentDashboard = lazy(() => import('./pages/student/DashboardPage'));
-const KnowledgeGraphPage = lazy(() => import('./pages/student/KnowledgeGraphPage'));
 const ExamListPage = lazy(() => import('./pages/student/ExamListPage'));
 const ExamLobbyPage = lazy(() => import('./pages/student/ExamLobbyPage'));
 const TakeExamPage = lazy(() => import('./pages/student/TakeExamPage'));
 const ExamResultPage = lazy(() => import('./pages/student/ExamResultPage'));
-const AIPracticePage = lazy(() => import('./pages/student/AIPracticePage'));
-const RemedialSessionPage = lazy(() => import('./pages/student/RemedialSessionPage'));
 const MyClassesPage = lazy(() => import('./pages/student/MyClassesPage'));
 const StudentTimetablePage = lazy(() => import('./pages/student/TimetablePage'));
 
@@ -81,16 +79,19 @@ export default function App() {
             <Route path="dashboard" element={<StudentDashboard />} />
             <Route path="classes" element={<MyClassesPage />} />
             <Route path="timetable" element={<StudentTimetablePage />} />
-            <Route path="knowledge-graph" element={<KnowledgeGraphPage />} />
             <Route path="exams" element={<ExamListPage />} />
             <Route path="exams/:id" element={<ExamLobbyPage />} />
-            <Route path="exams/:id/take" element={<TakeExamPage />} />
             <Route path="attempts/:attemptId/result" element={<ExamResultPage />} />
-            <Route path="ai-practice" element={<AIPracticePage />} />
-            <Route path="remedial/:sessionId" element={<RemedialSessionPage />} />
             <Route path="discussions" element={<DiscussionsPage />} />
             <Route path="notifications" element={<NotificationsPage />} />
             <Route path="profile" element={<ProfilePage />} />
+          </Route>
+        </Route>
+
+        {/* Student exam runner — immersive (no dashboard chrome / sidebar) */}
+        <Route element={<ProtectedRoute allowedRoles={[ROLES.STUDENT]} />}>
+          <Route element={<ExamTakingLayout />}>
+            <Route path="/student/exams/:id/take" element={<TakeExamPage />} />
           </Route>
         </Route>
 

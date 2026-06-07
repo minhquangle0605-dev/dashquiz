@@ -12,7 +12,7 @@ import {
   Tooltip,
   Legend,
 } from 'chart.js';
-import { Line, Radar, Bar } from 'react-chartjs-2';
+import { Line } from 'react-chartjs-2';
 
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -30,11 +30,7 @@ import { StatTile, type StatTone } from '@/components/shared/StatTile';
 import { QuickActionsGrid } from '@/components/shared/QuickActionsGrid';
 import {
   getStudentDashboard,
-  getStudentStrengths,
-  getStudentTimeAnalysis,
   type StudentDashboardData,
-  type StrengthItem,
-  type TimeAnalysisData,
 } from '@/services/analytics.api';
 
 ChartJS.register(
@@ -53,22 +49,13 @@ type TrendPeriod = '30d' | '60d' | '90d';
 
 export default function DashboardPage() {
   const [dashboard, setDashboard] = useState<StudentDashboardData | null>(null);
-  const [strengths, setStrengths] = useState<StrengthItem[]>([]);
-  const [timeData, setTimeData] = useState<TimeAnalysisData | null>(null);
   const [loading, setLoading] = useState(true);
   const [trendPeriod, setTrendPeriod] = useState<TrendPeriod>('30d');
 
   const fetchData = useCallback(async () => {
     try {
-      const [dashData, strengthData, timeResult] = await Promise.allSettled([
-        getStudentDashboard(),
-        getStudentStrengths(),
-        getStudentTimeAnalysis(),
-      ]);
-
-      if (dashData.status === 'fulfilled') setDashboard(dashData.value);
-      if (strengthData.status === 'fulfilled') setStrengths(strengthData.value);
-      if (timeResult.status === 'fulfilled') setTimeData(timeResult.value);
+      const dashData = await getStudentDashboard();
+      setDashboard(dashData);
     } catch {
       // individual sections remain at defaults
     } finally {
@@ -161,36 +148,16 @@ export default function DashboardPage() {
       tone: 'brand' as const,
     },
     {
-      label: 'AI Practice',
-      description: 'Adaptive smart study',
-      to: '/student/ai-practice',
-      icon: iconAi,
-      tone: 'accent' as const,
-    },
-    {
       label: 'My Classes',
       description: 'Resources & activities',
       to: '/student/classes',
       icon: iconClasses,
       tone: 'info' as const,
     },
-    {
-      label: 'Knowledge Graph',
-      description: 'Strength map by topic',
-      to: '/student/knowledge-graph',
-      icon: iconGraph,
-      tone: 'success' as const,
-    },
   ];
 
   // Score trend line chart data
   const trendChartData = buildTrendChart(dashboard, trendPeriod);
-
-  // Radar chart data (top 8 topics)
-  const radarData = buildRadarChart(strengths);
-
-  // Time-on-task bar chart
-  const timeChartData = buildTimeChart(timeData);
 
   return (
     <div className="space-y-6">
@@ -227,8 +194,8 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* Row 2: Score Trend + Strengths Radar */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      {/* Row 2: Score Trend */}
+      <div className="grid grid-cols-1 gap-6">
         {/* Line chart — score trend */}
         <Card padding="md">
           <div className="mb-4 flex items-center justify-between">
@@ -274,57 +241,10 @@ export default function DashboardPage() {
           )}
         </Card>
 
-        {/* Radar chart — strengths/weaknesses */}
-        <Card padding="md">
-          <h3 className="mb-4 text-base font-semibold tracking-tight text-[var(--color-text-primary)]">
-            Strengths &amp; Weaknesses
-          </h3>
-          <div className="h-56">
-            {radarData ? (
-              <Radar data={radarData} options={radarChartOptions} />
-            ) : (
-              <EmptyChart message="No topic data available yet" />
-            )}
-          </div>
-          {strengths.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {strengths.slice(0, 3).map((s) => (
-                <Badge key={s.topicId} variant="success">
-                  {s.topicName}: {s.accuracy}%
-                </Badge>
-              ))}
-              {strengths.length > 3 &&
-                strengths.slice(-2).map((s) => (
-                  <Badge key={s.topicId} variant="danger">
-                    {s.topicName}: {s.accuracy}%
-                  </Badge>
-                ))}
-            </div>
-          )}
-        </Card>
       </div>
 
-      {/* Row 3: Time-on-Task + Recent History */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Bar chart — time-on-task */}
-        <Card padding="md">
-          <h3 className="mb-4 text-base font-semibold tracking-tight text-[var(--color-text-primary)]">
-            Time per Topic
-          </h3>
-          <div className="h-56">
-            {timeChartData ? (
-              <Bar data={timeChartData} options={barChartOptions} />
-            ) : (
-              <EmptyChart message="No time data available yet" />
-            )}
-          </div>
-          {timeData && (
-            <p className="mt-3 text-sm text-[var(--color-text-muted)]">
-              Overall average: <span className="font-bold tabular-nums text-[var(--color-text-primary)]">{timeData.overallAvgTimeSec}s</span> per question
-            </p>
-          )}
-        </Card>
-
+      {/* Row 3: Recent History */}
+      <div className="grid grid-cols-1 gap-6">
         {/* Recent Exam History */}
         <Card padding="none">
           <div className="flex items-center justify-between border-b border-[var(--color-border-subtle)] px-6 py-4">
@@ -482,50 +402,6 @@ function buildTrendChart(dashboard: StudentDashboardData | null, _period: TrendP
   };
 }
 
-function buildRadarChart(strengths: StrengthItem[]) {
-  if (strengths.length === 0) return null;
-
-  const top = strengths.slice(0, 8);
-  return {
-    labels: top.map((s) => truncateLabel(s.topicName, 14)),
-    datasets: [
-      {
-        label: 'Accuracy (%)',
-        data: top.map((s) => s.accuracy),
-        backgroundColor: 'rgba(79, 70, 229, 0.15)',
-        borderColor: '#4f46e5',
-        borderWidth: 2,
-        pointBackgroundColor: '#4f46e5',
-        pointRadius: 3,
-      },
-    ],
-  };
-}
-
-function buildTimeChart(timeData: TimeAnalysisData | null) {
-  if (!timeData || timeData.perTopic.length === 0) return null;
-
-  const topics = timeData.perTopic.slice(0, 10);
-  return {
-    labels: topics.map((t) => truncateLabel(t.topicName, 12)),
-    datasets: [
-      {
-        label: 'Avg time (s)',
-        data: topics.map((t) => t.avgTimeSec),
-        backgroundColor: topics.map((t) =>
-          t.avgTimeSec > 60 ? 'rgba(239, 68, 68, 0.7)' : t.avgTimeSec > 30 ? 'rgba(245, 158, 11, 0.7)' : 'rgba(16, 185, 129, 0.7)',
-        ),
-        borderRadius: 6,
-        maxBarThickness: 36,
-      },
-    ],
-  };
-}
-
-function truncateLabel(str: string, max: number) {
-  return str.length > max ? str.slice(0, max) + '...' : str;
-}
-
 // ═══════════════════════════════════════════════════
 // CHART OPTIONS
 // ═══════════════════════════════════════════════════
@@ -552,50 +428,6 @@ const lineChartOptions = {
       min: 0,
       max: 10,
       ticks: { font: { size: 11 }, color: '#94a3b8', stepSize: 2 },
-      grid: { color: '#f1f5f9' },
-    },
-  },
-} as const;
-
-const radarChartOptions = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: { display: false },
-    tooltip: {
-      backgroundColor: '#1e293b',
-      cornerRadius: 8,
-    },
-  },
-  scales: {
-    r: {
-      beginAtZero: true,
-      max: 100,
-      ticks: { stepSize: 25, display: false },
-      grid: { color: '#e2e8f0' },
-      pointLabels: { font: { size: 10 }, color: '#475569' },
-    },
-  },
-} as const;
-
-const barChartOptions = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: { display: false },
-    tooltip: {
-      backgroundColor: '#1e293b',
-      cornerRadius: 8,
-    },
-  },
-  scales: {
-    x: {
-      grid: { display: false },
-      ticks: { font: { size: 10 }, color: '#94a3b8' },
-    },
-    y: {
-      beginAtZero: true,
-      ticks: { font: { size: 11 }, color: '#94a3b8' },
       grid: { color: '#f1f5f9' },
     },
   },
@@ -630,20 +462,9 @@ const iconFire = (
   </svg>
 );
 
-const iconAi = (
-  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-  </svg>
-);
-
 const iconClasses = (
   <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-2a4 4 0 100-8 4 4 0 000 8zm6 0a3 3 0 100-6 3 3 0 000 6zM7 12a3 3 0 100-6 3 3 0 000 6z" />
   </svg>
 );
 
-const iconGraph = (
-  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418" />
-  </svg>
-);

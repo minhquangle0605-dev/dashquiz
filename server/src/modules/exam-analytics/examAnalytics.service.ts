@@ -24,9 +24,9 @@ const VIOLATION_EVENTS: ExamAttemptEventType[] = [
 // ════════════════════════════════════════════════════════════════════
 // Exam Analytics Engine (Advanced Reporting upgrade — PDF §3, §5)
 //
-// Computes per-exam item analysis, option/distractor distribution, topic
-// mastery and an exam summary, then caches the result in the snapshot tables
-// (ExamReportSnapshot / QuestionStat / QuestionOptionStat / TopicPerformanceStat).
+// Computes per-exam item analysis, option/distractor distribution and an exam
+// summary, then caches the result in the snapshot tables
+// (ExamReportSnapshot / QuestionStat / QuestionOptionStat).
 // Reads are served from the cache and recomputed on demand when a snapshot is
 // missing or marked STALE (invalidation happens on submit / grade / delete).
 //
@@ -103,7 +103,7 @@ function qualityFlag(
 }
 
 // Per-student risk score 0–100 (higher = more at risk), a weighted blend of:
-// low score vs the passing/half mark, low per-exam topic mastery, auto-submission
+// low score vs the passing/half mark, low per-exam mastery, auto-submission
 // (ran out of time), and focus-loss / suspicious events. PDF §3 "Student Risk".
 function computeRisk(input: {
   score: number;
@@ -170,13 +170,6 @@ export class ExamAnalyticsService {
                 questionType: true,
                 subjectId: true,
                 chapterId: true,
-                topicId: true,
-                topic: {
-                  select: {
-                    name: true,
-                    chapter: { select: { name: true, subject: { select: { name: true } } } },
-                  },
-                },
                 options: { select: { id: true, label: true, isCorrect: true } },
               },
             },
@@ -336,67 +329,6 @@ export class ExamAnalyticsService {
       }
     }
 
-    // ── Topic mastery (PDF §3) ────────────────────────────────────
-    type TopicAgg = {
-      subjectId: number;
-      chapterId: number;
-      topicId: number;
-      name: string;
-      chapterName: string;
-      subjectName: string;
-      correct: number;
-      total: number;
-    };
-    const topicMap = new Map<number, TopicAgg>();
-    for (const eq of questions) {
-      const points = pointsByQ.get(eq.questionId) ?? 0;
-      const tid = eq.question.topicId;
-      if (!topicMap.has(tid)) {
-        topicMap.set(tid, {
-          subjectId: eq.question.subjectId,
-          chapterId: eq.question.chapterId,
-          topicId: tid,
-          name: eq.question.topic.name,
-          chapterName: eq.question.topic.chapter.name,
-          subjectName: eq.question.topic.chapter.subject.name,
-          correct: 0,
-          total: 0,
-        });
-      }
-      const agg = topicMap.get(tid)!;
-      for (const p of perAttempt) {
-        const ans = p.byQ.get(eq.questionId);
-        if (!isAnswered(ans)) continue;
-        agg.total += 1;
-        if (points > 0 && earnedScore(ans, points) >= points) agg.correct += 1;
-      }
-    }
-    const topicStats: Prisma.TopicPerformanceStatCreateManyInput[] = [];
-    const topicSummary = [...topicMap.values()].map((t) => {
-      const masteryRate = t.total ? round2((t.correct / t.total) * 100) : 0;
-      topicStats.push({
-        examId,
-        classId: ALL_CLASSES,
-        subjectId: t.subjectId,
-        chapterId: t.chapterId,
-        topicId: t.topicId,
-        masteryRate,
-        correctCount: t.correct,
-        totalCount: t.total,
-      });
-      return {
-        topicId: t.topicId,
-        topicName: t.name,
-        chapterName: t.chapterName,
-        subjectName: t.subjectName,
-        masteryRate,
-        correctCount: t.correct,
-        totalCount: t.total,
-        weak: t.total > 0 && masteryRate < 60,
-      };
-    });
-    topicSummary.sort((a, b) => a.masteryRate - b.masteryRate);
-
     // ── Submission timeline (by calendar day) ─────────────────────
     const timelineRows = await prisma.examAttempt.findMany({
       where: { examId, status: { in: [...COMPLETED] }, submittedAt: { not: null } },
@@ -410,7 +342,7 @@ export class ExamAnalyticsService {
     }
     const timeline = [...timelineMap.entries()].map(([date, count]) => ({ date, count }));
 
-    // ── Per-student insights: risk score + weak topics (PDF §3) ───
+    // ── Per-student insights: risk score + recommendations (PDF §3) ───
     const attemptIds = attempts.map((a) => a.id);
     const violationGroups = attemptIds.length
       ? await prisma.examAttemptEvent.groupBy({
@@ -423,7 +355,6 @@ export class ExamAnalyticsService {
 
     const studentInsights: Prisma.StudentExamInsightCreateManyInput[] = [];
     for (const p of perAttempt) {
-      const topicAgg = new Map<number, { name: string; correct: number; total: number }>();
       let answeredTotal = 0;
       let answeredCorrect = 0;
       for (const eq of questions) {
@@ -433,25 +364,9 @@ export class ExamAnalyticsService {
         const full = points > 0 && earnedScore(ans, points) >= points;
         answeredTotal += 1;
         if (full) answeredCorrect += 1;
-        const tid = eq.question.topicId;
-        const entry = topicAgg.get(tid) ?? { name: eq.question.topic.name, correct: 0, total: 0 };
-        entry.total += 1;
-        if (full) entry.correct += 1;
-        topicAgg.set(tid, entry);
       }
 
       const masteryFraction = answeredTotal > 0 ? answeredCorrect / answeredTotal : 0;
-      const topicList = [...topicAgg.entries()].map(([topicId, t]) => ({
-        topicId,
-        topicName: t.name,
-        masteryRate: t.total ? round2((t.correct / t.total) * 100) : 0,
-      }));
-      const weakTopics = topicList
-        .filter((t) => t.masteryRate < 60)
-        .sort((a, b) => a.masteryRate - b.masteryRate);
-      const strengths = topicList
-        .filter((t) => t.masteryRate >= 80)
-        .sort((a, b) => b.masteryRate - a.masteryRate);
 
       const violationCount = violationByAttempt.get(p.attemptId) ?? 0;
       const { riskScore, riskLevel } = computeRisk({
@@ -466,11 +381,6 @@ export class ExamAnalyticsService {
       const recommendations: string[] = [];
       if (passing !== null && p.total < passing) {
         recommendations.push('Scored below the passing mark — schedule a remediation session.');
-      }
-      if (weakTopics.length > 0) {
-        recommendations.push(
-          `Review and practise: ${weakTopics.slice(0, 3).map((t) => t.topicName).join(', ')}.`,
-        );
       }
       if (p.isAutoSubmitted) {
         recommendations.push('Ran out of time (auto-submitted) — work on pacing.');
@@ -488,8 +398,6 @@ export class ExamAnalyticsService {
         examId,
         riskLevel,
         riskScore,
-        weakTopicsJson: weakTopics as unknown as Prisma.InputJsonValue,
-        strengthsJson: strengths as unknown as Prisma.InputJsonValue,
         recommendationsJson: recommendations as unknown as Prisma.InputJsonValue,
       });
     }
@@ -498,11 +406,9 @@ export class ExamAnalyticsService {
     await prisma.$transaction([
       prisma.questionStat.deleteMany({ where: { examId } }),
       prisma.questionOptionStat.deleteMany({ where: { examId } }),
-      prisma.topicPerformanceStat.deleteMany({ where: { examId } }),
       prisma.studentExamInsight.deleteMany({ where: { examId } }),
       prisma.questionStat.createMany({ data: questionStats }),
       prisma.questionOptionStat.createMany({ data: optionStats }),
-      prisma.topicPerformanceStat.createMany({ data: topicStats }),
       prisma.studentExamInsight.createMany({ data: studentInsights }),
       prisma.examReportSnapshot.upsert({
         where: { examId_classId: { examId, classId: ALL_CLASSES } },
@@ -513,14 +419,12 @@ export class ExamAnalyticsService {
           generatedAt: new Date(),
           summaryJson: summary as Prisma.InputJsonValue,
           scoreDistributionJson: { distribution, timeline } as Prisma.InputJsonValue,
-          topicSummaryJson: topicSummary as unknown as Prisma.InputJsonValue,
         },
         update: {
           status: 'READY',
           generatedAt: new Date(),
           summaryJson: summary as Prisma.InputJsonValue,
           scoreDistributionJson: { distribution, timeline } as Prisma.InputJsonValue,
-          topicSummaryJson: topicSummary as unknown as Prisma.InputJsonValue,
         },
       }),
     ]);
@@ -580,7 +484,6 @@ export class ExamAnalyticsService {
               content: true,
               questionType: true,
               explanation: true,
-              topic: { select: { id: true, name: true } },
               options: {
                 orderBy: { label: 'asc' },
                 select: { id: true, label: true, content: true, isCorrect: true },
@@ -610,7 +513,6 @@ export class ExamAnalyticsService {
         content: eq.question.content,
         questionType: eq.question.questionType,
         explanation: eq.question.explanation,
-        topic: eq.question.topic,
         attempts: stat?.attempts ?? 0,
         correctRate: stat ? Math.round(stat.correctRate * 1000) / 10 : null, // → percentage
         skippedRate: stat ? Math.round(stat.skippedRate * 1000) / 10 : null,
@@ -635,19 +537,9 @@ export class ExamAnalyticsService {
     });
   }
 
-  async getTopics(examId: number, userId: number, role: string, refresh = false) {
-    await this.assertExamOwner(examId, userId, role);
-    await this.ensureSnapshot(examId, refresh);
-    const snap = await prisma.examReportSnapshot.findUnique({
-      where: { examId_classId: { examId, classId: ALL_CLASSES } },
-      select: { topicSummaryJson: true },
-    });
-    return snap?.topicSummaryJson ?? [];
-  }
-
   /**
    * Student performance / ranking for an exam. Phase 1 returns score-based
-   * ranking; Phase 3 enriches each row with risk level + weak topics from
+   * ranking; Phase 3 enriches each row with risk level + recommendations from
    * StudentExamInsight.
    */
   async getStudents(examId: number, userId: number, role: string, refresh = false) {
@@ -685,7 +577,6 @@ export class ExamAnalyticsService {
         attemptId: true,
         riskLevel: true,
         riskScore: true,
-        weakTopicsJson: true,
         recommendationsJson: true,
       },
     });
@@ -710,7 +601,6 @@ export class ExamAnalyticsService {
         isAutoSubmitted: a.isAutoSubmitted,
         riskLevel: insight?.riskLevel ?? 'none',
         riskScore: insight?.riskScore ?? null,
-        weakTopics: (insight?.weakTopicsJson as unknown) ?? [],
         recommendations: (insight?.recommendationsJson as unknown) ?? [],
       };
     });

@@ -1,4 +1,4 @@
-import type { StudentDashboardData, StrengthItem } from '@/services/analytics.api';
+import type { StudentDashboardData } from '@/services/analytics.api';
 
 // Dual-login: a "linked child" is just the student account this parent session
 // is bound to. The server always returns exactly one entry.
@@ -40,4 +40,3 @@ export interface ChildResultsResponse {
 }
 
 export type ChildDashboardData = StudentDashboardData;
-export type ChildStrengthItem = StrengthItem;

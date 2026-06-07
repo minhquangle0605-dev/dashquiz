@@ -4,7 +4,6 @@ import type {
   LinkedChild,
   ChildResultsResponse,
   ChildDashboardData,
-  ChildStrengthItem,
 } from '@/types/parent';
 
 export async function getChildren(): Promise<LinkedChild[]> {
@@ -29,11 +28,3 @@ export async function getChildDashboard(
   return data.data;
 }
 
-export async function getChildStrengths(
-  childId: number,
-  subjectId?: number,
-): Promise<ChildStrengthItem[]> {
-  const params = subjectId ? { subjectId } : {};
-  const { data } = await api.get(API_ENDPOINTS.PARENT.CHILD_STRENGTHS(childId), { params });
-  return data.data;
-}

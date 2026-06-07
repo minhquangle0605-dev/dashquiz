@@ -5,10 +5,10 @@ import api from '@/services/api';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import {
-  SubjectChapterTopicSelect,
+  SubjectChapterSelect,
   emptyCurriculumSelection,
   type CurriculumSelection,
-} from './SubjectChapterTopicSelect';
+} from './SubjectChapterSelect';
 import { QuestionPreviewEditor } from './QuestionPreviewEditor';
 import { AiSuggestionPanel } from './AiSuggestionPanel';
 import { aiSuggestQuestion } from '@/services/question.api';
@@ -278,7 +278,6 @@ export function ImportWizard({ isOpen, onClose, onImported, resumeJobId }: Impor
         {
           subjectId: Number(curriculum.subjectId),
           chapterId: Number(curriculum.chapterId),
-          topicId: curriculum.topicId ? Number(curriculum.topicId) : undefined,
         },
         setUploadProgress,
       );
@@ -369,7 +368,6 @@ export function ImportWizard({ isOpen, onClose, onImported, resumeJobId }: Impor
         type: 'set-taxonomy',
         subjectId: Number(next.subjectId),
         chapterId: Number(next.chapterId),
-        topicId: next.topicId ? Number(next.topicId) : null,
       }).catch(() => undefined);
     }
   };
@@ -555,16 +553,14 @@ export function ImportWizard({ isOpen, onClose, onImported, resumeJobId }: Impor
             )}
           </div>
 
-          <SubjectChapterTopicSelect
+          <SubjectChapterSelect
             value={curriculum}
             onChange={setCurriculum}
             allowEmpty={false}
-            showTopic
             labels={{
               subject: 'Target Subject *',
               grade: 'Target Grade *',
               chapter: 'Target Chapter *',
-              topic: 'Target Topic (optional)',
             }}
           />
 
@@ -683,16 +679,14 @@ export function ImportWizard({ isOpen, onClose, onImported, resumeJobId }: Impor
             ))}
           </div>
 
-          <SubjectChapterTopicSelect
+          <SubjectChapterSelect
             value={curriculum}
             onChange={handleTaxonomyChange}
             allowEmpty={false}
-            showTopic
             labels={{
               subject: 'Target Subject *',
               grade: 'Target Grade *',
               chapter: 'Target Chapter *',
-              topic: 'Target Topic (optional)',
             }}
           />
 

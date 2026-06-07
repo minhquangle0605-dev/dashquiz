@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
 import { MathText } from '@/components/shared/MathText';
 import { useAttemptResult } from '@/hooks/useExam';
-import { useGenerateRemedial } from '@/hooks/useAiRemedial';
 import { formatDuration, formatDate } from '@/utils/format';
 import type { ResultQuestion, ReviewWindowFlags } from '@/types/exam';
 
@@ -139,7 +138,6 @@ function QuestionReview({
         {question.chapter && (
           <span className="text-xs text-slate-500">
             {question.chapter.name}
-            {question.topic ? ` / ${question.topic.name}` : ''}
           </span>
         )}
       </div>
@@ -238,16 +236,6 @@ export default function ExamResultPage() {
 
   const attemptId = paramAttemptId ? Number(paramAttemptId) : undefined;
   const { data, isLoading, isError, error } = useAttemptResult(attemptId);
-  const generateRemedial = useGenerateRemedial();
-
-  const handleGenerateRemedial = () => {
-    if (!attemptId) return;
-    generateRemedial.mutate(attemptId, {
-      onSuccess: ({ sessionId }) => {
-        navigate(`/student/remedial/${sessionId}`);
-      },
-    });
-  };
 
   if (isLoading) {
     return (
@@ -435,41 +423,6 @@ export default function ExamResultPage() {
               )}
             </div>
 
-            {flags.correctness && summary.incorrectCount > 0 && (
-              <div className="rounded-xl border border-violet-200 bg-gradient-to-br from-violet-50 to-indigo-50 p-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="text-left">
-                    <p className="text-sm font-semibold text-violet-900">
-                      Fix {summary.incorrectCount} wrong answers with AI
-                    </p>
-                    <p className="mt-0.5 text-xs text-violet-700">
-                      AI will analyze your mistakes and generate similar questions for you to practice.
-                    </p>
-                  </div>
-                  <Button
-                    onClick={handleGenerateRemedial}
-                    disabled={generateRemedial.isPending}
-                    className="shrink-0 bg-violet-600 hover:bg-violet-700 text-white min-h-[44px]"
-                  >
-                    {generateRemedial.isPending ? (
-                      <>
-                        <Spinner size="sm" className="mr-2" />
-                        Generating questions...
-                      </>
-                    ) : (
-                      <>Review wrong answers with AI</>
-                    )}
-                  </Button>
-                </div>
-                {generateRemedial.isError && (
-                  <p className="mt-2 text-xs text-red-600">
-                    {generateRemedial.error instanceof Error
-                      ? generateRemedial.error.message
-                      : 'Could not generate questions, please try again.'}
-                  </p>
-                )}
-              </div>
-            )}
           </div>
         </div>
       </Card>

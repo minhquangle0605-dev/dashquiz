@@ -18,7 +18,6 @@ const mockQuestion = {
   id: 1,
   subjectId: 1,
   chapterId: 1,
-  topicId: 1,
   content: 'What is 2+2?',
   questionType: 'SINGLE_CHOICE' as const,
   difficulty: 1,
@@ -27,7 +26,6 @@ const mockQuestion = {
   createdAt: new Date(),
   subject: { id: 1, name: 'Mathematics', code: 'MATH' },
   chapter: { id: 1, name: 'Arithmetic' },
-  topic: { id: 1, name: 'Addition' },
   options: [
     { id: 1, questionId: 1, label: 'A', content: '3', isCorrect: false },
     { id: 2, questionId: 1, label: 'B', content: '4', isCorrect: true },
@@ -48,14 +46,12 @@ describe('QuestionService', () => {
     it('should create a question with options', async () => {
       prismaMock.subject.findUnique.mockResolvedValue({ id: 1, name: 'Mathematics', code: 'MATH', description: '', status: 1 });
       prismaMock.chapter.findUnique.mockResolvedValue({ id: 1, subjectId: 1, name: 'Arithmetic', gradeLevel: 10, orderIndex: 1 });
-      prismaMock.topic.findUnique.mockResolvedValue({ id: 1, chapterId: 1, name: 'Addition', description: '' });
       prismaMock.question.create.mockResolvedValue(mockQuestion);
 
       const result = await questionService.createQuestion(
         {
           subjectId: 1,
           chapterId: 1,
-          topicId: 1,
           content: 'What is 2+2?',
           questionType: 'SINGLE_CHOICE',
           difficulty: 1,
@@ -77,14 +73,12 @@ describe('QuestionService', () => {
     it('should throw 404 if subject not found', async () => {
       prismaMock.subject.findUnique.mockResolvedValue(null);
       prismaMock.chapter.findUnique.mockResolvedValue({ id: 1, subjectId: 1, name: 'Ch1', gradeLevel: 10, orderIndex: 1 });
-      prismaMock.topic.findUnique.mockResolvedValue({ id: 1, chapterId: 1, name: 'T1', description: '' });
 
       await expect(
         questionService.createQuestion(
           {
             subjectId: 999,
             chapterId: 1,
-            topicId: 1,
             content: 'Test?',
             questionType: 'SINGLE_CHOICE',
             difficulty: 1,
@@ -103,14 +97,12 @@ describe('QuestionService', () => {
     it('should throw 400 if chapter does not belong to subject', async () => {
       prismaMock.subject.findUnique.mockResolvedValue({ id: 1, name: 'Mathematics', code: 'MATH', description: '', status: 1 });
       prismaMock.chapter.findUnique.mockResolvedValue({ id: 2, subjectId: 2, name: 'Physics Ch', gradeLevel: 10, orderIndex: 1 });
-      prismaMock.topic.findUnique.mockResolvedValue({ id: 1, chapterId: 2, name: 'T1', description: '' });
 
       await expect(
         questionService.createQuestion(
           {
             subjectId: 1,
             chapterId: 2,
-            topicId: 1,
             content: 'Test?',
             questionType: 'SINGLE_CHOICE',
             difficulty: 1,
@@ -268,7 +260,7 @@ describe('QuestionService', () => {
   });
 
   describe('bulkCreate', () => {
-    it('should use the General topic when topicId is omitted', async () => {
+    it('should validate the curriculum and create questions', async () => {
       prismaMock.subject.findUnique.mockResolvedValue({
         id: 1,
         name: 'Mathematics',
@@ -283,16 +275,7 @@ describe('QuestionService', () => {
         gradeLevel: 10,
         orderIndex: 1,
       });
-      prismaMock.topic.findFirst.mockResolvedValue({
-        id: 9,
-        chapterId: 1,
-        name: 'General',
-        description: '',
-      });
-      prismaMock.question.create.mockResolvedValue({
-        ...mockQuestion,
-        topicId: 9,
-      });
+      prismaMock.question.create.mockResolvedValue(mockQuestion);
 
       const result = await questionService.bulkCreate(
         [
@@ -312,13 +295,9 @@ describe('QuestionService', () => {
       );
 
       expect(result.data.imported).toBe(1);
-      expect(prismaMock.topic.findFirst).toHaveBeenCalledWith({
-        where: { chapterId: 1, name: 'General' },
-        orderBy: { id: 'asc' },
-      });
       expect(prismaMock.question.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ topicId: 9 }),
+          data: expect.objectContaining({ subjectId: 1, chapterId: 1 }),
         }),
       );
     });

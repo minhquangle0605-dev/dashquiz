@@ -4,10 +4,10 @@ import toast from 'react-hot-toast';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import {
-  SubjectChapterTopicSelect,
+  SubjectChapterSelect,
   emptyCurriculumSelection,
   type CurriculumSelection,
-} from './SubjectChapterTopicSelect';
+} from './SubjectChapterSelect';
 import {
   bulkCreateQuestions,
   downloadDocumentImportTemplate,
@@ -538,11 +538,10 @@ Match each country to its capital: {
             </div>
           )}
 
-          <SubjectChapterTopicSelect
+          <SubjectChapterSelect
             value={curriculum}
             onChange={setCurriculum}
             allowEmpty={false}
-            showTopic={false}
             labels={{
               subject: 'Target Subject *',
               grade: 'Target Grade *',

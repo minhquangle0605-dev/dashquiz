@@ -146,7 +146,6 @@ export class QuestionService {
       s: query.subjectId ?? null,
       g: query.gradeLevel ?? null,
       c: query.chapterId ?? null,
-      t: query.topicId ?? null,
       qt: query.questionType ?? null,
       d: diff,
       k: query.keyword ?? null,
@@ -184,7 +183,6 @@ export class QuestionService {
     if (query.subjectId) where.subjectId = query.subjectId;
     if (query.gradeLevel) where.chapter = { gradeLevel: query.gradeLevel };
     if (query.chapterId) where.chapterId = query.chapterId;
-    if (query.topicId) where.topicId = query.topicId;
     if (query.questionType) where.questionType = query.questionType;
 
     if (query.difficulty && Array.isArray(query.difficulty) && query.difficulty.length > 0) {
@@ -225,7 +223,6 @@ export class QuestionService {
           id: true,
           subjectId: true,
           chapterId: true,
-          topicId: true,
           content: true,
           questionType: true,
           difficulty: true,
@@ -233,7 +230,6 @@ export class QuestionService {
           createdAt: true,
           subject: { select: { id: true, name: true, code: true } },
           chapter: { select: { id: true, name: true, gradeLevel: true } },
-          topic: { select: { id: true, name: true } },
           options: {
             orderBy: { label: 'asc' },
             select: {
@@ -276,7 +272,6 @@ export class QuestionService {
       include: {
         subject: { select: { id: true, name: true, code: true } },
         chapter: { select: { id: true, name: true, gradeLevel: true } },
-        topic: { select: { id: true, name: true } },
         options: { orderBy: { label: 'asc' } },
         tags: { select: { id: true, tagName: true } },
         creator: { select: { id: true, fullName: true } },
@@ -300,17 +295,12 @@ export class QuestionService {
   // ═══════════════════════════════════════════════
 
   async createQuestion(data: CreateQuestionInput, userId: number) {
-    const topicId = await this.resolveImportTopicId(
-      data.subjectId,
-      data.chapterId,
-      data.topicId,
-    );
+    await this.validateCurriculumRefs(data.subjectId, data.chapterId);
 
     const question = await prisma.question.create({
       data: {
         subjectId: data.subjectId,
         chapterId: data.chapterId,
-        topicId,
         content: sanitizeRichQuestionHtml(data.content),
         normalizedContent: normalizeForDedup(data.content),
         questionType: data.questionType,
@@ -328,7 +318,6 @@ export class QuestionService {
       include: {
         subject: { select: { id: true, name: true, code: true } },
         chapter: { select: { id: true, name: true, gradeLevel: true } },
-        topic: { select: { id: true, name: true } },
         options: { orderBy: { label: 'asc' } },
         tags: true,
       },
@@ -356,14 +345,11 @@ export class QuestionService {
 
     const subjectId = data.subjectId ?? existing.subjectId;
     const chapterId = data.chapterId ?? existing.chapterId;
-    let topicId = existing.topicId;
     const curriculumChanged =
-      data.subjectId !== undefined ||
-      data.chapterId !== undefined ||
-      data.topicId !== undefined;
+      data.subjectId !== undefined || data.chapterId !== undefined;
 
     if (curriculumChanged) {
-      topicId = await this.resolveImportTopicId(subjectId, chapterId, data.topicId);
+      await this.validateCurriculumRefs(subjectId, chapterId);
     }
 
     const question = await prisma.$transaction(async (tx) => {
@@ -393,12 +379,10 @@ export class QuestionService {
           }),
           ...(data.subjectId !== undefined && { subjectId: data.subjectId }),
           ...(data.chapterId !== undefined && { chapterId: data.chapterId }),
-          ...(curriculumChanged && { topicId }),
         },
         include: {
           subject: { select: { id: true, name: true, code: true } },
           chapter: { select: { id: true, name: true, gradeLevel: true } },
-          topic: { select: { id: true, name: true } },
           options: { orderBy: { label: 'asc' } },
           tags: { select: { id: true, tagName: true } },
         },
@@ -512,14 +496,10 @@ export class QuestionService {
 
   async bulkCreate(
     questions: BulkQuestionPayload[],
-    meta: { subjectId: number; chapterId: number; topicId?: number },
+    meta: { subjectId: number; chapterId: number },
     userId: number,
   ) {
-    const topicId = await this.resolveImportTopicId(
-      meta.subjectId,
-      meta.chapterId,
-      meta.topicId,
-    );
+    await this.validateCurriculumRefs(meta.subjectId, meta.chapterId);
 
     if (!Array.isArray(questions) || questions.length === 0) {
       throw new AppError('No questions provided', 400);
@@ -620,7 +600,6 @@ export class QuestionService {
           data: {
             subjectId: meta.subjectId,
             chapterId: meta.chapterId,
-            topicId,
             content: q.content,
             normalizedContent: normalizeForDedup(q.content),
             questionType: q.questionType,
@@ -678,11 +657,7 @@ export class QuestionService {
     meta: ImportQuestionsInput,
     userId: number,
   ) {
-    const topicId = await this.resolveImportTopicId(
-      meta.subjectId,
-      meta.chapterId,
-      meta.topicId,
-    );
+    await this.validateCurriculumRefs(meta.subjectId, meta.chapterId);
 
     const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
     const sheetName = workbook.SheetNames[0];
@@ -788,7 +763,6 @@ export class QuestionService {
           data: {
             subjectId: meta.subjectId,
             chapterId: meta.chapterId,
-            topicId,
             content: q.content,
             normalizedContent: normalizeForDedup(q.content),
             questionType: 'SINGLE_CHOICE',
@@ -1151,7 +1125,6 @@ export class QuestionService {
         include: {
           subject: { select: { id: true, name: true, code: true } },
           chapter: { select: { id: true, name: true, gradeLevel: true } },
-          topic: { select: { id: true, name: true } },
           options: { orderBy: { label: 'asc' } },
           tags: { select: { id: true, tagName: true } },
         },
@@ -1206,11 +1179,7 @@ export class QuestionService {
     return { success: true, message: `Updated ${ids.length} question(s)`, data: { updated: ids.length } };
   }
 
-  private async resolveImportTopicId(
-    subjectId: number,
-    chapterId: number,
-    topicId?: number,
-  ): Promise<number> {
+  private async validateCurriculumRefs(subjectId: number, chapterId: number) {
     const [subject, chapter] = await Promise.all([
       prisma.subject.findUnique({ where: { id: subjectId } }),
       prisma.chapter.findUnique({ where: { id: chapterId } }),
@@ -1222,50 +1191,6 @@ export class QuestionService {
 
     if (chapter.subjectId !== subjectId) {
       throw new AppError('Chapter does not belong to the specified subject', 400);
-    }
-
-    if (topicId) {
-      const topic = await prisma.topic.findUnique({ where: { id: topicId } });
-      if (!topic) throw new AppError('Topic not found', 404);
-      if (topic.chapterId !== chapterId) {
-        throw new AppError('Topic does not belong to the specified chapter', 400);
-      }
-      return topic.id;
-    }
-
-    const existingDefaultTopic = await prisma.topic.findFirst({
-      where: { chapterId, name: 'General' },
-      orderBy: { id: 'asc' },
-    });
-    if (existingDefaultTopic) return existingDefaultTopic.id;
-
-    const createdDefaultTopic = await prisma.topic.create({
-      data: { chapterId, name: 'General' },
-    });
-    return createdDefaultTopic.id;
-  }
-
-  private async validateCurriculumRefs(
-    subjectId: number,
-    chapterId: number,
-    topicId: number,
-  ) {
-    const [subject, chapter, topic] = await Promise.all([
-      prisma.subject.findUnique({ where: { id: subjectId } }),
-      prisma.chapter.findUnique({ where: { id: chapterId } }),
-      prisma.topic.findUnique({ where: { id: topicId } }),
-    ]);
-
-    if (!subject) throw new AppError('Subject not found', 404);
-    if (!isCoreSubjectCode(subject.code)) throw new AppError('Subject not found', 404);
-    if (!chapter) throw new AppError('Chapter not found', 404);
-    if (!topic) throw new AppError('Topic not found', 404);
-
-    if (chapter.subjectId !== subjectId) {
-      throw new AppError('Chapter does not belong to the specified subject', 400);
-    }
-    if (topic.chapterId !== chapterId) {
-      throw new AppError('Topic does not belong to the specified chapter', 400);
     }
   }
 }

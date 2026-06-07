@@ -136,7 +136,7 @@ async function main() {
   );
   console.log(`✓ ${semesters.length} semesters seeded`);
 
-  // ── 4. Seed Chapters & Topics ────────────────────
+  // ── 4. Seed Chapters ─────────────────────────────
   const chaptersConfig: Record<
     string,
     { gradeLevel: 10 | 11 | 12; chapters: string[] }[]
@@ -294,8 +294,6 @@ async function main() {
   };
 
   let totalChapters = 0;
-  let totalTopics = 0;
-  const topicIds: number[] = [];
 
   for (const subject of subjects) {
     const gradeGroups = chaptersConfig[subject.code] || [];
@@ -323,82 +321,10 @@ async function main() {
               },
             });
         totalChapters++;
-
-        const existingTopic = await prisma.topic.findFirst({
-          where: {
-            chapterId: chapter.id,
-            name: 'General',
-          },
-        });
-        const topic = existingTopic
-          ? existingTopic
-          : await prisma.topic.create({
-              data: {
-                chapterId: chapter.id,
-                name: 'General',
-              },
-            });
-        topicIds.push(topic.id);
-        totalTopics++;
       }
     }
   }
   console.log(`✓ ${totalChapters} chapters seeded`);
-  console.log(`✓ ${totalTopics} topics seeded`);
-
-  // ── 5. Seed Topic Relations (Knowledge Graph) ────
-  // The PDF provides chapter lists only, not prerequisite relationships.
-  let removedLegacyChapters = 0;
-  for (const subject of subjects) {
-    const legacyChapters = await prisma.chapter.findMany({
-      where: {
-        subjectId: subject.id,
-        topics: { none: { name: 'General' } },
-      },
-      include: { _count: { select: { questions: true } } },
-    });
-
-    for (const chapter of legacyChapters) {
-      if (chapter._count.questions > 0) continue;
-      await prisma.chapter.delete({ where: { id: chapter.id } });
-      removedLegacyChapters++;
-    }
-  }
-  console.log(`✓ ${removedLegacyChapters} legacy empty chapters removed`);
-
-  const relationsData: Array<{ fromIdx: number; toIdx: number; type: string }> = [/*
-    // Math: Linear Functions → Quadratic Functions → Function Graphs
-    { fromIdx: 0, toIdx: 1, type: 'prerequisite' },
-    { fromIdx: 1, toIdx: 2, type: 'prerequisite' },
-    { fromIdx: 0, toIdx: 3, type: 'related' },
-    // Math: Quadratic Equations → Systems of Equations → Inequalities
-    { fromIdx: 5, toIdx: 6, type: 'prerequisite' },
-    { fromIdx: 6, toIdx: 7, type: 'prerequisite' },
-    // Physics: Uniform Linear Motion → Uniformly Accelerated Linear Motion → Free Fall
-    { fromIdx: 12, toIdx: 13, type: 'prerequisite' },
-    { fromIdx: 13, toIdx: 14, type: 'related' },
-    // Chemistry: Atomic Composition → Electron Configuration → Periodic Table
-    { fromIdx: 20, toIdx: 21, type: 'prerequisite' },
-    { fromIdx: 21, toIdx: 22, type: 'prerequisite' },
-    // Chemistry: Redox Reactions → Reaction Rate → Chemical Equilibrium
-    { fromIdx: 27, toIdx: 28, type: 'prerequisite' },
-    { fromIdx: 28, toIdx: 29, type: 'related' },
-  */];
-
-  let relCount = 0;
-  for (const rel of relationsData) {
-    if (topicIds[rel.fromIdx] && topicIds[rel.toIdx]) {
-      await prisma.topicRelation.create({
-        data: {
-          fromTopicId: topicIds[rel.fromIdx],
-          toTopicId: topicIds[rel.toIdx],
-          relationType: rel.type,
-        },
-      });
-      relCount++;
-    }
-  }
-  console.log(`✓ ${relCount} topic relations seeded (Knowledge Graph)`);
 
   // ── 5b. Seed managed-subject timetable slots ─────
   // Encodes the Math/Physics/Chemistry slots from the timetable plan (Appendix §10).

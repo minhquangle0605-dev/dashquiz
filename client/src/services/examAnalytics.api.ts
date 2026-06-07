@@ -3,7 +3,6 @@ import { API_ENDPOINTS } from '@/utils/constants';
 import type {
   ExamAnalyticsSummary,
   ExamAnalyticsQuestion,
-  ExamAnalyticsTopic,
   ExamAnalyticsStudent,
 } from '@/types/exam';
 
@@ -32,17 +31,6 @@ export async function getExamAnalyticsQuestions(
 ): Promise<ExamAnalyticsQuestion[]> {
   const { data } = await api.get<ServerResponse<ExamAnalyticsQuestion[]>>(
     API_ENDPOINTS.EXAMS.ANALYTICS_QUESTIONS(examId),
-    refreshParam(refresh),
-  );
-  return data.data;
-}
-
-export async function getExamAnalyticsTopics(
-  examId: number,
-  refresh?: boolean,
-): Promise<ExamAnalyticsTopic[]> {
-  const { data } = await api.get<ServerResponse<ExamAnalyticsTopic[]>>(
-    API_ENDPOINTS.EXAMS.ANALYTICS_TOPICS(examId),
     refreshParam(refresh),
   );
   return data.data;

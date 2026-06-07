@@ -447,7 +447,6 @@ class QuestionZipService {
         explanation_image: null,
         subject: 'Mathematics',
         grade: '10',
-        topic: 'Geometry',
         difficulty: 'medium',
       },
       {

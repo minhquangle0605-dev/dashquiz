@@ -76,23 +76,3 @@ export async function getChildDashboard(req: Request, res: Response, next: NextF
   }
 }
 
-export async function getChildStrengths(req: Request, res: Response, next: NextFunction): Promise<void> {
-  try {
-    const parentUserId = getParentUserId(req);
-    const childId = parseInt(req.params.id, 10);
-    if (isNaN(childId)) throw new AppError('Invalid child ID', 400);
-
-    const { subjectId } = (req as Request & { validatedQuery?: ChildAnalyticsQuery }).validatedQuery ?? {};
-
-    const data = await parentService.getChildStrengths(parentUserId, childId, subjectId);
-
-    res.json({
-      success: true,
-      message: 'Child strengths analysis retrieved',
-      data,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    next(error instanceof Error ? error : new Error('Unexpected error'));
-  }
-}

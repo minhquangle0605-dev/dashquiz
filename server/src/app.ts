@@ -118,7 +118,7 @@ app.get('/api', (_req, res) => {
           users: '/api/users/*',
           exams: '/api/exams/*',
           questions: '/api/questions/*',
-          curriculum: '/api/subjects/*, /api/chapters/*, /api/topics/*',
+          curriculum: '/api/subjects/*, /api/chapters/*',
           ai: '/api/ai/*',
           notifications: '/api/notifications/*',
           parent: '/api/parent/*',

@@ -592,6 +592,8 @@ export default function TakeExamPage() {
     let lastExitAt = 0;
 
     const handleFullscreenChange = () => {
+      // Ignore the fullscreen drop we trigger ourselves on submit/unmount.
+      if (hasSubmitted.current) return;
       const isFullscreen = Boolean(document.fullscreenElement);
       if (!isFullscreen) {
         const now = Date.now();
@@ -599,7 +601,10 @@ export default function TakeExamPage() {
         lastExitAt = now;
         setFullscreenWarning(true);
         sendMonitoringEvent('FULLSCREEN_EXITED', { fullscreenState: false }, true);
-        toast.error('Fullscreen mode is required during this exam.');
+        // Best-effort silent re-entry. Most browsers reject re-requesting
+        // fullscreen without a fresh user gesture (e.g. after Esc), so the
+        // blocking overlay is the reliable way back in.
+        void document.documentElement.requestFullscreen?.().catch(() => {});
         return;
       }
       setFullscreenWarning(false);
@@ -609,6 +614,16 @@ export default function TakeExamPage() {
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, [examData, securitySettings.requireFullscreen, sendMonitoringEvent]);
+
+  // Always release fullscreen when leaving the runner (submit, time-up, or
+  // navigating away) so the student isn't stuck in fullscreen elsewhere.
+  useEffect(() => {
+    return () => {
+      if (document.fullscreenElement) {
+        void document.exitFullscreen?.().catch(() => {});
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!examData || hasSubmitted.current || !securitySettings.requireCamera) return;
@@ -647,6 +662,11 @@ export default function TakeExamPage() {
       sendMonitoringEvent('CONTEXT_MENU');
     };
     const preventShortcuts = (e: KeyboardEvent) => {
+      // Discourage the F11 fullscreen toggle while fullscreen is enforced.
+      if (securitySettings.requireFullscreen && e.key === 'F11') {
+        e.preventDefault();
+        return;
+      }
       if (!securitySettings.blockShortcuts) return;
       if (
         (e.ctrlKey || e.metaKey) &&
@@ -678,6 +698,7 @@ export default function TakeExamPage() {
     securitySettings.blockCopyPaste,
     securitySettings.blockRightClick,
     securitySettings.blockShortcuts,
+    securitySettings.requireFullscreen,
     sendMonitoringEvent,
   ]);
 
@@ -1150,7 +1171,7 @@ export default function TakeExamPage() {
     !isSequential || Math.floor(i / perPage) === currentPage;
 
   return (
-    <div className="-m-4 flex h-[calc(100vh-4rem)] flex-col sm:-m-6 lg:-m-8">
+    <div className="flex h-screen flex-col bg-[var(--color-bg-page)]">
       <ExamBanners
         showTabWarning={showTabWarning}
         tabSwitchCount={tabSwitchCount}
@@ -1158,26 +1179,43 @@ export default function TakeExamPage() {
         isOnline={isOnline}
       />
 
-      {(fullscreenWarning || securityWarning) && (
+      {securityWarning && (
         <div className="border-b border-[var(--color-warning)]/30 bg-[var(--color-warning-soft)] px-4 py-2 text-sm text-[var(--color-warning)]">
-          <div className="mx-auto flex max-w-6xl flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <span className="font-medium">
-              {securityWarning ||
-                'Fullscreen mode is required. Re-enter fullscreen before continuing.'}
-            </span>
-            {fullscreenWarning && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  void document.documentElement.requestFullscreen?.().then(() => {
-                    setFullscreenWarning(false);
-                  });
-                }}
-              >
-                Enter Fullscreen
-              </Button>
-            )}
+          <div className="mx-auto flex max-w-6xl items-center justify-center">
+            <span className="font-medium">{securityWarning}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Blocking overlay: the exam cannot continue outside fullscreen. */}
+      {fullscreenWarning && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/90 p-6 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-8 text-center shadow-2xl">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--color-warning-soft)] text-[var(--color-warning)]">
+              <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M20.25 3.75v4.5m0-4.5h-4.5m4.5 0L15 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15m11.25 5.25v-4.5m0 4.5h-4.5m4.5 0L15 15" />
+              </svg>
+            </div>
+            <h2 className="text-lg font-bold tracking-tight text-[var(--color-text-primary)]">
+              Fullscreen is required
+            </h2>
+            <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
+              You must stay in fullscreen for the whole exam. Exiting fullscreen has been
+              recorded. Return to fullscreen to continue.
+            </p>
+            <Button
+              variant="primary"
+              fullWidth
+              className="mt-6"
+              onClick={() => {
+                void document.documentElement
+                  .requestFullscreen?.()
+                  .then(() => setFullscreenWarning(false))
+                  .catch(() => {});
+              }}
+            >
+              Return to fullscreen
+            </Button>
           </div>
         </div>
       )}

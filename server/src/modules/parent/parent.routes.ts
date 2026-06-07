@@ -38,12 +38,4 @@ router.get(
   parentController.getChildDashboard,
 );
 
-router.get(
-  '/children/:id/analytics/strengths',
-  authenticate,
-  authorize(ROLES.PARENT),
-  validate(childAnalyticsQuerySchema, 'query'),
-  parentController.getChildStrengths,
-);
-
 export default router;

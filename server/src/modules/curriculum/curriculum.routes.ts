@@ -3,7 +3,7 @@ import * as curriculumController from './curriculum.controller';
 import { authenticate, authorize } from '../../middlewares/auth';
 import { validate } from '../../middlewares/validate';
 import { activityLogger } from '../../middlewares/activityLogger';
-import { createChapterSchema, createTopicSchema } from './curriculum.validation';
+import { createChapterSchema } from './curriculum.validation';
 import { ROLES } from '../../utils/constants';
 
 const router = Router();
@@ -26,20 +26,6 @@ router.get(
   curriculumController.getChaptersBySubject,
 );
 
-// GET /api/chapters/:id/topics — topics by chapter
-router.get(
-  '/chapters/:id/topics',
-  authenticate,
-  curriculumController.getTopicsByChapter,
-);
-
-// GET /api/topics/:id/relations — Knowledge Graph edges
-router.get(
-  '/topics/:id/relations',
-  authenticate,
-  curriculumController.getTopicRelations,
-);
-
 // ═══════════════════════════════════════════════
 // TEACHER-ONLY CREATION ENDPOINTS
 // ═══════════════════════════════════════════════
@@ -52,16 +38,6 @@ router.post(
   validate(createChapterSchema),
   activityLogger('CREATE_CHAPTER', 'chapter'),
   curriculumController.createChapter,
-);
-
-// POST /api/topics — create topic
-router.post(
-  '/topics',
-  authenticate,
-  authorize(ROLES.TEACHER, ROLES.ADMIN),
-  validate(createTopicSchema),
-  activityLogger('CREATE_TOPIC', 'topic'),
-  curriculumController.createTopic,
 );
 
 export default router;

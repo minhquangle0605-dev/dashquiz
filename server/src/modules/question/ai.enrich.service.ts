@@ -6,7 +6,7 @@ import { logger } from '../../utils/logger';
 // ─────────────────────────────────────────────────────────────────────────────
 // AI ENRICHMENT (PDF §5/§7/§14 — "AI assists AFTER deterministic parsing,
 // never silently publishes"). Given an already-parsed question, Gemini suggests
-// difficulty, tags, topic, an improved explanation, and flags weak distractors.
+// difficulty, tags, an improved explanation, and flags weak distractors.
 // Suggestions are returned for review — nothing is applied or saved here.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -28,7 +28,6 @@ export interface AiSuggestion {
   available: boolean;
   difficulty?: number;
   tags?: string[];
-  topic?: string;
   explanation?: string;
   weakDistractors?: AiWeakDistractor[];
   notes?: string;
@@ -64,8 +63,7 @@ ${options || '  (no options)'}
 Return STRICT JSON with this exact shape (omit a field if you have no good suggestion):
 {
   "difficulty": <integer 1-5, where 1=very easy and 5=very hard>,
-  "tags": [<2-5 short lowercase topic keywords>],
-  "topic": "<a concise topic/subtopic name, max 6 words>",
+  "tags": [<2-5 short lowercase keywords>],
   "explanation": "<a clear explanation of the correct answer, plain text, max 50 words>",
   "weakDistractors": [{"label": "<option letter>", "reason": "<why this distractor is weak/implausible, max 20 words>"}],
   "notes": "<one short overall quality note, or empty string>"
@@ -143,10 +141,6 @@ class AiEnrichService {
       typeof parsed.explanation === 'string' && parsed.explanation.trim()
         ? parsed.explanation.trim().slice(0, 600)
         : undefined;
-    const topic =
-      typeof parsed.topic === 'string' && parsed.topic.trim()
-        ? parsed.topic.trim().slice(0, 60)
-        : undefined;
     const notes =
       typeof parsed.notes === 'string' && parsed.notes.trim()
         ? parsed.notes.trim().slice(0, 300)
@@ -156,7 +150,6 @@ class AiEnrichService {
       available: true,
       difficulty: clampDifficulty(parsed.difficulty),
       tags: cleanTags(parsed.tags),
-      topic,
       explanation,
       weakDistractors: cleanWeakDistractors(parsed.weakDistractors, validLabels),
       notes,

@@ -215,7 +215,6 @@ export interface ResultQuestion {
   content: string;
   questionType: string;
   chapter: { id: number; name: string } | null;
-  topic: { id: number; name: string } | null;
   explanation: string | null;
   selectedOption: { id: number; label: string; content: string } | null;
   selectedOptions?: Array<{ id: number; label: string; content: string }>;
@@ -688,7 +687,6 @@ export interface ExamAnalyticsQuestion {
   content: string;
   questionType: string;
   explanation: string | null;
-  topic: { id: number; name: string } | null;
   attempts: number;
   correctRate: number | null; // percentage 0–100
   skippedRate: number | null; // percentage 0–100
@@ -698,17 +696,6 @@ export interface ExamAnalyticsQuestion {
   discrimination: number | null;
   qualityFlag: QuestionQualityFlag | string;
   options: ExamAnalyticsOption[];
-}
-
-export interface ExamAnalyticsTopic {
-  topicId: number;
-  topicName: string;
-  chapterName: string;
-  subjectName: string;
-  masteryRate: number; // percentage 0–100
-  correctCount: number;
-  totalCount: number;
-  weak: boolean;
 }
 
 export interface ExamAnalyticsStudent {
@@ -727,7 +714,6 @@ export interface ExamAnalyticsStudent {
   isAutoSubmitted: boolean;
   riskLevel: string;
   riskScore: number | null;
-  weakTopics: Array<{ topicId: number; topicName: string; masteryRate: number }>;
   recommendations: string[];
 }
 
@@ -747,7 +733,6 @@ export interface QuestionQuality {
     content: string;
     questionType: string;
     difficulty: number;
-    topic: { id: number; name: string } | null;
   };
   usage: { examCount: number; totalAttempts: number };
   aggregate: {

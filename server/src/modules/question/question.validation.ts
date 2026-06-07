@@ -119,7 +119,6 @@ function validateQuestionShape(
 export const createQuestionSchema = z.object({
   subjectId: z.coerce.number().int().positive('Subject is required'),
   chapterId: z.coerce.number().int().positive('Chapter is required'),
-  topicId: z.coerce.number().int().positive().optional(),
   content: z.string().min(1, 'Question content is required'),
   questionType: z.enum(QUESTION_TYPES).default('SINGLE_CHOICE'),
   difficulty: z.coerce.number().int().min(1, 'Difficulty min is 1').max(5, 'Difficulty max is 5'),
@@ -141,7 +140,6 @@ export const updateQuestionSchema = z.object({
   explanation: z.string().optional().nullable(),
   subjectId: z.coerce.number().int().positive().optional(),
   chapterId: z.coerce.number().int().positive().optional(),
-  topicId: z.coerce.number().int().positive().optional(),
   options: z
     .array(questionOptionSchema)
     .min(1, 'At least one answer/option is required')
@@ -157,7 +155,6 @@ export const listQuestionsQuerySchema = z.object({
   subjectId: z.coerce.number().int().positive().optional(),
   gradeLevel: z.coerce.number().int().min(10).max(12).optional(),
   chapterId: z.coerce.number().int().positive().optional(),
-  topicId: z.coerce.number().int().positive().optional(),
   difficulty: z
     .string()
     .optional()
@@ -207,7 +204,6 @@ export const addTagsSchema = z.object({
 export const importQuestionsSchema = z.object({
   subjectId: z.coerce.number().int().positive('Subject is required'),
   chapterId: z.coerce.number().int().positive('Chapter is required'),
-  topicId: z.coerce.number().int().positive().optional(),
 });
 
 // ═══════════════════════════════════════════════

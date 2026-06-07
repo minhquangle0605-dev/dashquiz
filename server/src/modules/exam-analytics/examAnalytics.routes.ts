@@ -16,7 +16,6 @@ const guard = [authenticate, authorize(ROLES.TEACHER, ROLES.ADMIN)] as const;
 
 examAnalyticsRouter.get('/exams/:id/analytics/summary', ...guard, controller.getSummary);
 examAnalyticsRouter.get('/exams/:id/analytics/questions', ...guard, controller.getQuestions);
-examAnalyticsRouter.get('/exams/:id/analytics/topics', ...guard, controller.getTopics);
 examAnalyticsRouter.get('/exams/:id/analytics/students', ...guard, controller.getStudents);
 examAnalyticsRouter.get('/exams/:id/analytics/status', ...guard, controller.getStatus);
 examAnalyticsRouter.post('/exams/:id/analytics/recalculate', ...guard, controller.recalculate);

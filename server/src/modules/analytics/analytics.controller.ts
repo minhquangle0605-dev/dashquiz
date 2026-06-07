@@ -25,42 +25,6 @@ export async function getStudentDashboard(req: Request, res: Response, next: Nex
   }
 }
 
-export async function getStudentStrengths(req: Request, res: Response, next: NextFunction): Promise<void> {
-  try {
-    const studentId = req.user!.id;
-    const { subjectId } = (req as Request & { validatedQuery?: { subjectId?: number } }).validatedQuery ?? {};
-
-    const data = await studentAnalyticsService.getStrengths(studentId, subjectId);
-
-    res.json({
-      success: true,
-      message: 'Student strengths analysis retrieved',
-      data,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    next(error instanceof Error ? error : new Error('Unexpected error'));
-  }
-}
-
-export async function getStudentTimeAnalysis(req: Request, res: Response, next: NextFunction): Promise<void> {
-  try {
-    const studentId = req.user!.id;
-    const { subjectId } = (req as Request & { validatedQuery?: { subjectId?: number } }).validatedQuery ?? {};
-
-    const data = await studentAnalyticsService.getTimeAnalysis(studentId, subjectId);
-
-    res.json({
-      success: true,
-      message: 'Student time analysis retrieved',
-      data,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    next(error instanceof Error ? error : new Error('Unexpected error'));
-  }
-}
-
 export async function getStudentPatterns(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const studentId = req.user!.id;
@@ -71,24 +35,6 @@ export async function getStudentPatterns(req: Request, res: Response, next: Next
     res.json({
       success: true,
       message: 'Student answer patterns retrieved',
-      data,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    next(error instanceof Error ? error : new Error('Unexpected error'));
-  }
-}
-
-export async function getStudentKnowledgeGraph(req: Request, res: Response, next: NextFunction): Promise<void> {
-  try {
-    const studentId = req.user!.id;
-    const { subjectId } = (req as Request & { validatedQuery?: { subjectId?: number } }).validatedQuery ?? {};
-
-    const data = await studentAnalyticsService.getKnowledgeGraph(studentId, subjectId);
-
-    res.json({
-      success: true,
-      message: 'Knowledge graph retrieved',
       data,
       timestamp: new Date().toISOString(),
     });

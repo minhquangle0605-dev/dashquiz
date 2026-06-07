@@ -86,10 +86,6 @@ export const API_ENDPOINTS = {
     ATTEMPTS: '/api/student/attempts',
   },
   AI: {
-    REMEDIAL_GENERATE: '/api/ai/remedial-practice',
-    REMEDIAL_SESSION: (sessionId: number) => `/api/ai/remedial-sessions/${sessionId}`,
-    REMEDIAL_ANSWER: (sessionId: number, questionId: number) =>
-      `/api/ai/remedial-sessions/${sessionId}/questions/${questionId}/answer`,
     MATCHING_DISTRACTOR: '/api/ai/matching-distractor',
   },
   EXAMS: {
@@ -121,7 +117,6 @@ export const API_ENDPOINTS = {
     // Advanced analytics (served under /api/teacher/exams/:id/analytics/*)
     ANALYTICS_SUMMARY: (id: number) => `/api/teacher/exams/${id}/analytics/summary`,
     ANALYTICS_QUESTIONS: (id: number) => `/api/teacher/exams/${id}/analytics/questions`,
-    ANALYTICS_TOPICS: (id: number) => `/api/teacher/exams/${id}/analytics/topics`,
     ANALYTICS_STUDENTS: (id: number) => `/api/teacher/exams/${id}/analytics/students`,
     ANALYTICS_STATUS: (id: number) => `/api/teacher/exams/${id}/analytics/status`,
     ANALYTICS_RECALCULATE: (id: number) => `/api/teacher/exams/${id}/analytics/recalculate`,
@@ -188,10 +183,7 @@ export const API_ENDPOINTS = {
   },
   STUDENT_ANALYTICS: {
     DASHBOARD: '/api/student/dashboard',
-    STRENGTHS: '/api/student/analytics/strengths',
-    TIME: '/api/student/analytics/time',
     PATTERNS: '/api/student/analytics/patterns',
-    KNOWLEDGE_GRAPH: '/api/student/analytics/knowledge-graph',
     ATTEMPTS: '/api/student/analytics/attempts',
   },
   TEACHER_ANALYTICS: {
@@ -242,14 +234,11 @@ export const API_ENDPOINTS = {
     SUBJECTS: '/api/subjects',
     CHAPTERS_BY_SUBJECT: (subjectId: number) =>
       `/api/subjects/${subjectId}/chapters`,
-    TOPICS_BY_CHAPTER: (chapterId: number) =>
-      `/api/chapters/${chapterId}/topics`,
   },
   PARENT: {
     CHILDREN: '/api/parent/children',
     CHILD_RESULTS: (childId: number) => `/api/parent/children/${childId}/results`,
     CHILD_DASHBOARD: (childId: number) => `/api/parent/children/${childId}/dashboard`,
-    CHILD_STRENGTHS: (childId: number) => `/api/parent/children/${childId}/analytics/strengths`,
   },
   NOTIFICATIONS: {
     LIST: '/api/notifications',

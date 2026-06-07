@@ -43,21 +43,6 @@ export async function getQuestions(req: Request, res: Response, next: NextFuncti
   }
 }
 
-export async function getTopics(req: Request, res: Response, next: NextFunction): Promise<void> {
-  try {
-    if (!req.user) throw new AppError('Authentication required', 401);
-    const data = await examAnalyticsService.getTopics(
-      parseExamId(req),
-      req.user.id,
-      req.user.role,
-      wantsRefresh(req),
-    );
-    res.json({ success: true, message: 'Exam topic analytics retrieved', data, timestamp: new Date().toISOString() });
-  } catch (error) {
-    next(error instanceof Error ? error : new Error('Unexpected error'));
-  }
-}
-
 export async function getStudents(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     if (!req.user) throw new AppError('Authentication required', 401);

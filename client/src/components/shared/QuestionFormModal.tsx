@@ -5,10 +5,10 @@ import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import {
-  SubjectChapterTopicSelect,
+  SubjectChapterSelect,
   emptyCurriculumSelection,
   type CurriculumSelection,
-} from './SubjectChapterTopicSelect';
+} from './SubjectChapterSelect';
 import { DIFFICULTY_OPTIONS } from './DifficultyBadge';
 import type {
   Question,
@@ -133,7 +133,6 @@ export function QuestionFormModal({
           ? String(editQuestion.chapter.gradeLevel)
           : '',
         chapterId: editQuestion.chapterId ? String(editQuestion.chapterId) : '',
-        topicId: editQuestion.topicId ? String(editQuestion.topicId) : '',
       });
       setContent(editQuestion.content);
       setQuestionType(editQuestion.questionType);
@@ -335,12 +334,11 @@ export function QuestionFormModal({
     >
       <div className="space-y-5">
         {/* Curriculum selection */}
-        <SubjectChapterTopicSelect
+        <SubjectChapterSelect
           value={curriculum}
           onChange={setCurriculum}
           allowEmpty={false}
           layout="row"
-          showTopic={false}
         />
 
         {/* Question type & Difficulty */}

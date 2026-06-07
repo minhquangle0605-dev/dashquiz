@@ -17,7 +17,6 @@ import {
 import {
   getExamAnalyticsSummary,
   getExamAnalyticsQuestions,
-  getExamAnalyticsTopics,
   getExamAnalyticsStudents,
   recalculateExamAnalytics,
 } from '@/services/examAnalytics.api';
@@ -35,17 +34,15 @@ import type {
   ReportAttempt,
   ExamAnalyticsSummary,
   ExamAnalyticsQuestion,
-  ExamAnalyticsTopic,
 } from '@/types/exam';
 
 /* ── Tab navigation (PDF §6) ─────────────────────────── */
 
-type MainTab = 'overview' | 'questions' | 'topics' | 'students' | 'exports';
+type MainTab = 'overview' | 'questions' | 'students' | 'exports';
 
 const TABS: { key: MainTab; label: string }[] = [
   { key: 'overview', label: 'Overview' },
   { key: 'questions', label: 'Questions' },
-  { key: 'topics', label: 'Topics' },
   { key: 'students', label: 'Students' },
   { key: 'exports', label: 'Exports' },
 ];
@@ -231,7 +228,6 @@ export default function ExamReportsPage() {
 
       {tab === 'overview' && <OverviewTab analytics={analytics} />}
       {tab === 'questions' && <QuestionsTab examId={examId} />}
-      {tab === 'topics' && <TopicsTab examId={examId} />}
       {tab === 'students' && (
         <StudentsTab
           report={report}
@@ -372,10 +368,7 @@ function QuestionsTab({ examId }: { examId: number }) {
     const list = (questions ?? []).filter((q) => {
       if (!search.trim()) return true;
       const needle = search.toLowerCase();
-      return (
-        q.content.toLowerCase().includes(needle) ||
-        (q.topic?.name.toLowerCase().includes(needle) ?? false)
-      );
+      return q.content.toLowerCase().includes(needle);
     });
     const dir = asc ? 1 : -1;
     const val = (q: ExamAnalyticsQuestion): number => {
@@ -429,7 +422,7 @@ function QuestionsTab({ examId }: { examId: number }) {
     <div className="space-y-3">
       <input
         type="search"
-        placeholder="Search question text or topic…"
+        placeholder="Search question text…"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         className="h-10 w-full max-w-sm rounded-lg border border-slate-300 bg-white px-3 text-sm"
@@ -461,7 +454,6 @@ function QuestionsTab({ examId }: { examId: number }) {
                     <td className="px-4 py-3 text-slate-500">{q.orderIndex + 1}</td>
                     <td className="max-w-md truncate px-4 py-3 text-slate-700">
                       {q.content.replace(/\$/g, '')}
-                      {q.topic && <span className="ml-1 text-xs text-slate-400">· {q.topic.name}</span>}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums">
                       {q.correctRate != null ? `${q.correctRate}%` : '—'}
@@ -724,95 +716,6 @@ function MiniStat({ label, value }: { label: string; value: string | number }) {
   );
 }
 
-/* ── Topics tab — mastery analysis (PDF §6) ──────────── */
-
-function TopicsTab({ examId }: { examId: number }) {
-  const { data: topics, isLoading } = useQuery({
-    queryKey: ['exam-analytics', examId, 'topics'],
-    queryFn: () => getExamAnalyticsTopics(examId),
-    enabled: Number.isFinite(examId),
-  });
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-16">
-        <Spinner size="lg" />
-      </div>
-    );
-  }
-
-  const list = (topics ?? []) as ExamAnalyticsTopic[];
-  if (list.length === 0) {
-    return <Card padding="lg"><p className="text-center text-slate-400">No topic data available.</p></Card>;
-  }
-
-  const weak = list.filter((t) => t.weak);
-
-  return (
-    <div className="space-y-4">
-      {weak.length > 0 && (
-        <Card padding="lg">
-          <h3 className="mb-2 text-sm font-semibold text-slate-700">Weak areas to reteach</h3>
-          <div className="flex flex-wrap gap-2">
-            {weak.map((t) => (
-              <span
-                key={t.topicId}
-                className="rounded-full bg-rose-100 px-3 py-1 text-xs font-medium text-rose-700"
-              >
-                {t.topicName} · {t.masteryRate}%
-              </span>
-            ))}
-          </div>
-        </Card>
-      )}
-
-      <Card padding="none" className="overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase text-slate-500">
-                <th className="px-4 py-3">Topic</th>
-                <th className="px-4 py-3">Chapter</th>
-                <th className="px-4 py-3">Mastery</th>
-                <th className="px-4 py-3 text-right">Correct / total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {list.map((t) => (
-                <tr key={t.topicId} className="border-b border-slate-100">
-                  <td className="px-4 py-3 font-medium text-slate-800">{t.topicName}</td>
-                  <td className="px-4 py-3 text-slate-500">{t.chapterName}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <div className="h-2 w-28 rounded bg-slate-100">
-                        <div
-                          className={`h-2 rounded ${
-                            t.masteryRate < 60
-                              ? 'bg-rose-500'
-                              : t.masteryRate < 80
-                                ? 'bg-amber-500'
-                                : 'bg-emerald-500'
-                          }`}
-                          style={{ width: `${t.masteryRate}%` }}
-                        />
-                      </div>
-                      <span className="tabular-nums text-slate-600">{t.masteryRate}%</span>
-                      {t.weak && <Badge variant="danger">Weak</Badge>}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-slate-600">
-                    {t.correctCount} / {t.totalCount}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-    </div>
-  );
-}
-
 /* ── Students tab — grades / responses / manual grading ── */
 
 type StudentSubTab = 'performance' | 'grades' | 'responses' | 'manual';
@@ -953,7 +856,6 @@ function StudentPerformanceTab({ examId }: { examId: number }) {
                 <th className="px-4 py-3 text-right">Score</th>
                 <th className="px-4 py-3">Time</th>
                 <th className="px-4 py-3">Risk</th>
-                <th className="px-4 py-3">Weak topics</th>
               </tr>
             </thead>
             <tbody>
@@ -991,22 +893,6 @@ function StudentPerformanceTab({ examId }: { examId: number }) {
                           {badge.label}
                         </span>
                       </td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-wrap gap-1">
-                          {s.weakTopics.length === 0 ? (
-                            <span className="text-xs text-slate-400">—</span>
-                          ) : (
-                            s.weakTopics.slice(0, 3).map((t) => (
-                              <span
-                                key={t.topicId}
-                                className="rounded bg-rose-50 px-1.5 py-0.5 text-[11px] text-rose-700"
-                              >
-                                {t.topicName}
-                              </span>
-                            ))
-                          )}
-                        </div>
-                      </td>
                     </tr>
                     {expanded && s.recommendations.length > 0 && (
                       <tr className="bg-slate-50">
@@ -1038,7 +924,7 @@ function StudentPerformanceTab({ examId }: { examId: number }) {
 const EXPORT_TYPES: { type: ExportReportType; label: string; desc: string }[] = [
   { type: 'exam_summary', label: 'Exam summary', desc: 'KPIs: averages, pass & completion rates, time.' },
   { type: 'question_analysis', label: 'Question analysis', desc: 'Per-question correct rate, discrimination, quality.' },
-  { type: 'student_results', label: 'Student results', desc: 'Ranking, score, risk level and weak topics.' },
+  { type: 'student_results', label: 'Student results', desc: 'Ranking, score and risk level.' },
 ];
 
 const REPORT_TYPE_LABEL: Record<string, string> = {

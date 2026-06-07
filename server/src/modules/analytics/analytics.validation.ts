@@ -4,19 +4,7 @@ export const studentDashboardQuerySchema = z.object({
   subjectId: z.coerce.number().int().positive().optional(),
 });
 
-export const studentStrengthsQuerySchema = z.object({
-  subjectId: z.coerce.number().int().positive().optional(),
-});
-
-export const studentTimeAnalysisQuerySchema = z.object({
-  subjectId: z.coerce.number().int().positive().optional(),
-});
-
 export const studentPatternsQuerySchema = z.object({
-  subjectId: z.coerce.number().int().positive().optional(),
-});
-
-export const studentKnowledgeGraphQuerySchema = z.object({
   subjectId: z.coerce.number().int().positive().optional(),
 });
 

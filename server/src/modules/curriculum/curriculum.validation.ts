@@ -15,21 +15,7 @@ export const createChapterSchema = z.object({
 });
 
 // ═══════════════════════════════════════════════
-// TOPIC
-// ═══════════════════════════════════════════════
-
-export const createTopicSchema = z.object({
-  chapterId: z.coerce.number().int().positive('Chapter is required'),
-  name: z
-    .string()
-    .min(1, 'Topic name is required')
-    .max(100, 'Topic name must not exceed 100 characters'),
-  description: z.string().max(2000).optional().nullable(),
-});
-
-// ═══════════════════════════════════════════════
 // TYPE EXPORTS
 // ═══════════════════════════════════════════════
 
 export type CreateChapterInput = z.infer<typeof createChapterSchema>;
-export type CreateTopicInput = z.infer<typeof createTopicSchema>;

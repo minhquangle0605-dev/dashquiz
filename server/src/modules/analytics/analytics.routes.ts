@@ -6,10 +6,7 @@ import { ROLES } from '../../utils/constants';
 import * as analyticsController from './analytics.controller';
 import {
   studentDashboardQuerySchema,
-  studentStrengthsQuerySchema,
-  studentTimeAnalysisQuerySchema,
   studentPatternsQuerySchema,
-  studentKnowledgeGraphQuerySchema,
   studentAttemptsQuerySchema,
   classPerformanceQuerySchema,
   weakStudentsQuerySchema,
@@ -34,35 +31,11 @@ studentAnalyticsRouter.get(
 );
 
 studentAnalyticsRouter.get(
-  '/analytics/strengths',
-  authenticate,
-  authorize(ROLES.STUDENT),
-  validate(studentStrengthsQuerySchema, 'query'),
-  analyticsController.getStudentStrengths,
-);
-
-studentAnalyticsRouter.get(
-  '/analytics/time',
-  authenticate,
-  authorize(ROLES.STUDENT),
-  validate(studentTimeAnalysisQuerySchema, 'query'),
-  analyticsController.getStudentTimeAnalysis,
-);
-
-studentAnalyticsRouter.get(
   '/analytics/patterns',
   authenticate,
   authorize(ROLES.STUDENT),
   validate(studentPatternsQuerySchema, 'query'),
   analyticsController.getStudentPatterns,
-);
-
-studentAnalyticsRouter.get(
-  '/analytics/knowledge-graph',
-  authenticate,
-  authorize(ROLES.STUDENT),
-  validate(studentKnowledgeGraphQuerySchema, 'query'),
-  analyticsController.getStudentKnowledgeGraph,
 );
 
 studentAnalyticsRouter.get(

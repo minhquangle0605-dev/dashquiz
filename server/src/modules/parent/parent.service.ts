@@ -96,11 +96,6 @@ export class ParentService {
     await this.assertOwnChild(parentUserId, childId);
     return studentAnalyticsService.getDashboard(childId, subjectId);
   }
-
-  async getChildStrengths(parentUserId: number, childId: number, subjectId?: number) {
-    await this.assertOwnChild(parentUserId, childId);
-    return studentAnalyticsService.getStrengths(childId, subjectId);
-  }
 }
 
 export const parentService = new ParentService();

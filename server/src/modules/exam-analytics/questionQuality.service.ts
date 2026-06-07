@@ -38,7 +38,6 @@ export class QuestionQualityService {
         content: true,
         questionType: true,
         difficulty: true,
-        topic: { select: { id: true, name: true } },
         review: {
           select: {
             status: true,
@@ -93,7 +92,6 @@ export class QuestionQualityService {
         content: question.content,
         questionType: question.questionType,
         difficulty: question.difficulty,
-        topic: question.topic,
       },
       usage: { examCount: stats.length, totalAttempts },
       aggregate: {

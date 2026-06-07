@@ -6,10 +6,10 @@ import { Card } from '@/components/ui/Card';
 import { Spinner } from '@/components/ui/Spinner';
 import { DifficultyBadge, DIFFICULTY_OPTIONS } from '@/components/shared/DifficultyBadge';
 import {
-  SubjectChapterTopicSelect,
+  SubjectChapterSelect,
   emptyCurriculumSelection,
   type CurriculumSelection,
-} from '@/components/shared/SubjectChapterTopicSelect';
+} from '@/components/shared/SubjectChapterSelect';
 import { MathText } from '@/components/shared/MathText';
 import { QuestionFormModal } from '@/components/shared/QuestionFormModal';
 import { ImportWizard } from '@/components/shared/ImportWizard';
@@ -303,13 +303,12 @@ export default function QuestionBankPage() {
               </div>
             </div>
 
-            {/* Subject / Chapter / Topic */}
-            <SubjectChapterTopicSelect
+            {/* Subject / Chapter */}
+            <SubjectChapterSelect
               value={curriculum}
               onChange={setCurriculum}
               layout="column"
               allowEmpty
-              showTopic={false}
             />
 
             {/* Question type filter */}
@@ -611,12 +610,11 @@ export default function QuestionBankPage() {
                     onChange={(e) => setSearchText(e.target.value)}
                   />
                 </div>
-                <SubjectChapterTopicSelect
+                <SubjectChapterSelect
                   value={curriculum}
                   onChange={setCurriculum}
                   layout="row"
                   allowEmpty
-                  showTopic={false}
                 />
                 <select
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
@@ -849,12 +847,6 @@ export default function QuestionBankPage() {
                             <span>
                               Grade:{' '}
                               <strong className="text-slate-700">{q.chapter.gradeLevel}</strong>
-                            </span>
-                          )}
-                          {q.topic && (
-                            <span>
-                              Topic:{' '}
-                              <strong className="text-slate-700">{q.topic.name}</strong>
                             </span>
                           )}
                           <span>

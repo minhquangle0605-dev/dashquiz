@@ -231,7 +231,6 @@ model User {
   createdExams           Exam[]
   examAssignments        ExamAssignment[]
   examAttempts           ExamAttempt[]
-  aiPracticeSessions     AiPracticeSession[]
   notifications          Notification[]
   activityLogs           ActivityLog[]
   backups                Backup[]
@@ -553,7 +552,7 @@ model ClassActivityLog {
   @@map("class_activity_logs")
 }
 
-// CURRICULUM (4 models)
+// CURRICULUM (2 models)
 
 model Subject {
   id          Int     @id @default(autoincrement())
@@ -579,38 +578,10 @@ model Chapter {
   orderIndex Int    @map("order_index")
 
   subject   Subject    @relation(fields: [subjectId], references: [id], onDelete: Cascade)
-  topics    Topic[]
   questions Question[]
 
   @@index([subjectId, gradeLevel, orderIndex])
   @@map("chapters")
-}
-
-model Topic {
-  id          Int     @id @default(autoincrement())
-  chapterId   Int     @map("chapter_id")
-  name        String  @db.VarChar(100)
-  description String? @db.Text
-
-  chapter            Chapter             @relation(fields: [chapterId], references: [id], onDelete: Cascade)
-  questions          Question[]
-  fromRelations      TopicRelation[]     @relation("FromTopic")
-  toRelations        TopicRelation[]     @relation("ToTopic")
-  aiPracticeSessions AiPracticeSession[]
-
-  @@map("topics")
-}
-
-model TopicRelation {
-  id           Int    @id @default(autoincrement())
-  fromTopicId  Int    @map("from_topic_id")
-  toTopicId    Int    @map("to_topic_id")
-  relationType String @map("relation_type") @db.VarChar(30)
-
-  fromTopic Topic @relation("FromTopic", fields: [fromTopicId], references: [id], onDelete: Cascade)
-  toTopic   Topic @relation("ToTopic", fields: [toTopicId], references: [id], onDelete: Cascade)
-
-  @@map("topic_relations")
 }
 
 // QUESTION BANK (3 models)
@@ -619,7 +590,6 @@ model Question {
   id           Int          @id @default(autoincrement())
   subjectId    Int          @map("subject_id")
   chapterId    Int          @map("chapter_id")
-  topicId      Int          @map("topic_id")
   content      String       @db.Text
   questionType QuestionKind @map("question_type")
   difficulty   Int          @db.SmallInt
@@ -632,7 +602,6 @@ model Question {
 
   subject        Subject          @relation(fields: [subjectId], references: [id], onDelete: Restrict)
   chapter        Chapter          @relation(fields: [chapterId], references: [id], onDelete: Restrict)
-  topic          Topic            @relation(fields: [topicId], references: [id], onDelete: Restrict)
   creator        User             @relation(fields: [createdBy], references: [id], onDelete: Restrict)
   options        QuestionOption[]
   tags           QuestionTag[]
@@ -746,7 +715,6 @@ model Exam {
   reportSnapshots       ExamReportSnapshot[]
   questionStats         QuestionStat[]
   questionOptionStats   QuestionOptionStat[]
-  topicPerformanceStats TopicPerformanceStat[]
   studentExamInsights   StudentExamInsight[]
 
   @@map("exams")
@@ -857,7 +825,6 @@ model ExamAttempt {
   securitySession     AttemptSecuritySession?
   attemptViolations   AttemptViolation[]
   proctorReview       ProctorReview?
-  aiPracticeSessions AiPracticeSession[]
 
   @@index([studentId, examId])
   @@map("exam_attempts")
@@ -1008,10 +975,10 @@ model AttemptAnswer {
   @@map("attempt_answers")
 }
 
-// ADVANCED ANALYTICS — snapshot cache for the reporting upgrade (5 models)
+// ADVANCED ANALYTICS — snapshot cache for the reporting upgrade (4 models)
 // These tables cache heavy per-exam analytics so dashboards load fast. They are
 // recomputed by the analytics engine and invalidated on submit / grade / delete,
-// so they are treated as a derived cache (no FK to question/option/topic needed —
+// so they are treated as a derived cache (no FK to question/option needed —
 // rows are scoped + cascade-deleted by exam, and overwritten on each recompute).
 // classId = 0 is the sentinel for "all assigned classes" (keeps @@unique usable).
 
@@ -1029,7 +996,6 @@ model ExamReportSnapshot {
   generatedAt           DateTime             @default(now()) @map("generated_at") @db.Timestamptz()
   summaryJson           Json                 @map("summary_json")
   scoreDistributionJson Json                 @map("score_distribution_json")
-  topicSummaryJson      Json                 @map("topic_summary_json")
 
   exam Exam @relation(fields: [examId], references: [id], onDelete: Cascade)
 
@@ -1074,24 +1040,6 @@ model QuestionOptionStat {
   @@map("question_option_stats")
 }
 
-model TopicPerformanceStat {
-  id           Int   @id @default(autoincrement())
-  examId       Int   @map("exam_id")
-  classId      Int   @default(0) @map("class_id")
-  subjectId    Int   @map("subject_id")
-  chapterId    Int   @map("chapter_id")
-  topicId      Int   @map("topic_id")
-  masteryRate  Float @default(0) @map("mastery_rate")
-  correctCount Int   @default(0) @map("correct_count")
-  totalCount   Int   @default(0) @map("total_count")
-
-  exam Exam @relation(fields: [examId], references: [id], onDelete: Cascade)
-
-  @@unique([examId, classId, topicId])
-  @@index([topicId])
-  @@map("topic_performance_stats")
-}
-
 model StudentExamInsight {
   id                  Int      @id @default(autoincrement())
   attemptId           Int      @unique @map("attempt_id")
@@ -1099,8 +1047,6 @@ model StudentExamInsight {
   examId              Int      @map("exam_id")
   riskLevel           String   @default("none") @map("risk_level") @db.VarChar(20)
   riskScore           Float    @default(0) @map("risk_score")
-  weakTopicsJson      Json?    @map("weak_topics_json")
-  strengthsJson       Json?    @map("strengths_json")
   recommendationsJson Json?    @map("recommendations_json")
   generatedAt         DateTime @default(now()) @map("generated_at") @db.Timestamptz()
 
@@ -1185,7 +1131,6 @@ model ImportJob {
   // Target taxonomy chosen on the upload step (applied on commit).
   subjectId     Int?            @map("subject_id")
   chapterId     Int?            @map("chapter_id")
-  topicId       Int?            @map("topic_id")
   // Which parser produced the result (regex | openai | excel | zip) — shown in UI.
   parserSource  String?         @map("parser_source") @db.VarChar(20)
   errorMessage  String?         @map("error_message") @db.Text
@@ -1228,40 +1173,6 @@ model ImportPreviewItem {
 
   @@index([importJobId, orderIndex])
   @@map("import_preview_items")
-}
-
-// AI ADAPTIVE (2 models)
-
-model AiPracticeSession {
-  id              Int      @id @default(autoincrement())
-  studentId       Int      @map("student_id")
-  topicId         Int      @map("topic_id")
-  sourceAttemptId Int      @map("source_attempt_id")
-  totalQuestions  Int      @map("total_questions")
-  correctAnswers  Int      @default(0) @map("correct_answers")
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz()
-
-  student       User                  @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  topic         Topic                 @relation(fields: [topicId], references: [id], onDelete: Cascade)
-  sourceAttempt ExamAttempt           @relation(fields: [sourceAttemptId], references: [id], onDelete: Cascade)
-  questions     AiGeneratedQuestion[]
-
-  @@map("ai_practice_sessions")
-}
-
-model AiGeneratedQuestion {
-  id            Int      @id @default(autoincrement())
-  sessionId     Int      @map("session_id")
-  content       String   @db.Text
-  optionsJson   Json     @map("options_json")
-  correctOption String   @map("correct_option") @db.Char(1)
-  explanation   String?  @db.Text
-  studentAnswer String?  @map("student_answer") @db.Char(1)
-  isCorrect     Boolean? @map("is_correct")
-
-  session AiPracticeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-
-  @@map("ai_generated_questions")
 }
 
 // SYSTEM ADMIN (5 models)

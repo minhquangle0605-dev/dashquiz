@@ -22,104 +22,6 @@ export interface StudentDashboardData {
   trends: Record<string, { avgScore: number; examCount: number }>;
 }
 
-export interface StrengthItem {
-  topicId: number;
-  topicName: string;
-  chapterName: string;
-  subjectName: string;
-  accuracy: number;
-  correctCount: number;
-  totalQuestions: number;
-}
-
-export interface TimeAnalysisData {
-  overallAvgTimeSec: number;
-  totalAnswers: number;
-  perTopic: {
-    topicId: number;
-    topicName: string;
-    avgTimeSec: number;
-    avgCorrectTimeSec: number;
-    avgWrongTimeSec: number;
-    totalAnswers: number;
-  }[];
-}
-
-export interface KnowledgeGraphNode {
-  id: number;
-  name: string;
-  chapterId: number;
-  chapterName: string;
-  chapterColor: string;
-  subjectId: number;
-  subjectName: string;
-  mastery: number;
-  masteryLevel: 'weak' | 'developing' | 'strong' | 'untouched';
-  color: 'red' | 'yellow' | 'green' | 'gray';
-  attempts: number;
-}
-
-export interface KnowledgeGraphEdge {
-  id: number;
-  source: number;
-  target: number;
-  relationType: string;
-}
-
-export interface KnowledgeGraphChapter {
-  id: number;
-  name: string;
-  subjectId: number;
-  subjectName: string;
-  orderIndex: number;
-  color: string;
-  topicCount: number;
-  masteredCount: number;
-  attemptedCount: number;
-  avgMastery: number;
-}
-
-export interface KnowledgeGraphSubject {
-  id: number;
-  name: string;
-}
-
-export interface KnowledgeGraphSummary {
-  totalTopics: number;
-  attemptedTopics: number;
-  strongCount: number;
-  developingCount: number;
-  weakCount: number;
-  untouchedCount: number;
-  overallMastery: number;
-}
-
-export interface KnowledgeGraphRecommendation {
-  topicId: number;
-  topicName: string;
-  chapterName: string;
-  subjectName: string;
-  mastery: number;
-  attempts?: number;
-  unlocks?: number;
-  reason?: string;
-}
-
-export interface KnowledgeGraphRecommendations {
-  nextToStudy: KnowledgeGraphRecommendation[];
-  quickWins: KnowledgeGraphRecommendation[];
-  keyPrerequisites: KnowledgeGraphRecommendation[];
-}
-
-export interface KnowledgeGraphData {
-  nodes: KnowledgeGraphNode[];
-  edges: KnowledgeGraphEdge[];
-  chapters?: KnowledgeGraphChapter[];
-  subjects?: KnowledgeGraphSubject[];
-  summary?: KnowledgeGraphSummary;
-  recommendations?: KnowledgeGraphRecommendations;
-}
-
 export interface AttemptItem {
   id: number;
   examId: number;
@@ -152,24 +54,6 @@ export interface PaginatedAttempts {
 export async function getStudentDashboard(subjectId?: number): Promise<StudentDashboardData> {
   const params = subjectId ? { subjectId } : {};
   const { data } = await api.get(API_ENDPOINTS.STUDENT_ANALYTICS.DASHBOARD, { params });
-  return data.data;
-}
-
-export async function getStudentStrengths(subjectId?: number): Promise<StrengthItem[]> {
-  const params = subjectId ? { subjectId } : {};
-  const { data } = await api.get(API_ENDPOINTS.STUDENT_ANALYTICS.STRENGTHS, { params });
-  return data.data;
-}
-
-export async function getStudentTimeAnalysis(subjectId?: number): Promise<TimeAnalysisData> {
-  const params = subjectId ? { subjectId } : {};
-  const { data } = await api.get(API_ENDPOINTS.STUDENT_ANALYTICS.TIME, { params });
-  return data.data;
-}
-
-export async function getStudentKnowledgeGraph(subjectId?: number): Promise<KnowledgeGraphData> {
-  const params = subjectId ? { subjectId } : {};
-  const { data } = await api.get(API_ENDPOINTS.STUDENT_ANALYTICS.KNOWLEDGE_GRAPH, { params });
   return data.data;
 }
 

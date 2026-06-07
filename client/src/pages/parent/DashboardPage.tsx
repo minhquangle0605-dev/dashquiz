@@ -13,7 +13,7 @@ import {
   Tooltip,
   Legend,
 } from 'chart.js';
-import { Line, Radar } from 'react-chartjs-2';
+import { Line } from 'react-chartjs-2';
 
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -29,9 +29,8 @@ import {
 import { GreetingBanner } from '@/components/shared/GreetingBanner';
 import { StatTile } from '@/components/shared/StatTile';
 import { QuickActionsGrid } from '@/components/shared/QuickActionsGrid';
-import { getChildren, getChildDashboard, getChildStrengths } from '@/services/parent.api';
+import { getChildren, getChildDashboard } from '@/services/parent.api';
 import type { ChildDashboardData } from '@/types/parent';
-import type { StrengthItem } from '@/services/analytics.api';
 
 ChartJS.register(
   CategoryScale,
@@ -147,21 +146,15 @@ export default function DashboardPage() {
 
 function ChildDashboardContent({ childId }: { childId: number }) {
   const [dashboard, setDashboard] = useState<ChildDashboardData | null>(null);
-  const [strengths, setStrengths] = useState<StrengthItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [dashData, strengthData] = await Promise.allSettled([
-        getChildDashboard(childId),
-        getChildStrengths(childId),
-      ]);
-      if (dashData.status === 'fulfilled') setDashboard(dashData.value);
-      else setDashboard(null);
-      if (strengthData.status === 'fulfilled') setStrengths(strengthData.value);
-      else setStrengths([]);
+      const dashData = await getChildDashboard(childId);
+      setDashboard(dashData);
     } catch {
+      setDashboard(null);
       // sections remain empty
     } finally {
       setLoading(false);
@@ -219,7 +212,6 @@ function ChildDashboardContent({ childId }: { childId: number }) {
   ];
 
   const trendChartData = buildTrendChart(dashboard);
-  const radarData = buildRadarChart(strengths);
 
   return (
     <>
@@ -239,7 +231,7 @@ function ChildDashboardContent({ childId }: { childId: number }) {
       </div>
 
       {/* Charts row */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6">
         <Card padding="md">
           <h3 className="mb-4 text-lg font-semibold text-slate-900">Score Trend</h3>
           <div className="h-56">
@@ -249,32 +241,6 @@ function ChildDashboardContent({ childId }: { childId: number }) {
               <EmptyChart message="No score data available yet" />
             )}
           </div>
-        </Card>
-
-        <Card padding="md">
-          <h3 className="mb-4 text-lg font-semibold text-slate-900">Strengths & Weaknesses</h3>
-          <div className="h-56">
-            {radarData ? (
-              <Radar data={radarData} options={radarChartOptions} />
-            ) : (
-              <EmptyChart message="No topic data available yet" />
-            )}
-          </div>
-          {strengths.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {strengths.slice(0, 3).map((s) => (
-                <Badge key={s.topicId} variant="success">
-                  {s.topicName}: {s.accuracy}%
-                </Badge>
-              ))}
-              {strengths.length > 3 &&
-                strengths.slice(-2).map((s) => (
-                  <Badge key={s.topicId} variant="danger">
-                    {s.topicName}: {s.accuracy}%
-                  </Badge>
-                ))}
-            </div>
-          )}
         </Card>
       </div>
 
@@ -394,26 +360,6 @@ function buildTrendChart(dashboard: ChildDashboardData | null) {
   };
 }
 
-function buildRadarChart(strengths: StrengthItem[]) {
-  if (strengths.length === 0) return null;
-
-  const top = strengths.slice(0, 8);
-  return {
-    labels: top.map((s) => s.topicName.length > 14 ? s.topicName.slice(0, 14) + '...' : s.topicName),
-    datasets: [
-      {
-        label: 'Accuracy (%)',
-        data: top.map((s) => s.accuracy),
-        backgroundColor: 'rgba(79, 70, 229, 0.15)',
-        borderColor: '#4f46e5',
-        borderWidth: 2,
-        pointBackgroundColor: '#4f46e5',
-        pointRadius: 3,
-      },
-    ],
-  };
-}
-
 const lineChartOptions = {
   responsive: true,
   maintainAspectRatio: false,
@@ -428,24 +374,6 @@ const lineChartOptions = {
       max: 10,
       ticks: { font: { size: 11 }, color: '#94a3b8', stepSize: 2 },
       grid: { color: '#f1f5f9' },
-    },
-  },
-} as const;
-
-const radarChartOptions = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: { display: false },
-    tooltip: { backgroundColor: '#1e293b', cornerRadius: 8 },
-  },
-  scales: {
-    r: {
-      beginAtZero: true,
-      max: 100,
-      ticks: { stepSize: 25, display: false },
-      grid: { color: '#e2e8f0' },
-      pointLabels: { font: { size: 10 }, color: '#475569' },
     },
   },
 } as const;

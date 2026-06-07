@@ -144,7 +144,6 @@ export async function importQuestions(
     const meta = {
       subjectId: Number(req.body.subjectId),
       chapterId: Number(req.body.chapterId),
-      topicId: req.body.topicId ? Number(req.body.topicId) : undefined,
     };
 
     if (!meta.subjectId || !meta.chapterId) {
@@ -353,7 +352,6 @@ export async function bulkCreateQuestions(
     const meta = {
       subjectId: Number(req.body?.subjectId),
       chapterId: Number(req.body?.chapterId),
-      topicId: req.body?.topicId ? Number(req.body.topicId) : undefined,
     };
 
     if (!meta.subjectId || !meta.chapterId) {
