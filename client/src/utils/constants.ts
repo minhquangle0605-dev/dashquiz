@@ -195,6 +195,18 @@ export const API_ENDPOINTS = {
     EXAM_RESULTS: (examId: number) => `/api/teacher/exams/${examId}/results`,
     EXPORT_REPORT: '/api/teacher/reports/export',
   },
+  KNOWLEDGE_GRAPH: {
+    STUDENT: '/api/student/knowledge-graph',
+    STUDENT_RECOMMENDATIONS: '/api/student/knowledge-graph/recommendations',
+    TEACHER_STUDENT: (studentId: number) => `/api/teacher/students/${studentId}/knowledge-graph`,
+    TEACHER_CLASS: (classId: number) => `/api/teacher/classes/${classId}/knowledge-graph`,
+    TEACHER_CLASS_WEAK: (classId: number) =>
+      `/api/teacher/classes/${classId}/knowledge-graph/weak-nodes`,
+    ADMIN_NODES: '/api/admin/knowledge-nodes',
+    ADMIN_AUTOGENERATE: '/api/admin/knowledge-nodes/autogenerate',
+    ADMIN_RECALCULATE: '/api/admin/knowledge-nodes/recalculate',
+    ADMIN_NODE_BY_ID: (id: number) => `/api/admin/knowledge-nodes/${id}`,
+  },
   QUESTIONS: {
     BASE: '/api/questions',
     BY_ID: (id: number) => `/api/questions/${id}`,

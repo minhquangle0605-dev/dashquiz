@@ -257,6 +257,7 @@ model User {
   discussionAttachments  DiscussionAttachment[]
   createdTimetableSlots  ClassTimetableSlot[]
   proctoredSchedules     ExamSchedule[]              @relation("ExamProctor")
+  knowledgeMastery       StudentKnowledgeMastery[]
 
   @@index([username, role])
   @@map("users")
@@ -566,6 +567,7 @@ model Subject {
   exams          Exam[]
   classes        Class[]
   timetableSlots ClassTimetableSlot[]
+  knowledgeNodes KnowledgeNode[]
 
   @@map("subjects")
 }
@@ -577,8 +579,9 @@ model Chapter {
   gradeLevel Int    @map("grade_level") @db.SmallInt
   orderIndex Int    @map("order_index")
 
-  subject   Subject    @relation(fields: [subjectId], references: [id], onDelete: Cascade)
-  questions Question[]
+  subject        Subject         @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  questions      Question[]
+  knowledgeNodes KnowledgeNode[]
 
   @@index([subjectId, gradeLevel, orderIndex])
   @@map("chapters")
@@ -611,6 +614,7 @@ model Question {
   duplicateLinksFrom QuestionDuplicateLink[] @relation("DupOriginal")
   duplicateLinksTo   QuestionDuplicateLink[] @relation("DupDuplicate")
   versions       QuestionVersion[]
+  knowledgeLinks QuestionKnowledgeNode[]
 
   @@map("questions")
 }
@@ -1306,4 +1310,79 @@ model DiscussionAttachment {
   @@index([replyId])
   @@index([uploaderId])
   @@map("discussion_attachments")
+}
+
+// KNOWLEDGE GRAPH (3 models)
+// An analytics layer on top of the existing question bank + attempt data. Each
+// KnowledgeNode is a learning unit (Subject → Chapter → Skill). Questions link to
+// nodes via QuestionKnowledgeNode (every question always links to its CHAPTER node;
+// tagged questions additionally link to SKILL nodes). StudentKnowledgeMastery is a
+// per-(student,node) derived cache recomputed after each exam submission.
+
+enum KnowledgeNodeType {
+  SUBJECT
+  CHAPTER
+  SKILL
+  SUBSKILL
+}
+
+model KnowledgeNode {
+  id          Int               @id @default(autoincrement())
+  subjectId   Int?              @map("subject_id")
+  chapterId   Int?              @map("chapter_id")
+  parentId    Int?              @map("parent_id")
+  type        KnowledgeNodeType
+  name        String            @db.VarChar(200)
+  description String?           @db.Text
+  orderIndex  Int               @default(0) @map("order_index")
+  createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt   DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  subject        Subject?                  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  chapter        Chapter?                  @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  parent         KnowledgeNode?            @relation("KnowledgeNodeTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children       KnowledgeNode[]           @relation("KnowledgeNodeTree")
+  questionLinks  QuestionKnowledgeNode[]
+  masteryRecords StudentKnowledgeMastery[]
+
+  @@index([subjectId, chapterId])
+  @@index([parentId])
+  @@index([type])
+  @@map("knowledge_nodes")
+}
+
+model QuestionKnowledgeNode {
+  questionId      Int   @map("question_id")
+  knowledgeNodeId Int   @map("knowledge_node_id")
+  weight          Float @default(1)
+
+  question      Question      @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  knowledgeNode KnowledgeNode @relation(fields: [knowledgeNodeId], references: [id], onDelete: Cascade)
+
+  @@id([questionId, knowledgeNodeId])
+  @@index([knowledgeNodeId])
+  @@map("question_knowledge_nodes")
+}
+
+model StudentKnowledgeMastery {
+  id              Int       @id @default(autoincrement())
+  studentId       Int       @map("student_id")
+  knowledgeNodeId Int       @map("knowledge_node_id")
+  subjectId       Int?      @map("subject_id")
+  masteryScore    Float     @default(0) @map("mastery_score")
+  accuracyRate    Float     @default(0) @map("accuracy_rate")
+  attemptCount    Int       @default(0) @map("attempt_count")
+  correctCount    Int       @default(0) @map("correct_count")
+  avgTimeSec      Float?    @map("avg_time_sec")
+  weaknessLevel   String    @default("unknown") @map("weakness_level") @db.VarChar(20)
+  lastAttemptAt   DateTime? @map("last_attempt_at") @db.Timestamptz()
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  student       User          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  knowledgeNode KnowledgeNode @relation(fields: [knowledgeNodeId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, knowledgeNodeId])
+  @@index([studentId, subjectId])
+  @@index([knowledgeNodeId])
+  @@map("student_knowledge_mastery")
 }

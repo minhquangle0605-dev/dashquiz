@@ -59,6 +59,15 @@ const iconTimetable = (
     />
   </svg>
 );
+const iconKnowledge = (
+  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M9 6a3 3 0 116 0 3 3 0 01-6 0zM5 18a3 3 0 116 0 3 3 0 01-6 0zM13 18a3 3 0 116 0 3 3 0 01-6 0zM12 9v3m0 0l-4 3m4-3l4 3"
+    />
+  </svg>
+);
 
 export default function TeacherLayout() {
   return (
@@ -70,6 +79,7 @@ export default function TeacherLayout() {
         { to: '/teacher/dashboard', label: 'Dashboard', end: true, icon: iconDashboard },
         { to: '/teacher/questions', label: 'Question Bank', icon: iconBank },
         { to: '/teacher/exams', label: 'Exams', icon: iconExams },
+        { to: '/teacher/knowledge-graph', label: 'Knowledge Graph', icon: iconKnowledge },
         { to: '/teacher/classes', label: 'Classes', icon: iconClass },
         { to: '/teacher/timetable', label: 'Timetable', icon: iconTimetable },
         { to: '/teacher/discussions', label: 'Discussions', icon: iconDiscussions },

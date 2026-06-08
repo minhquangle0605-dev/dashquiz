@@ -6,6 +6,11 @@ import { logger } from '../../utils/logger';
 import { PAGINATION, COMPLETED_ATTEMPT_STATUSES } from '../../utils/constants';
 import { invalidateStudentCache } from '../analytics/analytics.service';
 import { invalidateExamAnalytics } from '../exam-analytics/examAnalytics.service';
+import {
+  knowledgeGraphService,
+  invalidateStudentKnowledgeGraph,
+  invalidateClassKnowledgeGraphs,
+} from '../knowledge-graph/knowledgeGraph.service';
 import { computeFinalScore } from '../exam/grading';
 import { getReviewWindowFlags, hasAnyReview } from '../exam/reviewOptions';
 import { buildAttemptQuestions } from './attemptQuestions';
@@ -1174,6 +1179,19 @@ export class StudentExamService {
     invalidateExamAnalytics(attempt.examId).catch((err) =>
       logger.warn('Failed to invalidate exam analytics cache:', err),
     );
+
+    // Knowledge Graph: recompute mastery for the nodes this attempt touched, then
+    // drop the student's + class graph caches (PDF §8). Fire-and-forget so a graph
+    // failure never blocks the submission response.
+    knowledgeGraphService
+      .recalculateAttemptMastery(attempt.id)
+      .then(() =>
+        Promise.all([
+          invalidateStudentKnowledgeGraph(attempt.studentId),
+          invalidateClassKnowledgeGraphs(),
+        ]),
+      )
+      .catch((err) => logger.warn('Failed to recalculate knowledge graph mastery:', err));
 
     // Real-time: emit exam:student-submitted so teacher sees it live
     const student = await prisma.user.findUnique({

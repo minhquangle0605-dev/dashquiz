@@ -11,6 +11,7 @@ import {
   readQuestionImageAsDataUri,
 } from './question.media';
 import { normalizeForDedup } from './questionDedup.service';
+import { knowledgeGraphService } from '../knowledge-graph/knowledgeGraph.service';
 import { logger } from '../../utils/logger';
 import type {
   CreateQuestionInput,
@@ -325,6 +326,9 @@ export class QuestionService {
 
     await this.invalidateQuestionListCaches();
     await this.snapshotVersion(question.id, snapFromQuestion(question), userId, 'created');
+    knowledgeGraphService
+      .syncQuestionNodes(question.id)
+      .catch((err) => logger.warn('Knowledge graph sync (create) failed:', err));
 
     return {
       success: true,
@@ -391,6 +395,9 @@ export class QuestionService {
 
     await this.invalidateQuestionListCaches();
     await this.snapshotVersion(question.id, snapFromQuestion(question), changedBy ?? null, 'updated');
+    knowledgeGraphService
+      .syncQuestionNodes(question.id)
+      .catch((err) => logger.warn('Knowledge graph sync (update) failed:', err));
 
     return {
       success: true,
@@ -633,6 +640,10 @@ export class QuestionService {
       logger.warn(`bulkCreate version snapshot failed: ${(error as Error).message}`);
     }
 
+    knowledgeGraphService
+      .syncQuestionsNodes(created.map((q) => q.id))
+      .catch((err) => logger.warn('Knowledge graph sync (bulk) failed:', err));
+
     return {
       success: true,
       message: `Imported ${created.length} question(s) successfully`,
@@ -776,6 +787,10 @@ export class QuestionService {
     );
 
     await this.invalidateQuestionListCaches();
+
+    knowledgeGraphService
+      .syncQuestionsNodes(created.map((q) => q.id))
+      .catch((err) => logger.warn('Knowledge graph sync (excel import) failed:', err));
 
     return {
       success: true,
@@ -957,6 +972,9 @@ export class QuestionService {
     });
 
     await this.invalidateQuestionListCaches();
+    knowledgeGraphService
+      .syncQuestionNodes(questionId)
+      .catch((err) => logger.warn('Knowledge graph sync (add tags) failed:', err));
 
     return {
       success: true,
@@ -981,6 +999,9 @@ export class QuestionService {
     await prisma.questionTag.delete({ where: { id: tagId } });
 
     await this.invalidateQuestionListCaches();
+    knowledgeGraphService
+      .syncQuestionNodes(questionId)
+      .catch((err) => logger.warn('Knowledge graph sync (remove tag) failed:', err));
 
     return {
       success: true,

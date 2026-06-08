@@ -20,6 +20,7 @@ const TakeExamPage = lazy(() => import('./pages/student/TakeExamPage'));
 const ExamResultPage = lazy(() => import('./pages/student/ExamResultPage'));
 const MyClassesPage = lazy(() => import('./pages/student/MyClassesPage'));
 const StudentTimetablePage = lazy(() => import('./pages/student/TimetablePage'));
+const StudentKnowledgeGraphPage = lazy(() => import('./pages/student/KnowledgeGraphPage'));
 
 const TeacherDashboard = lazy(() => import('./pages/teacher/DashboardPage'));
 const QuestionBankPage = lazy(() => import('./pages/teacher/QuestionBankPage'));
@@ -28,6 +29,7 @@ const CreateExamPage = lazy(() => import('./pages/teacher/CreateExamPage'));
 const ExamReportsPage = lazy(() => import('./pages/teacher/ExamReportsPage'));
 const ClassesPage = lazy(() => import('./pages/teacher/ClassesPage'));
 const TeacherTimetablePage = lazy(() => import('./pages/teacher/TimetablePage'));
+const TeacherKnowledgeGraphPage = lazy(() => import('./pages/teacher/KnowledgeGraphPage'));
 
 const ParentDashboard = lazy(() => import('./pages/parent/DashboardPage'));
 const ChildResultsPage = lazy(() => import('./pages/parent/ChildResultsPage'));
@@ -40,6 +42,7 @@ const SystemPage = lazy(() => import('./pages/admin/SystemPage'));
 const AdminTimetablePage = lazy(() => import('./pages/admin/TimetablePage'));
 const AdminExamsPage = lazy(() => import('./pages/admin/ExamsPage'));
 const AdminAnalyticsPage = lazy(() => import('./pages/admin/AnalyticsPage'));
+const AdminKnowledgeNodesPage = lazy(() => import('./pages/admin/KnowledgeNodesPage'));
 
 const NotFoundPage = lazy(() => import('./pages/common/NotFoundPage'));
 const ForbiddenPage = lazy(() => import('./pages/common/ForbiddenPage'));
@@ -81,6 +84,7 @@ export default function App() {
             <Route path="timetable" element={<StudentTimetablePage />} />
             <Route path="exams" element={<ExamListPage />} />
             <Route path="exams/:id" element={<ExamLobbyPage />} />
+            <Route path="knowledge-graph" element={<StudentKnowledgeGraphPage />} />
             <Route path="attempts/:attemptId/result" element={<ExamResultPage />} />
             <Route path="discussions" element={<DiscussionsPage />} />
             <Route path="notifications" element={<NotificationsPage />} />
@@ -104,6 +108,7 @@ export default function App() {
             <Route path="exams" element={<ExamsPage />} />
             <Route path="exams/create" element={<CreateExamPage />} />
             <Route path="exams/:id/reports" element={<ExamReportsPage />} />
+            <Route path="knowledge-graph" element={<TeacherKnowledgeGraphPage />} />
             <Route path="classes" element={<ClassesPage />} />
             <Route path="timetable" element={<TeacherTimetablePage />} />
             <Route path="discussions" element={<DiscussionsPage />} />
@@ -133,6 +138,7 @@ export default function App() {
             <Route path="questions" element={<QuestionBankPage />} />
             <Route path="exams" element={<AdminExamsPage />} />
             <Route path="analytics" element={<AdminAnalyticsPage />} />
+            <Route path="knowledge-nodes" element={<AdminKnowledgeNodesPage />} />
             <Route path="academic" element={<AcademicPage />} />
             <Route path="timetable" element={<AdminTimetablePage />} />
             <Route path="discussions" element={<AdminDiscussionsPage />} />

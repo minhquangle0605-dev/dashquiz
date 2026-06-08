@@ -24,6 +24,11 @@ import { studentAnalyticsRouter, teacherAnalyticsRouter } from './modules/analyt
 import { examAnalyticsRouter } from './modules/exam-analytics/examAnalytics.routes';
 import { questionQualityRouter } from './modules/exam-analytics/questionQuality.routes';
 import { adminAnalyticsRouter } from './modules/exam-analytics/adminAnalytics.routes';
+import {
+  studentKnowledgeGraphRouter,
+  teacherKnowledgeGraphRouter,
+  adminKnowledgeGraphRouter,
+} from './modules/knowledge-graph/knowledgeGraph.routes';
 import aiRoutes from './modules/ai/ai.routes';
 import notificationRoutes from './modules/notification/notification.routes';
 import classRoutes from './modules/class/class.routes';
@@ -98,12 +103,15 @@ app.use('/api/timetable', timetableRoutes);
 app.use('/api/admin/users', adminUserRoutes);
 app.use('/api/admin/academic', academicRoutes);
 app.use('/api/admin/system', systemRoutes);
+app.use('/api/admin/knowledge-nodes', adminKnowledgeGraphRouter);
 app.use('/api/admin', adminAnalyticsRouter);
 app.use('/api/parent', parentRoutes);
 app.use('/api/student', studentExamRoutes);
 app.use('/api/student', studentAnalyticsRouter);
+app.use('/api/student', studentKnowledgeGraphRouter);
 app.use('/api/teacher', teacherAnalyticsRouter);
 app.use('/api/teacher', examAnalyticsRouter);
+app.use('/api/teacher', teacherKnowledgeGraphRouter);
 app.use('/api', curriculumRoutes);
 
 // ── API Index ───────────────────────────────────
