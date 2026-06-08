@@ -706,10 +706,15 @@ model Exam {
   accessPassword   String?        @map("access_password") @db.VarChar(100)
   reviewOptions    Json?          @map("review_options")
   status         ExamStatus @default(DRAFT)
+  // Knowledge-graph practice sets (PDF §9/§15). isPractice exams are auto-generated
+  // from a weak node and hidden from the normal teacher/admin exam lists.
+  isPractice          Boolean @default(false) @map("is_practice")
+  generatedFromNodeId Int?    @map("generated_from_node_id")
   createdAt      DateTime   @default(now()) @map("created_at") @db.Timestamptz()
 
   subject         Subject          @relation(fields: [subjectId], references: [id], onDelete: Restrict)
   creator         User             @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+  generatedFromNode KnowledgeNode? @relation("ExamGeneratedFromNode", fields: [generatedFromNodeId], references: [id], onDelete: SetNull)
   examQuestions   ExamQuestion[]
   examSchedules   ExamSchedule[]
   examAssignments ExamAssignment[]
@@ -1344,6 +1349,10 @@ model KnowledgeNode {
   children       KnowledgeNode[]           @relation("KnowledgeNodeTree")
   questionLinks  QuestionKnowledgeNode[]
   masteryRecords StudentKnowledgeMastery[]
+  aliases        KnowledgeNodeAlias[]
+  relationsFrom  KnowledgeRelation[]       @relation("KnowledgeRelationFrom")
+  relationsTo    KnowledgeRelation[]       @relation("KnowledgeRelationTo")
+  practiceExams  Exam[]                    @relation("ExamGeneratedFromNode")
 
   @@index([subjectId, chapterId])
   @@index([parentId])
@@ -1351,10 +1360,64 @@ model KnowledgeNode {
   @@map("knowledge_nodes")
 }
 
+// Explicit graph edges beyond the parent/child tree (PDF §5 "Target Data Model").
+// PART_OF mirrors the curriculum hierarchy; PREREQUISITE_OF / RELATED_TO /
+// MISCONCEPTION_FOR power prerequisite-aware recommendations and learning paths.
+enum KnowledgeRelationType {
+  PART_OF
+  PREREQUISITE_OF
+  RELATED_TO
+  MISCONCEPTION_FOR
+}
+
+model KnowledgeRelation {
+  id           Int                   @id @default(autoincrement())
+  fromNodeId   Int                   @map("from_node_id")
+  toNodeId     Int                   @map("to_node_id")
+  relationType KnowledgeRelationType @map("relation_type")
+  weight       Float                 @default(1)
+  // Provenance of the edge: manual (admin), auto (seeded from parentId), ai.
+  source       String                @default("manual") @db.VarChar(20)
+  note         String?               @db.VarChar(300)
+  createdBy    Int?                  @map("created_by")
+  createdAt    DateTime              @default(now()) @map("created_at") @db.Timestamptz()
+
+  fromNode KnowledgeNode @relation("KnowledgeRelationFrom", fields: [fromNodeId], references: [id], onDelete: Cascade)
+  toNode   KnowledgeNode @relation("KnowledgeRelationTo", fields: [toNodeId], references: [id], onDelete: Cascade)
+
+  @@unique([fromNodeId, toNodeId, relationType])
+  @@index([toNodeId])
+  @@index([relationType])
+  @@map("knowledge_relations")
+}
+
+// Synonyms / teacher-entered tag variants that map to a canonical node
+// (PDF §5 KnowledgeNodeAlias). normalizedAlias is lowercased/trimmed for lookup.
+model KnowledgeNodeAlias {
+  id              Int      @id @default(autoincrement())
+  knowledgeNodeId Int      @map("knowledge_node_id")
+  alias           String   @db.VarChar(200)
+  normalizedAlias String   @map("normalized_alias") @db.VarChar(200)
+  source          String   @default("manual") @db.VarChar(20)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  knowledgeNode KnowledgeNode @relation(fields: [knowledgeNodeId], references: [id], onDelete: Cascade)
+
+  @@unique([knowledgeNodeId, normalizedAlias])
+  @@index([normalizedAlias])
+  @@map("knowledge_node_aliases")
+}
+
 model QuestionKnowledgeNode {
   questionId      Int   @map("question_id")
   knowledgeNodeId Int   @map("knowledge_node_id")
   weight          Float @default(1)
+  // Mapping quality (PDF §5/§16). confidence 0..1; evidenceSource: auto | manual |
+  // ai | import; reviewStatus: approved | pending | rejected. Auto-generated links
+  // default to approved so existing coverage is unaffected.
+  confidence     Float  @default(1)
+  evidenceSource String @default("auto") @map("evidence_source") @db.VarChar(20)
+  reviewStatus   String @default("approved") @map("review_status") @db.VarChar(20)
 
   question      Question      @relation(fields: [questionId], references: [id], onDelete: Cascade)
   knowledgeNode KnowledgeNode @relation(fields: [knowledgeNodeId], references: [id], onDelete: Cascade)

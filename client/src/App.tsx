@@ -34,6 +34,7 @@ const TeacherKnowledgeGraphPage = lazy(() => import('./pages/teacher/KnowledgeGr
 const ParentDashboard = lazy(() => import('./pages/parent/DashboardPage'));
 const ChildResultsPage = lazy(() => import('./pages/parent/ChildResultsPage'));
 const ParentTimetablePage = lazy(() => import('./pages/parent/TimetablePage'));
+const ParentKnowledgeGraphPage = lazy(() => import('./pages/parent/KnowledgeGraphPage'));
 
 const AdminDashboard = lazy(() => import('./pages/admin/DashboardPage'));
 const UsersPage = lazy(() => import('./pages/admin/UsersPage'));
@@ -123,6 +124,7 @@ export default function App() {
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<ParentDashboard />} />
             <Route path="results" element={<ChildResultsPage />} />
+            <Route path="knowledge-graph" element={<ParentKnowledgeGraphPage />} />
             <Route path="timetable" element={<ParentTimetablePage />} />
             <Route path="notifications" element={<NotificationsPage />} />
             <Route path="profile" element={<ProfilePage />} />

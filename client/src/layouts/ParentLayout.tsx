@@ -36,6 +36,15 @@ const iconTimetable = (
     />
   </svg>
 );
+const iconKnowledgeGraph = (
+  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M6 6a2 2 0 100-4 2 2 0 000 4zm0 0v12m0 0a2 2 0 100 4 2 2 0 000-4zm12-8a2 2 0 100-4 2 2 0 000 4zm0 0a6 6 0 01-6 6H9"
+    />
+  </svg>
+);
 
 export default function ParentLayout() {
   return (
@@ -46,6 +55,7 @@ export default function ParentLayout() {
       navItems={[
         { to: '/parent/dashboard', label: 'Dashboard', end: true, icon: iconDashboard },
         { to: '/parent/results', label: "Child's Results", icon: iconResults },
+        { to: '/parent/knowledge-graph', label: 'Knowledge Graph', icon: iconKnowledgeGraph },
         { to: '/parent/timetable', label: 'Timetable', icon: iconTimetable },
         { to: '/parent/profile', label: 'Profile', icon: iconProfile },
       ]}

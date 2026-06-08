@@ -4,7 +4,16 @@ import { authenticate, authorize } from '../../middlewares/auth';
 import { validate } from '../../middlewares/validate';
 import { ROLES } from '../../utils/constants';
 import * as controller from './knowledgeGraph.controller';
-import { subjectQuerySchema, updateNodeBodySchema } from './knowledgeGraph.validation';
+import {
+  subjectQuerySchema,
+  updateNodeBodySchema,
+  learningPathQuerySchema,
+  listRelationsQuerySchema,
+  createRelationBodySchema,
+  addAliasBodySchema,
+  mergeNodeBodySchema,
+  practiceBodySchema,
+} from './knowledgeGraph.validation';
 
 // ═══════════════════════════════════════════════════
 // STUDENT ROUTER — mounted at /api/student
@@ -25,6 +34,22 @@ studentKnowledgeGraphRouter.get(
   authorize(ROLES.STUDENT),
   validate(subjectQuerySchema, 'query'),
   controller.getMyRecommendations,
+);
+
+studentKnowledgeGraphRouter.get(
+  '/knowledge-graph/path',
+  authenticate,
+  authorize(ROLES.STUDENT),
+  validate(learningPathQuerySchema, 'query'),
+  controller.getMyLearningPath,
+);
+
+studentKnowledgeGraphRouter.post(
+  '/knowledge-graph/practice',
+  authenticate,
+  authorize(ROLES.STUDENT),
+  validate(practiceBodySchema, 'body'),
+  controller.generateMyPractice,
 );
 
 // ═══════════════════════════════════════════════════
@@ -56,6 +81,14 @@ teacherKnowledgeGraphRouter.get(
   controller.getClassWeakNodes,
 );
 
+teacherKnowledgeGraphRouter.post(
+  '/classes/:classId/knowledge-graph/practice',
+  authenticate,
+  authorize(ROLES.TEACHER),
+  validate(practiceBodySchema, 'body'),
+  controller.assignClassPractice,
+);
+
 // ═══════════════════════════════════════════════════
 // ADMIN ROUTER — mounted at /api/admin/knowledge-nodes
 // ═══════════════════════════════════════════════════
@@ -81,6 +114,75 @@ adminKnowledgeGraphRouter.post(
   authenticate,
   authorize(ROLES.ADMIN),
   controller.recalculateAll,
+);
+
+// Relations (Package B). Declared before "/:id" so the literal path wins.
+adminKnowledgeGraphRouter.get(
+  '/relations',
+  authenticate,
+  authorize(ROLES.ADMIN),
+  validate(listRelationsQuerySchema, 'query'),
+  controller.listRelations,
+);
+
+adminKnowledgeGraphRouter.post(
+  '/relations',
+  authenticate,
+  authorize(ROLES.ADMIN),
+  validate(createRelationBodySchema, 'body'),
+  controller.createRelation,
+);
+
+adminKnowledgeGraphRouter.post(
+  '/relations/seed-part-of',
+  authenticate,
+  authorize(ROLES.ADMIN),
+  controller.seedPartOfRelations,
+);
+
+adminKnowledgeGraphRouter.delete(
+  '/relations/:id',
+  authenticate,
+  authorize(ROLES.ADMIN),
+  controller.deleteRelation,
+);
+
+// Governance (Package C). Literal paths declared before "/:id".
+adminKnowledgeGraphRouter.get(
+  '/quality',
+  authenticate,
+  authorize(ROLES.ADMIN),
+  controller.getQualityReport,
+);
+
+adminKnowledgeGraphRouter.delete(
+  '/aliases/:aliasId',
+  authenticate,
+  authorize(ROLES.ADMIN),
+  controller.deleteNodeAlias,
+);
+
+adminKnowledgeGraphRouter.get(
+  '/:id/aliases',
+  authenticate,
+  authorize(ROLES.ADMIN),
+  controller.listNodeAliases,
+);
+
+adminKnowledgeGraphRouter.post(
+  '/:id/aliases',
+  authenticate,
+  authorize(ROLES.ADMIN),
+  validate(addAliasBodySchema, 'body'),
+  controller.addNodeAlias,
+);
+
+adminKnowledgeGraphRouter.post(
+  '/:id/merge',
+  authenticate,
+  authorize(ROLES.ADMIN),
+  validate(mergeNodeBodySchema, 'body'),
+  controller.mergeNode,
 );
 
 adminKnowledgeGraphRouter.patch(

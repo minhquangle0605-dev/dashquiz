@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -14,6 +15,7 @@ import { Card } from '@/components/ui/Card';
 import { Spinner } from '@/components/ui/Spinner';
 import { getTeacherClasses } from '@/services/analytics.api';
 import {
+  assignClassPractice,
   getClassKnowledgeGraph,
   getClassWeakNodes,
   getStudentKnowledgeGraph,
@@ -63,6 +65,17 @@ export default function KnowledgeGraphPage() {
     queryKey: ['teacher-kg-student', studentId],
     queryFn: () => getStudentKnowledgeGraph(studentId as number),
     enabled: studentId != null,
+  });
+
+  const assign = useMutation({
+    mutationFn: (nodeId: number) => assignClassPractice(classId as number, nodeId),
+    onSuccess: (r) =>
+      toast.success(`Assigned "${r.title}" (${r.totalQuestions} questions) to the class`),
+    onError: (e: unknown) =>
+      toast.error(
+        (e as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+          'Failed to assign practice',
+      ),
   });
 
   const cellMap = useMemo(() => {
@@ -158,6 +171,46 @@ export default function KnowledgeGraphPage() {
           </>
         )}
       </Card>
+
+      {/* Assign targeted practice from weak nodes */}
+      {weakNodes && weakNodes.length > 0 && (
+        <Card
+          title="Assign targeted practice"
+          subtitle="Create a practice set from a weak area and assign it to this class."
+        >
+          <ul className="divide-y divide-[var(--color-border-subtle)]">
+            {weakNodes.slice(0, 8).map((n) => {
+              const lvl = levelFromScore(n.avgMastery, n.studentsWithData);
+              return (
+                <li key={n.nodeId} className="flex items-center gap-3 py-2">
+                  <span
+                    className="min-w-0 flex-1 truncate text-sm font-medium text-[var(--color-text-secondary)]"
+                    title={n.name}
+                  >
+                    {n.name}
+                  </span>
+                  <span
+                    className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${LEVEL_BADGE[lvl]}`}
+                  >
+                    {Math.round(n.avgMastery)}% avg
+                  </span>
+                  <span className="hidden shrink-0 text-[11px] text-[var(--color-text-muted)] sm:inline">
+                    {n.weakStudents} weak / {n.studentsWithData} measured
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => assign.mutate(n.nodeId)}
+                    disabled={assign.isPending}
+                    className="shrink-0 rounded-lg border border-[var(--color-primary-soft-strong)] bg-[var(--color-bg-card)] px-3 py-1.5 text-xs font-semibold text-[var(--color-primary)] hover:bg-[var(--color-primary-soft)] disabled:opacity-50"
+                  >
+                    {assign.isPending && assign.variables === n.nodeId ? 'Assigning…' : 'Assign practice'}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
+      )}
 
       {/* Heatmap */}
       <Card title="Mastery heatmap" subtitle="Students × chapters. Click a student to drill in.">

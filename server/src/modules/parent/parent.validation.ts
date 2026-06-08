@@ -21,3 +21,9 @@ export const childAnalyticsQuerySchema = z.object({
 });
 
 export type ChildAnalyticsQuery = z.infer<typeof childAnalyticsQuerySchema>;
+
+export const childLearningPathQuerySchema = z.object({
+  targetNodeId: z.coerce.number().int().positive(),
+});
+
+export type ChildLearningPathQuery = z.infer<typeof childLearningPathQuerySchema>;

@@ -1,6 +1,7 @@
 import { prisma } from '../../config/database';
 import { AppError } from '../../middlewares/errorHandler';
 import { studentAnalyticsService } from '../analytics/analytics.service';
+import { knowledgeGraphService } from '../knowledge-graph/knowledgeGraph.service';
 import type { ChildResultsQuery } from './parent.validation';
 
 export class ParentService {
@@ -95,6 +96,18 @@ export class ParentService {
   async getChildDashboard(parentUserId: number, childId: number, subjectId?: number) {
     await this.assertOwnChild(parentUserId, childId);
     return studentAnalyticsService.getDashboard(childId, subjectId);
+  }
+
+  /** Read-only view of a linked child's knowledge graph (mastery by subject/chapter/skill). */
+  async getChildKnowledgeGraph(parentUserId: number, childId: number, subjectId?: number) {
+    await this.assertOwnChild(parentUserId, childId);
+    return knowledgeGraphService.getStudentGraph(childId, subjectId);
+  }
+
+  /** Prerequisite learning path to a node, annotated with the child's mastery. */
+  async getChildLearningPath(parentUserId: number, childId: number, targetNodeId: number) {
+    await this.assertOwnChild(parentUserId, childId);
+    return knowledgeGraphService.getLearningPath(childId, targetNodeId);
   }
 }
 

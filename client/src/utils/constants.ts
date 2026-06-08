@@ -198,14 +198,25 @@ export const API_ENDPOINTS = {
   KNOWLEDGE_GRAPH: {
     STUDENT: '/api/student/knowledge-graph',
     STUDENT_RECOMMENDATIONS: '/api/student/knowledge-graph/recommendations',
+    STUDENT_PATH: '/api/student/knowledge-graph/path',
+    STUDENT_PRACTICE: '/api/student/knowledge-graph/practice',
     TEACHER_STUDENT: (studentId: number) => `/api/teacher/students/${studentId}/knowledge-graph`,
     TEACHER_CLASS: (classId: number) => `/api/teacher/classes/${classId}/knowledge-graph`,
     TEACHER_CLASS_WEAK: (classId: number) =>
       `/api/teacher/classes/${classId}/knowledge-graph/weak-nodes`,
+    TEACHER_CLASS_PRACTICE: (classId: number) =>
+      `/api/teacher/classes/${classId}/knowledge-graph/practice`,
     ADMIN_NODES: '/api/admin/knowledge-nodes',
     ADMIN_AUTOGENERATE: '/api/admin/knowledge-nodes/autogenerate',
     ADMIN_RECALCULATE: '/api/admin/knowledge-nodes/recalculate',
     ADMIN_NODE_BY_ID: (id: number) => `/api/admin/knowledge-nodes/${id}`,
+    ADMIN_NODE_MERGE: (id: number) => `/api/admin/knowledge-nodes/${id}/merge`,
+    ADMIN_NODE_ALIASES: (id: number) => `/api/admin/knowledge-nodes/${id}/aliases`,
+    ADMIN_ALIAS_BY_ID: (aliasId: number) => `/api/admin/knowledge-nodes/aliases/${aliasId}`,
+    ADMIN_QUALITY: '/api/admin/knowledge-nodes/quality',
+    ADMIN_RELATIONS: '/api/admin/knowledge-nodes/relations',
+    ADMIN_RELATION_BY_ID: (id: number) => `/api/admin/knowledge-nodes/relations/${id}`,
+    ADMIN_RELATIONS_SEED: '/api/admin/knowledge-nodes/relations/seed-part-of',
   },
   QUESTIONS: {
     BASE: '/api/questions',
@@ -251,6 +262,9 @@ export const API_ENDPOINTS = {
     CHILDREN: '/api/parent/children',
     CHILD_RESULTS: (childId: number) => `/api/parent/children/${childId}/results`,
     CHILD_DASHBOARD: (childId: number) => `/api/parent/children/${childId}/dashboard`,
+    CHILD_KNOWLEDGE_GRAPH: (childId: number) => `/api/parent/children/${childId}/knowledge-graph`,
+    CHILD_KNOWLEDGE_GRAPH_PATH: (childId: number) =>
+      `/api/parent/children/${childId}/knowledge-graph/path`,
   },
   NOTIFICATIONS: {
     LIST: '/api/notifications',

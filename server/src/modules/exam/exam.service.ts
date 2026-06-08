@@ -97,6 +97,10 @@ export class ExamService {
 
     const where: Prisma.ExamWhereInput = {};
 
+    // Knowledge-graph practice sets are auto-generated and self-/class-launched;
+    // keep them out of the standard exam-management lists.
+    where.isPractice = false;
+
     if (role === 'teacher') {
       where.createdBy = userId;
     }

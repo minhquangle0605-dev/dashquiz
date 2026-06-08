@@ -525,43 +525,49 @@ export class StudentExamService {
       updatedAt: null,
     };
 
-    const assignedClassIds = exam.examAssignments.map((a) => a.classId);
+    // Personal knowledge-graph practice (owned by this student) is self-launched,
+    // so it skips the class-assignment + schedule gates that assigned exams use.
+    const isOwnerPractice = exam.isPractice && exam.createdBy === studentId;
 
-    // Which of the exam's classes is this student actually in?
-    const myEnrollments = await prisma.classStudent.findMany({
-      where: { studentId, classId: { in: assignedClassIds } },
-      select: { classId: true },
-    });
-    if (myEnrollments.length === 0) {
-      throw new AppError('You are not assigned to take this exam', 403);
-    }
-    const myClassIds = myEnrollments.map((e) => e.classId);
+    if (!isOwnerPractice) {
+      const assignedClassIds = exam.examAssignments.map((a) => a.classId);
 
-    // Availability gate. Per-class scheduling is opt-in: only when the exam has at
-    // least one per-class window do we require one relevant to the student's class.
-    const now = new Date();
-    const perClassCount = await prisma.examSchedule.count({
-      where: { examId, classId: { not: null } },
-    });
-    if (perClassCount > 0) {
-      const activeRelevant = await prisma.examSchedule.findFirst({
-        where: {
-          examId,
-          status: 'ACTIVE',
-          startTime: { lte: now },
-          endTime: { gt: now },
-          OR: [{ classId: null }, { classId: { in: myClassIds } }],
-        },
+      // Which of the exam's classes is this student actually in?
+      const myEnrollments = await prisma.classStudent.findMany({
+        where: { studentId, classId: { in: assignedClassIds } },
+        select: { classId: true },
       });
-      if (!activeRelevant) {
-        throw new AppError('This exam is not currently available for your class', 400);
+      if (myEnrollments.length === 0) {
+        throw new AppError('You are not assigned to take this exam', 403);
       }
-    } else if (exam.status !== 'PUBLISHED') {
-      const activeSchedule = await prisma.examSchedule.findFirst({
-        where: { examId, status: 'ACTIVE', startTime: { lte: now }, endTime: { gt: now } },
+      const myClassIds = myEnrollments.map((e) => e.classId);
+
+      // Availability gate. Per-class scheduling is opt-in: only when the exam has at
+      // least one per-class window do we require one relevant to the student's class.
+      const now = new Date();
+      const perClassCount = await prisma.examSchedule.count({
+        where: { examId, classId: { not: null } },
       });
-      if (!activeSchedule) {
-        throw new AppError('This exam is not currently available', 400);
+      if (perClassCount > 0) {
+        const activeRelevant = await prisma.examSchedule.findFirst({
+          where: {
+            examId,
+            status: 'ACTIVE',
+            startTime: { lte: now },
+            endTime: { gt: now },
+            OR: [{ classId: null }, { classId: { in: myClassIds } }],
+          },
+        });
+        if (!activeRelevant) {
+          throw new AppError('This exam is not currently available for your class', 400);
+        }
+      } else if (exam.status !== 'PUBLISHED') {
+        const activeSchedule = await prisma.examSchedule.findFirst({
+          where: { examId, status: 'ACTIVE', startTime: { lte: now }, endTime: { gt: now } },
+        });
+        if (!activeSchedule) {
+          throw new AppError('This exam is not currently available', 400);
+        }
       }
     }
 

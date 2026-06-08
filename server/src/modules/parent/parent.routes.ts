@@ -7,6 +7,7 @@ import * as parentController from './parent.controller';
 import {
   childResultsQuerySchema,
   childAnalyticsQuerySchema,
+  childLearningPathQuerySchema,
 } from './parent.validation';
 
 const router = Router();
@@ -36,6 +37,22 @@ router.get(
   authorize(ROLES.PARENT),
   validate(childAnalyticsQuerySchema, 'query'),
   parentController.getChildDashboard,
+);
+
+router.get(
+  '/children/:id/knowledge-graph',
+  authenticate,
+  authorize(ROLES.PARENT),
+  validate(childAnalyticsQuerySchema, 'query'),
+  parentController.getChildKnowledgeGraph,
+);
+
+router.get(
+  '/children/:id/knowledge-graph/path',
+  authenticate,
+  authorize(ROLES.PARENT),
+  validate(childLearningPathQuerySchema, 'query'),
+  parentController.getChildLearningPath,
 );
 
 export default router;

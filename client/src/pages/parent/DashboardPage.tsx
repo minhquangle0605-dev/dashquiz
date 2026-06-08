@@ -123,6 +123,13 @@ export default function DashboardPage() {
             tone: 'brand',
           },
           {
+            label: 'Knowledge Graph',
+            description: 'Mastery by topic & skill',
+            to: '/parent/knowledge-graph',
+            icon: iconGraph,
+            tone: 'success',
+          },
+          {
             label: 'Notifications',
             description: 'Updates from school',
             to: '/parent/notifications',
@@ -401,5 +408,10 @@ const iconTrophy = (
 const iconBell = (
   <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+  </svg>
+);
+const iconGraph = (
+  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M6 6a2 2 0 100-4 2 2 0 000 4zm0 0v12m0 0a2 2 0 100 4 2 2 0 000-4zm12-8a2 2 0 100-4 2 2 0 000 4zm0 0a6 6 0 01-6 6H9" />
   </svg>
 );

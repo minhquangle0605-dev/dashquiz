@@ -24,6 +24,9 @@ export interface GraphNode {
   attemptCount: number;
   correctCount: number;
   avgTimeSec: number | null;
+  lastAttemptAt: string | null;
+  daysSinceLastPractice: number | null;
+  stale: boolean;
 }
 
 export interface GraphEdge {
@@ -43,6 +46,12 @@ export interface GraphSummary {
   criticalCount: number;
 }
 
+export type RecommendationReasonCode =
+  | 'LOW_MASTERY'
+  | 'LOW_CONFIDENCE'
+  | 'PREREQ_GAP'
+  | 'STALE_MASTERY';
+
 export interface Recommendation {
   nodeId: number;
   name: string;
@@ -50,7 +59,42 @@ export interface Recommendation {
   subjectId: number | null;
   masteryScore: number;
   reason: string;
+  reasonCode: RecommendationReasonCode;
   priority: 'high' | 'medium';
+  confidence: ConfidenceLevel;
+  evidenceCount: number;
+  prerequisite?: { nodeId: number; name: string; masteryScore: number } | null;
+}
+
+export type RelationType = 'PART_OF' | 'PREREQUISITE_OF' | 'RELATED_TO' | 'MISCONCEPTION_FOR';
+
+export interface RelationDTO {
+  id: number;
+  fromNodeId: number;
+  toNodeId: number;
+  fromName: string;
+  toName: string;
+  relationType: RelationType;
+  weight: number;
+  source: string;
+  note: string | null;
+}
+
+export interface LearningPathStep {
+  nodeId: number;
+  name: string;
+  type: KnowledgeNodeType;
+  masteryScore: number;
+  weaknessLevel: WeaknessLevel;
+  confidence: ConfidenceLevel;
+  attemptCount: number;
+  isTarget: boolean;
+  needsWork: boolean;
+}
+
+export interface LearningPathResponse {
+  target: { nodeId: number; name: string } | null;
+  steps: LearningPathStep[];
 }
 
 export interface StudentGraphResponse {
@@ -95,6 +139,29 @@ export interface AdminKnowledgeNode {
   orderIndex: number;
   questionCount: number;
   childCount: number;
+  aliasCount: number;
+}
+
+export interface NodeAlias {
+  id: number;
+  alias: string;
+  source: string;
+}
+
+export interface QualityReport {
+  totals: {
+    nodes: number;
+    relations: number;
+    questions: number;
+    mappedQuestions: number;
+    coverage: number;
+  };
+  unmappedQuestions: { count: number; sample: { id: number; content: string }[] };
+  orphanNodes: { count: number; sample: { id: number; name: string; type: string }[] };
+  duplicateCandidates: { name: string; nodeIds: number[] }[];
+  lowConfidenceMappings: number;
+  overMappedQuestions: { count: number; sample: { questionId: number; skillCount: number }[] };
+  thinSkillNodes: { count: number; sample: { id: number; name: string; questionCount: number }[] };
 }
 
 // ═══════════════════════════════════════════════════
@@ -110,6 +177,24 @@ export async function getMyKnowledgeGraph(subjectId?: number): Promise<StudentGr
 export async function getMyRecommendations(subjectId?: number): Promise<Recommendation[]> {
   const params = subjectId ? { subjectId } : {};
   const { data } = await api.get(API_ENDPOINTS.KNOWLEDGE_GRAPH.STUDENT_RECOMMENDATIONS, { params });
+  return data.data;
+}
+
+export async function getMyLearningPath(targetNodeId: number): Promise<LearningPathResponse> {
+  const { data } = await api.get(API_ENDPOINTS.KNOWLEDGE_GRAPH.STUDENT_PATH, {
+    params: { targetNodeId },
+  });
+  return data.data;
+}
+
+export async function generatePracticeFromNode(
+  nodeId: number,
+  questionCount?: number,
+): Promise<{ examId: number; title: string; totalQuestions: number }> {
+  const { data } = await api.post(API_ENDPOINTS.KNOWLEDGE_GRAPH.STUDENT_PRACTICE, {
+    nodeId,
+    questionCount,
+  });
   return data.data;
 }
 
@@ -141,6 +226,41 @@ export async function getClassWeakNodes(
 ): Promise<ClassWeakNode[]> {
   const params = subjectId ? { subjectId } : {};
   const { data } = await api.get(API_ENDPOINTS.KNOWLEDGE_GRAPH.TEACHER_CLASS_WEAK(classId), { params });
+  return data.data;
+}
+
+export async function assignClassPractice(
+  classId: number,
+  nodeId: number,
+  questionCount?: number,
+): Promise<{ examId: number; title: string; totalQuestions: number; classId: number }> {
+  const { data } = await api.post(API_ENDPOINTS.KNOWLEDGE_GRAPH.TEACHER_CLASS_PRACTICE(classId), {
+    nodeId,
+    questionCount,
+  });
+  return data.data;
+}
+
+// ═══════════════════════════════════════════════════
+// PARENT (read-only view of a linked child's graph)
+// ═══════════════════════════════════════════════════
+
+export async function getChildKnowledgeGraph(
+  childId: number,
+  subjectId?: number,
+): Promise<StudentGraphResponse> {
+  const params = subjectId ? { subjectId } : {};
+  const { data } = await api.get(API_ENDPOINTS.PARENT.CHILD_KNOWLEDGE_GRAPH(childId), { params });
+  return data.data;
+}
+
+export async function getChildLearningPath(
+  childId: number,
+  targetNodeId: number,
+): Promise<LearningPathResponse> {
+  const { data } = await api.get(API_ENDPOINTS.PARENT.CHILD_KNOWLEDGE_GRAPH_PATH(childId), {
+    params: { targetNodeId },
+  });
   return data.data;
 }
 
@@ -179,5 +299,70 @@ export async function updateKnowledgeNode(
 
 export async function deleteKnowledgeNode(id: number): Promise<{ id: number }> {
   const { data } = await api.delete(API_ENDPOINTS.KNOWLEDGE_GRAPH.ADMIN_NODE_BY_ID(id));
+  return data.data;
+}
+
+// ─── Relations (Package B) ─────────────────────────
+
+export async function getKnowledgeRelations(params?: {
+  nodeId?: number;
+  relationType?: RelationType;
+}): Promise<RelationDTO[]> {
+  const { data } = await api.get(API_ENDPOINTS.KNOWLEDGE_GRAPH.ADMIN_RELATIONS, { params });
+  return data.data;
+}
+
+export async function createKnowledgeRelation(body: {
+  fromNodeId: number;
+  toNodeId: number;
+  relationType: RelationType;
+  weight?: number;
+  note?: string | null;
+}): Promise<RelationDTO> {
+  const { data } = await api.post(API_ENDPOINTS.KNOWLEDGE_GRAPH.ADMIN_RELATIONS, body);
+  return data.data;
+}
+
+export async function deleteKnowledgeRelation(id: number): Promise<{ id: number }> {
+  const { data } = await api.delete(API_ENDPOINTS.KNOWLEDGE_GRAPH.ADMIN_RELATION_BY_ID(id));
+  return data.data;
+}
+
+export async function seedPartOfRelations(): Promise<{ created: number }> {
+  const { data } = await api.post(API_ENDPOINTS.KNOWLEDGE_GRAPH.ADMIN_RELATIONS_SEED);
+  return data.data;
+}
+
+// ─── Governance (Package C) ────────────────────────
+
+export async function getQualityReport(): Promise<QualityReport> {
+  const { data } = await api.get(API_ENDPOINTS.KNOWLEDGE_GRAPH.ADMIN_QUALITY);
+  return data.data;
+}
+
+export async function getNodeAliases(nodeId: number): Promise<NodeAlias[]> {
+  const { data } = await api.get(API_ENDPOINTS.KNOWLEDGE_GRAPH.ADMIN_NODE_ALIASES(nodeId));
+  return data.data;
+}
+
+export async function addNodeAlias(nodeId: number, alias: string): Promise<NodeAlias> {
+  const { data } = await api.post(API_ENDPOINTS.KNOWLEDGE_GRAPH.ADMIN_NODE_ALIASES(nodeId), {
+    alias,
+  });
+  return data.data;
+}
+
+export async function deleteNodeAlias(aliasId: number): Promise<{ id: number }> {
+  const { data } = await api.delete(API_ENDPOINTS.KNOWLEDGE_GRAPH.ADMIN_ALIAS_BY_ID(aliasId));
+  return data.data;
+}
+
+export async function mergeKnowledgeNode(
+  sourceId: number,
+  targetNodeId: number,
+): Promise<{ merged: number; into: number }> {
+  const { data } = await api.post(API_ENDPOINTS.KNOWLEDGE_GRAPH.ADMIN_NODE_MERGE(sourceId), {
+    targetNodeId,
+  });
   return data.data;
 }

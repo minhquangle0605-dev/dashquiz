@@ -421,6 +421,8 @@ export class ExamSecurityService {
         id: true,
         status: true,
         title: true,
+        isPractice: true,
+        createdBy: true,
         examAssignments: { select: { classId: true } },
         examSchedules: {
           select: { classId: true, status: true, startTime: true, endTime: true },
@@ -431,13 +433,16 @@ export class ExamSecurityService {
 
     const settings = await this.getEffectiveSettings(examId);
     const now = new Date();
+    // Personal knowledge-graph practice (owned by this student) skips the
+    // class-assignment + schedule gates — it is self-launched, not assigned.
+    const isOwnerPractice = exam.isPractice && exam.createdBy === studentId;
     const assignedClassIds = exam.examAssignments.map((a) => a.classId);
     const enrollments = await prisma.classStudent.findMany({
       where: { studentId, classId: { in: assignedClassIds } },
       select: { classId: true },
     });
     const studentClassIds = enrollments.map((e) => e.classId);
-    const hasAssignment = studentClassIds.length > 0;
+    const hasAssignment = isOwnerPractice || studentClassIds.length > 0;
     const hasPerClassSchedule = exam.examSchedules.some((s) => s.classId !== null);
     const activeSchedule = exam.examSchedules.some(
       (s) =>
@@ -446,7 +451,9 @@ export class ExamSecurityService {
         s.endTime > now &&
         (!hasPerClassSchedule || s.classId === null || (s.classId !== null && studentClassIds.includes(s.classId))),
     );
-    const scheduleOk = hasPerClassSchedule ? activeSchedule : exam.status === 'PUBLISHED' || activeSchedule;
+    const scheduleOk =
+      isOwnerPractice ||
+      (hasPerClassSchedule ? activeSchedule : exam.status === 'PUBLISHED' || activeSchedule);
     const ipOk = ipAllowed(ipAddress, settings.allowedIpRanges);
     const fullscreenOk = !settings.requireFullscreen || input.supportsFullscreen !== false;
     const cameraOk = !settings.requireCamera || input.cameraPermission === 'granted';
