@@ -220,6 +220,8 @@ model User {
   phone        String?    @db.VarChar(20)
   avatar       String?    @db.VarChar(255)
   status       UserStatus @default(ACTIVE)
+  mustChangePassword Boolean   @default(false) @map("must_change_password")
+  passwordChangedAt  DateTime? @map("password_changed_at") @db.Timestamptz()
   lastLoginAt  DateTime?  @map("last_login_at") @db.Timestamptz()
   createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz()
 

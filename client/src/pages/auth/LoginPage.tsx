@@ -3,11 +3,13 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
+import { Link } from 'react-router-dom';
 
 import { useAuth } from '@/hooks/useAuth';
 import { login as loginApi } from '@/services/auth.api';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
+import { ROUTES } from '@/utils/constants';
 
 const loginSchema = z.object({
   username: z
@@ -179,13 +181,21 @@ export default function LoginPage() {
           )}
         </div>
 
-        <label className="flex items-center gap-2 text-sm text-slate-600 select-none">
-          <input
-            type="checkbox"
-            className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-          />
-          Remember me
-        </label>
+        <div className="flex items-center justify-between">
+          <label className="flex items-center gap-2 text-sm text-slate-600 select-none">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+            />
+            Remember me
+          </label>
+          <Link
+            to={ROUTES.FORGOT_PASSWORD}
+            className="text-sm font-medium text-indigo-600 hover:text-indigo-700"
+          >
+            Forgot password?
+          </Link>
+        </div>
 
         <Button
           type="submit"

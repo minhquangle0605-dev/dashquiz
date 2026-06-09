@@ -12,6 +12,7 @@ import ParentLayout from './layouts/ParentLayout';
 import AdminLayout from './layouts/AdminLayout';
 
 const LoginPage = lazy(() => import('./pages/auth/LoginPage'));
+const ForgotPasswordPage = lazy(() => import('./pages/auth/ForgotPasswordPage'));
 
 const StudentDashboard = lazy(() => import('./pages/student/DashboardPage'));
 const ExamListPage = lazy(() => import('./pages/student/ExamListPage'));
@@ -45,6 +46,7 @@ const AdminExamsPage = lazy(() => import('./pages/admin/ExamsPage'));
 const AdminAnalyticsPage = lazy(() => import('./pages/admin/AnalyticsPage'));
 const AdminKnowledgeNodesPage = lazy(() => import('./pages/admin/KnowledgeNodesPage'));
 
+const ChangePasswordPage = lazy(() => import('./pages/common/ChangePasswordPage'));
 const NotFoundPage = lazy(() => import('./pages/common/NotFoundPage'));
 const ForbiddenPage = lazy(() => import('./pages/common/ForbiddenPage'));
 const ServerErrorPage = lazy(() => import('./pages/common/ServerErrorPage'));
@@ -74,6 +76,14 @@ export default function App() {
         {/* Public auth routes — explicit path so layout + Outlet match reliably (RR v7) */}
         <Route path="/login" element={<AuthLayout />}>
           <Route index element={<LoginPage />} />
+        </Route>
+        <Route path="/forgot-password" element={<AuthLayout />}>
+          <Route index element={<ForgotPasswordPage />} />
+        </Route>
+
+        {/* Mandatory password change — available to any authenticated role */}
+        <Route element={<ProtectedRoute />}>
+          <Route path="/change-password" element={<ChangePasswordPage />} />
         </Route>
 
         {/* Student routes (protected) */}

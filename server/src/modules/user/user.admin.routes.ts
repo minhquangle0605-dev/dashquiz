@@ -9,6 +9,7 @@ import {
   createUserSchema,
   updateUserSchema,
   changeRoleSchema,
+  resetPasswordSchema,
 } from './user.validation';
 import { ROLES, FILE_UPLOAD } from '../../utils/constants';
 
@@ -54,6 +55,13 @@ router.put(
   validate(changeRoleSchema),
   activityLogger('CHANGE_ROLE', 'user'),
   userController.adminChangeRole,
+);
+
+router.post(
+  '/:id/reset-password',
+  validate(resetPasswordSchema),
+  activityLogger('RESET_PASSWORD', 'user'),
+  userController.adminResetPassword,
 );
 
 router.post(

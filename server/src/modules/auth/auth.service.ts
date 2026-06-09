@@ -143,6 +143,7 @@ export class AuthService {
         fullName: user.fullName,
         avatar: user.avatar,
         role: resolvedRole,
+        mustChangePassword: user.mustChangePassword,
       },
     };
   }

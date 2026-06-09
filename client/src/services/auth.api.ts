@@ -20,6 +20,7 @@ function normalizeLoginUser(raw: User & { id: number | string }): User {
     ...raw,
     id: String(raw.id),
     role,
+    mustChangePassword: Boolean(raw.mustChangePassword),
   };
 }
 

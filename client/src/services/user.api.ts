@@ -20,12 +20,14 @@ export async function updateProfile(
 }
 
 export async function changePassword(
-  oldPassword: string,
-  newPassword: string
+  currentPassword: string,
+  newPassword: string,
+  confirmPassword: string
 ): Promise<void> {
-  await api.post(API_ENDPOINTS.USERS.ME_PASSWORD, {
-    oldPassword,
+  await api.put(API_ENDPOINTS.USERS.ME_PASSWORD, {
+    currentPassword,
     newPassword,
+    confirmPassword,
   });
 }
 

@@ -34,6 +34,11 @@ export function useAuth() {
     (userData: User, tokens: AuthTokens) => {
       loginAction(userData, tokens);
 
+      if (userData.mustChangePassword) {
+        navigate(ROUTES.CHANGE_PASSWORD, { replace: true });
+        return;
+      }
+
       if (userData.role === 'parent') {
         import('@/utils/pushNotifications').then((m) => m.initPushOnFirstLogin());
       }

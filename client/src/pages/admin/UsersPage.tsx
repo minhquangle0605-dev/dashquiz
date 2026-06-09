@@ -26,7 +26,9 @@ import {
   deleteUser,
   importUsers,
   getImportTemplateUrl,
+  resetUserPassword,
   type ImportUserCredential,
+  type ResetPasswordResult,
 } from '@/services/admin.api';
 import api from '@/services/api';
 import type { AdminUser, AdminUserRole, CreateUserPayload, RoleOption, UpdateUserPayload, UserStatus } from '@/types/admin';
@@ -128,6 +130,8 @@ export default function UsersPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [resetResult, setResetResult] = useState<ResetPasswordResult | null>(null);
+  const [resettingId, setResettingId] = useState<number | null>(null);
 
   const debouncedSearch = useDebounce(search, 400);
 
@@ -201,6 +205,24 @@ export default function UsersPage() {
       fetchUsers();
     } catch (err: any) {
       toast.error(err?.response?.data?.message ?? 'Failed to delete user');
+    }
+  }
+
+  async function handleResetPassword(user: AdminUser) {
+    if (
+      !window.confirm(
+        `Reset the password for "${user.username}"? They will be required to set a new one at next login.`,
+      )
+    )
+      return;
+    setResettingId(user.id);
+    try {
+      const res = await resetUserPassword(user.id);
+      setResetResult(res);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? 'Failed to reset password');
+    } finally {
+      setResettingId(null);
     }
   }
 
@@ -372,6 +394,16 @@ export default function UsersPage() {
                           </svg>
                         </button>
                         <button
+                          onClick={() => handleResetPassword(user)}
+                          disabled={resettingId === user.id}
+                          className="rounded-lg p-2 text-slate-400 hover:bg-amber-50 hover:text-amber-600 transition-colors disabled:opacity-50"
+                          title="Reset password"
+                        >
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                          </svg>
+                        </button>
+                        <button
                           onClick={() => handleDelete(user.id)}
                           className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors"
                           title="Delete user"
@@ -470,6 +502,40 @@ export default function UsersPage() {
           fetchUsers();
         }}
       />
+
+      {/* Password reset result */}
+      <Modal
+        isOpen={!!resetResult}
+        onClose={() => setResetResult(null)}
+        title="Temporary password"
+        size="sm"
+      >
+        {resetResult && (
+          <div className="space-y-4">
+            <p className="text-sm text-slate-600">
+              Share this one-time password with{' '}
+              <span className="font-semibold">{resetResult.username}</span>. They must change it at
+              next login, and it cannot be retrieved again later.
+            </p>
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+              <code className="font-mono text-sm text-slate-900">{resetResult.password}</code>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  navigator.clipboard?.writeText(resetResult.password);
+                  toast.success('Password copied');
+                }}
+              >
+                Copy
+              </Button>
+            </div>
+            <div className="flex justify-end">
+              <Button onClick={() => setResetResult(null)}>Done</Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
@@ -710,11 +776,20 @@ function ImportUsersModal({
   const [file, setFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
   const [credentials, setCredentials] = useState<ImportUserCredential[]>([]);
+  const [warnings, setWarnings] = useState<string[]>([]);
+  const [summary, setSummary] = useState<{
+    studentsCreated?: number;
+    teachersCreated?: number;
+    parentsCreated?: number;
+    parentsReused?: number;
+  } | null>(null);
 
   useEffect(() => {
     if (!isOpen) {
       setFile(null);
       setCredentials([]);
+      setWarnings([]);
+      setSummary(null);
     }
   }, [isOpen]);
 
@@ -723,6 +798,8 @@ function ImportUsersModal({
     if (!f) return;
     setFile(f);
     setCredentials([]);
+    setWarnings([]);
+    setSummary(null);
   }
 
   async function handleImport() {
@@ -733,11 +810,22 @@ function ImportUsersModal({
       const imported = result?.imported ?? 0;
       const errorList = Array.isArray(result?.errors) ? result.errors : [];
       const credList = Array.isArray(result?.credentials) ? result.credentials : [];
+      const warnList = Array.isArray(result?.warnings) ? result.warnings : [];
+      const reused = result?.parentsReused ?? 0;
       if (imported > 0) {
-        toast.success(`Successfully imported ${imported} user(s)`);
+        toast.success(
+          `Successfully imported ${imported} user(s)${reused ? `, ${reused} parent(s) reused` : ''}`,
+        );
       } else if (errorList.length === 0) {
         toast.success('Import finished — no rows to add');
       }
+      setWarnings(warnList);
+      setSummary({
+        studentsCreated: result?.studentsCreated,
+        teachersCreated: result?.teachersCreated,
+        parentsCreated: result?.parentsCreated,
+        parentsReused: result?.parentsReused,
+      });
       errorList.slice(0, 5).forEach((err) => {
         const rowLabel = err?.row ? `Row ${err.row}` : 'Row';
         const fieldLabel = err?.field ? ` (${err.field})` : '';
@@ -861,6 +949,26 @@ function ImportUsersModal({
         <p className="text-xs text-slate-500">
           Leave the <span className="font-semibold">password</span> column blank to auto-generate a secure 10-character password for each account. The generated credentials will be shown after import so you can download and share them.
         </p>
+
+        {summary && (
+          <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-4 text-xs text-indigo-900">
+            <p className="mb-2 text-sm font-semibold text-indigo-800">Import summary</p>
+            <div className="flex flex-wrap gap-x-5 gap-y-1">
+              <span>Students: <b>{summary.studentsCreated ?? 0}</b></span>
+              <span>Teachers: <b>{summary.teachersCreated ?? 0}</b></span>
+              <span>Parents created: <b>{summary.parentsCreated ?? 0}</b></span>
+              <span>Parents reused: <b>{summary.parentsReused ?? 0}</b></span>
+            </div>
+            {warnings.length > 0 && (
+              <ul className="mt-3 list-disc space-y-0.5 pl-5 text-amber-800">
+                {warnings.slice(0, 10).map((w, i) => (
+                  <li key={i}>{w}</li>
+                ))}
+                {warnings.length > 10 && <li>…and {warnings.length - 10} more</li>}
+              </ul>
+            )}
+          </div>
+        )}
 
         {credentials.length > 0 && (
           <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">

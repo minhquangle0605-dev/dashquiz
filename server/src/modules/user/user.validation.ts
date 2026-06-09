@@ -128,10 +128,22 @@ export const changeRoleSchema = z.object({
   role: userRoleSchema,
 });
 
+export const resetPasswordSchema = z.object({
+  password: z
+    .string()
+    .min(8, 'Password must be at least 8 characters')
+    .regex(
+      passwordRegex,
+      'Password must contain at least one uppercase letter, one lowercase letter, and one number',
+    )
+    .optional(),
+});
+
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 export type ListUsersQuery = z.infer<typeof listUsersQuerySchema>;
 export type CreateUserInput = z.infer<typeof createUserSchema>;
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
 export type ChangeRoleInput = z.infer<typeof changeRoleSchema>;
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
 export type UserRoleValue = z.infer<typeof userRoleSchema>;

@@ -9,6 +9,7 @@ export interface User {
   role: UserRole;
   avatar?: string;
   status?: UserStatus;
+  mustChangePassword?: boolean;
 }
 
 export interface LoginRequest {

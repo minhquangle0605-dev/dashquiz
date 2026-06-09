@@ -34,6 +34,11 @@ export function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
     return <Navigate to={ROUTES.LOGIN} state={{ from: location }} replace />;
   }
 
+  // Force a first-login / admin-reset password change before anything else.
+  if (user.mustChangePassword && location.pathname !== ROUTES.CHANGE_PASSWORD) {
+    return <Navigate to={ROUTES.CHANGE_PASSWORD} replace />;
+  }
+
   if (allowedRoles && !allowedRoles.includes(user.role)) {
     return <Navigate to={ROUTES.FORBIDDEN} replace />;
   }

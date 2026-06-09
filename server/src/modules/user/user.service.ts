@@ -15,6 +15,8 @@ import {
   formatStudentAccountId,
   formatTeacherAccountId,
   inferGradeLevelFromClassName,
+  normalizePhone,
+  resolveParentIdentity,
 } from '../../utils/accountId';
 import type {
   UpdateProfileInput,
@@ -23,7 +25,28 @@ import type {
   CreateUserInput,
   UpdateUserInput,
   ChangeRoleInput,
+  ResetPasswordInput,
 } from './user.validation';
+
+/**
+ * Generate a random temporary password that satisfies the password policy
+ * (>= 8 chars, with at least one lowercase, uppercase, and digit). Ambiguous
+ * characters (0/O, 1/l/I) are excluded to make hand-typing reliable.
+ */
+function generateRandomPassword(length = 10): string {
+  const lower = 'abcdefghijkmnopqrstuvwxyz';
+  const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const digits = '23456789';
+  const all = lower + upper + digits;
+  const pick = (alphabet: string) => alphabet[randomInt(0, alphabet.length)];
+  const chars = [pick(lower), pick(upper), pick(digits)];
+  for (let i = chars.length; i < length; i++) chars.push(pick(all));
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = randomInt(0, i + 1);
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+  return chars.join('');
+}
 
 export class UserService {
   // ═══════════════════════════════════════════════
@@ -54,6 +77,7 @@ export class UserService {
         avatar: user.avatar,
         role: reportedRole,
         status: user.status,
+        mustChangePassword: user.mustChangePassword,
         lastLoginAt: user.lastLoginAt,
         createdAt: user.createdAt,
       },
@@ -125,13 +149,13 @@ export class UserService {
 
     await prisma.user.update({
       where: { id: userId },
-      data: { passwordHash },
+      data: { passwordHash, mustChangePassword: false, passwordChangedAt: new Date() },
     });
 
     return {
       success: true,
       message: 'Password changed successfully',
-      data: null,
+      data: { mustChangePassword: false },
     };
   }
 
@@ -393,6 +417,7 @@ export class UserService {
           phone: data.phone || null,
           role: data.role,
           status: 'ACTIVE',
+          mustChangePassword: true,
         },
       });
 
@@ -554,6 +579,38 @@ export class UserService {
     };
   }
 
+  /**
+   * Admin reset of a user's password to a new temporary one. Forces the user to
+   * change it again at next login. Returns the plaintext password once so the
+   * admin can hand it over — it is never stored.
+   */
+  async adminResetPassword(userId: number, data: ResetPasswordInput) {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new AppError('User not found', 404);
+    }
+
+    const provided = data.password?.trim();
+    const password = provided || generateRandomPassword(10);
+    const passwordHash = await bcrypt.hash(password, 12);
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash, mustChangePassword: true, passwordChangedAt: null },
+    });
+
+    return {
+      success: true,
+      message: 'Password reset successfully',
+      data: {
+        username: user.username,
+        password,
+        passwordGenerated: !provided,
+        mustChangePassword: true,
+      },
+    };
+  }
+
   async importUsersFromExcel(file: Express.Multer.File) {
     if (!file) {
       throw new AppError('No file uploaded', 400);
@@ -592,21 +649,23 @@ export class UserService {
         s.studentCode.toUpperCase(),
       ),
     );
-    const existingParentCodes = new Set(
-      (await prisma.parentProfile.findMany({ select: { parentCode: true } })).map((p) =>
-        p.parentCode.toUpperCase(),
-      ),
+    const existingParents = await prisma.parentProfile.findMany({
+      select: { parentCode: true, phoneNumber: true },
+    });
+    const existingParentCodes = new Set(existingParents.map((p) => p.parentCode.toUpperCase()));
+    // De-duplication lookups: normalized identity key → the actual stored parent code.
+    const existingParentByCode = new Map(
+      existingParents.map((p) => [p.parentCode.toUpperCase(), p.parentCode] as const),
     );
-    const existingParentPhones = new Set(
-      (
-        await prisma.parentProfile.findMany({
-          where: { phoneNumber: { not: null } },
-          select: { phoneNumber: true },
-        })
-      )
-        .map((p) => p.phoneNumber?.trim())
-        .filter((phone): phone is string => Boolean(phone)),
-    );
+    const existingParentByPhone = new Map<string, string>();
+    const existingParentPhones = new Set<string>();
+    for (const p of existingParents) {
+      const normalized = normalizePhone(p.phoneNumber);
+      if (normalized) {
+        existingParentPhones.add(normalized);
+        if (!existingParentByPhone.has(normalized)) existingParentByPhone.set(normalized, p.parentCode);
+      }
+    }
     const importedClassIds = [
       ...new Set(
         rows
@@ -647,20 +706,22 @@ export class UserService {
     const newParentPhones = new Set<string>();
     const importedStudentCodes = new Set<string>();
 
-    const generateRandomPassword = (length = 10): string => {
-      const lower = 'abcdefghijkmnopqrstuvwxyz';
-      const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-      const digits = '23456789';
-      const all = lower + upper + digits;
-      const pick = (alphabet: string) => alphabet[randomInt(0, alphabet.length)];
-      const chars = [pick(lower), pick(upper), pick(digits)];
-      for (let i = chars.length; i < length; i++) chars.push(pick(all));
-      for (let i = chars.length - 1; i > 0; i--) {
-        const j = randomInt(0, i + 1);
-        [chars[i], chars[j]] = [chars[j], chars[i]];
+    // Inline parents auto-created from student rows (deduplicated by resolved parent code).
+    const parentCandidates = new Map<
+      string,
+      {
+        parentCode: string;
+        username: string;
+        fullName: string;
+        phone: string | null;
+        plainPassword: string;
+        passwordHash: string;
+        passwordGenerated: boolean;
       }
-      return chars.join('');
-    };
+    >();
+    const reusedParentCodes = new Set<string>();
+    const candidateParentPhones = new Set<string>();
+    const warnings: string[] = [];
 
     for (const row of rows) {
       const roleName = String(row.role ?? row.Role ?? '')
@@ -724,6 +785,11 @@ export class UserService {
       ).trim();
       const parentCode =
         String(row.parentCode ?? row.parent_code ?? row.ParentCode ?? '').trim() || null;
+      const parentFullName =
+        String(row.parentFullName ?? row.parent_full_name ?? row.ParentFullName ?? '').trim() ||
+        null;
+      const parentPhone =
+        String(row.parentPhone ?? row.parent_phone ?? row.ParentPhone ?? '').trim() || null;
       const classIdRaw = String(row.classId ?? row.class_id ?? row.ClassId ?? '').trim();
       const classId = classIdRaw ? Number(classIdRaw) : null;
 
@@ -731,6 +797,16 @@ export class UserService {
       let studentCode: string | null = null;
       let parentStudentCode: string | null = null;
       let resolvedAccountCode = accountCode;
+      // Resolved FK written onto StudentProfile.parentCode, and an inline parent to create on commit.
+      let studentParentCode: string | null = null;
+      let parentReuseCode: string | null = null;
+      let pendingParent: {
+        key: string;
+        parentCode: string;
+        username: string;
+        phone: string | null;
+        fullName: string;
+      } | null = null;
 
       if (roleName === 'STUDENT') {
         if (!accountCode) {
@@ -855,6 +931,57 @@ export class UserService {
         }
       }
 
+      // Inline parent on a student row: link to an existing/batch parent, or create a new one.
+      if (roleName === 'STUDENT') {
+        const identity = resolveParentIdentity({ parentCode, parentPhone });
+        if (identity) {
+          const key = identity.parentCode.toUpperCase();
+          const existingCode =
+            existingParentByCode.get(key) ??
+            (identity.normalizedPhone ? existingParentByPhone.get(identity.normalizedPhone) : undefined);
+
+          if (existingCode) {
+            studentParentCode = existingCode;
+            parentReuseCode = existingCode;
+          } else if (parentCandidates.has(key)) {
+            studentParentCode = parentCandidates.get(key)!.parentCode;
+          } else if (!parentFullName) {
+            errors.push({
+              row: rowNum,
+              field: 'parentFullName',
+              message: 'parentFullName is required to create a new parent account',
+            });
+            hasError = true;
+          } else if (
+            existingUsernames.has(identity.username.toLowerCase()) ||
+            newUsernames.has(identity.username.toLowerCase())
+          ) {
+            errors.push({
+              row: rowNum,
+              field: 'parentPhone',
+              message: `Generated parent username "${identity.username}" already exists`,
+            });
+            hasError = true;
+          } else {
+            pendingParent = {
+              key,
+              parentCode: identity.parentCode,
+              username: identity.username,
+              phone: identity.normalizedPhone,
+              fullName: parentFullName,
+            };
+            studentParentCode = identity.parentCode;
+          }
+        } else if (parentCode) {
+          errors.push({
+            row: rowNum,
+            field: 'parentCode',
+            message: 'parentCode is invalid; provide a parentCode or parentPhone',
+          });
+          hasError = true;
+        }
+      }
+
       if (roleName === 'ADMIN' && !username) {
         errors.push({
           row: rowNum,
@@ -922,7 +1049,12 @@ export class UserService {
       }
 
       if (roleName === 'PARENT' && phone) {
-        if (existingParentPhones.has(phone) || newParentPhones.has(phone)) {
+        const normalizedParentPhone = normalizePhone(phone);
+        if (
+          normalizedParentPhone &&
+          (existingParentPhones.has(normalizedParentPhone) ||
+            newParentPhones.has(normalizedParentPhone))
+        ) {
           errors.push({
             row: rowNum,
             field: 'phone',
@@ -984,6 +1116,41 @@ export class UserService {
       }
 
       if (!hasError) {
+        if (parentReuseCode) {
+          const reuseKey = parentReuseCode.toUpperCase();
+          if (!reusedParentCodes.has(reuseKey)) {
+            reusedParentCodes.add(reuseKey);
+            warnings.push(
+              `Parent "${parentReuseCode}" already existed; student linked to the existing account.`,
+            );
+          }
+        }
+
+        if (pendingParent && !parentCandidates.has(pendingParent.key)) {
+          const parentPassword = generateRandomPassword(10);
+          const parentHash = await bcrypt.hash(parentPassword, 12);
+          let parentPhoneNumber: string | null = null;
+          if (
+            pendingParent.phone &&
+            !existingParentPhones.has(pendingParent.phone) &&
+            !candidateParentPhones.has(pendingParent.phone)
+          ) {
+            parentPhoneNumber = pendingParent.phone;
+            candidateParentPhones.add(pendingParent.phone);
+          }
+          parentCandidates.set(pendingParent.key, {
+            parentCode: pendingParent.parentCode,
+            username: pendingParent.username,
+            fullName: pendingParent.fullName,
+            phone: parentPhoneNumber,
+            plainPassword: parentPassword,
+            passwordHash: parentHash,
+            passwordGenerated: true,
+          });
+          newUsernames.add(pendingParent.username.toLowerCase());
+          newParentCodes.add(pendingParent.parentCode.toUpperCase());
+        }
+
         const passwordHash = await bcrypt.hash(effectivePassword, 12);
         validUsers.push({
           username,
@@ -996,7 +1163,7 @@ export class UserService {
           accountCode: resolvedAccountCode,
           studentCode,
           parentStudentCode,
-          parentCode,
+          parentCode: roleName === 'STUDENT' ? studentParentCode : null,
           classId,
           homeroomClassName: roleName === 'STUDENT' && className ? className : null,
         });
@@ -1004,11 +1171,15 @@ export class UserService {
         if (studentCode) newStudentCodes.add(studentCode.toUpperCase());
         if (roleName === 'PARENT' && resolvedAccountCode)
           newParentCodes.add(resolvedAccountCode.toUpperCase());
-        if (roleName === 'PARENT' && phone) newParentPhones.add(phone);
+        if (roleName === 'PARENT' && phone) {
+          const normalizedParentPhone = normalizePhone(phone);
+          if (normalizedParentPhone) newParentPhones.add(normalizedParentPhone);
+        }
       }
     }
 
     let createdCount = 0;
+    let inlineParentsCreated = 0;
     const credentials: Array<{
       username: string;
       password: string;
@@ -1017,9 +1188,42 @@ export class UserService {
       accountCode: string | null;
       passwordGenerated: boolean;
     }> = [];
-    if (validUsers.length > 0) {
+    if (validUsers.length > 0 || parentCandidates.size > 0) {
       try {
         await prisma.$transaction(async (tx) => {
+          // Create inline (deduplicated) parents first so student rows can link to them.
+          for (const cand of parentCandidates.values()) {
+            const parentUser = await tx.user.create({
+              data: {
+                username: cand.username,
+                passwordHash: cand.passwordHash,
+                fullName: cand.fullName,
+                phone: cand.phone,
+                role: 'PARENT',
+                status: 'ACTIVE',
+                mustChangePassword: true,
+              },
+            });
+            await tx.parentProfile.create({
+              data: {
+                parentCode: cand.parentCode,
+                userId: parentUser.id,
+                phoneNumber: cand.phone,
+                fullName: cand.fullName,
+              },
+            });
+            credentials.push({
+              username: cand.username,
+              password: cand.plainPassword,
+              fullName: cand.fullName,
+              role: 'PARENT',
+              accountCode: cand.parentCode,
+              passwordGenerated: cand.passwordGenerated,
+            });
+            createdCount++;
+            inlineParentsCreated++;
+          }
+
           const usersToCreate = [...validUsers].sort((a, b) => {
             if (a.role === 'STUDENT' && b.role === 'PARENT') return -1;
             if (a.role === 'PARENT' && b.role === 'STUDENT') return 1;
@@ -1035,6 +1239,7 @@ export class UserService {
                 phone: row.phone,
                 role: row.role,
                 status: 'ACTIVE',
+                mustChangePassword: true,
               },
             });
 
@@ -1112,62 +1317,104 @@ export class UserService {
       }
     }
 
+    const studentsCreated = validUsers.filter((u) => u.role === 'STUDENT').length;
+    const teachersCreated = validUsers.filter((u) => u.role === 'TEACHER').length;
+    const legacyParentsCreated = validUsers.filter((u) => u.role === 'PARENT').length;
+    const parentsCreated = inlineParentsCreated + legacyParentsCreated;
+    const parentsReused = reusedParentCodes.size;
+
     logger.info(
-      `User import: ${createdCount} created, ${errors.length} errors from ${rows.length} rows`,
+      `User import: ${createdCount} created (${studentsCreated} students, ${teachersCreated} teachers, ${parentsCreated} parents), ${parentsReused} parent(s) reused, ${errors.length} errors from ${rows.length} rows`,
     );
+
+    const reuseSuffix = parentsReused ? `, ${parentsReused} parent(s) reused` : '';
 
     return {
       success: true,
-      message: `Import completed: ${createdCount} users created, ${errors.length} errors`,
+      message: `Import completed: ${createdCount} users created, ${errors.length} errors${reuseSuffix}`,
       data: {
         totalRows: rows.length,
         created: createdCount,
         imported: createdCount,
+        studentsCreated,
+        teachersCreated,
+        parentsCreated,
+        parentsReused,
         errorCount: errors.length,
         errors: errors.slice(0, 100),
+        warnings: warnings.slice(0, 100),
         credentials,
       },
     };
   }
 
   getImportTemplate() {
+    // Parent info lives on the STUDENT row (parentFullName/parentPhone/parentCode).
+    // The two students below share one parentPhone → one parent account, both linked.
     const templateData = [
       {
         fullName: 'Nguyen Van A',
-        phone: '0901234567',
+        phone: '',
         role: 'STUDENT',
         ID: '001',
         className: '10A1',
         school: 'webquiz',
+        parentFullName: 'Tran Thi B',
+        parentPhone: '0901234567',
+        parentCode: '',
+        password: '',
       },
       {
-        fullName: 'Tran Thi B',
-        phone: '0912345678',
-        role: 'TEACHER',
-        ID: '001',
-        className: '',
+        fullName: 'Nguyen Van C',
+        phone: '',
+        role: 'STUDENT',
+        ID: '002',
+        className: '10A1',
         school: 'webquiz',
+        parentFullName: 'Tran Thi B',
+        parentPhone: '0901234567',
+        parentCode: '',
+        password: '',
       },
       {
         fullName: 'Pham Van D',
-        phone: '0923456789',
+        phone: '',
         role: 'STUDENT',
-        ID: '002',
+        ID: '003',
         className: '11A1',
         school: 'webquiz',
+        parentFullName: 'Le Thi E',
+        parentPhone: '',
+        parentCode: 'P0001',
+        password: '',
       },
       {
-        fullName: 'Le Thi C',
-        phone: '0934567890',
-        role: 'PARENT',
-        ID: 'C10001',
+        fullName: 'Le Van F',
+        phone: '0912345678',
+        role: 'TEACHER',
+        ID: 'T001',
         className: '',
         school: 'webquiz',
+        parentFullName: '',
+        parentPhone: '',
+        parentCode: '',
+        password: '',
       },
     ];
 
     const worksheet = XLSX.utils.json_to_sheet(templateData, {
-      header: ['fullName', 'phone', 'role', 'ID', 'className', 'school'],
+      header: [
+        'fullName',
+        'phone',
+        'role',
+        'ID',
+        'className',
+        'school',
+        'parentFullName',
+        'parentPhone',
+        'parentCode',
+        'password',
+      ],
     });
 
     const colWidths = [
@@ -1177,6 +1424,10 @@ export class UserService {
       { wch: 10 }, // ID
       { wch: 12 }, // className
       { wch: 15 }, // school
+      { wch: 22 }, // parentFullName
+      { wch: 15 }, // parentPhone
+      { wch: 12 }, // parentCode
+      { wch: 14 }, // password
     ];
     worksheet['!cols'] = colWidths;
 

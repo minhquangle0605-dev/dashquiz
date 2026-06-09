@@ -101,9 +101,35 @@ export interface ImportUsersResult {
   imported: number;
   created?: number;
   totalRows?: number;
+  studentsCreated?: number;
+  teachersCreated?: number;
+  parentsCreated?: number;
+  parentsReused?: number;
   errorCount?: number;
   errors: ImportUserError[];
+  warnings: string[];
   credentials: ImportUserCredential[];
+}
+
+export interface ResetPasswordResult {
+  username: string;
+  password: string;
+  passwordGenerated: boolean;
+  mustChangePassword: boolean;
+}
+
+export async function resetUserPassword(
+  id: number,
+  password?: string,
+): Promise<ResetPasswordResult> {
+  const { data } = await api.post(API_ENDPOINTS.ADMIN.USERS.RESET_PASSWORD(id), password ? { password } : {});
+  const payload = (data?.data ?? data ?? {}) as Partial<ResetPasswordResult>;
+  return {
+    username: String(payload.username ?? ''),
+    password: String(payload.password ?? ''),
+    passwordGenerated: Boolean(payload.passwordGenerated),
+    mustChangePassword: Boolean(payload.mustChangePassword ?? true),
+  };
 }
 
 export async function importUsers(file: File): Promise<ImportUsersResult> {
@@ -133,12 +159,20 @@ export async function importUsers(file: File): Promise<ImportUsersResult> {
       passwordGenerated: Boolean(obj.passwordGenerated),
     };
   });
+  const warnings: string[] = Array.isArray(payload.warnings)
+    ? payload.warnings.map((w: unknown) => String(w))
+    : [];
   return {
     imported: payload.imported ?? payload.created ?? 0,
     created: payload.created,
     totalRows: payload.totalRows,
+    studentsCreated: payload.studentsCreated,
+    teachersCreated: payload.teachersCreated,
+    parentsCreated: payload.parentsCreated,
+    parentsReused: payload.parentsReused,
     errorCount: payload.errorCount,
     errors,
+    warnings,
     credentials,
   };
 }
